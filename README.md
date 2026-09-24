@@ -34,3 +34,18 @@ With OmniWM configured entirely through the API, it is possible for OmniWM to be
 ## The Road Ahead:
 
 I am still a newbie C developer (yes, this project will be built in C), so this project will take me a while. I intend to start by working out the backend details in a set of markdown documents, as i am more confident about my system design capabilities than my actual programming skills 
+
+- [ ] stage 1: config store and ipc functional, simple write+read test. 
+- [ ] stage 2: TOML parser for config store functional + helper for registering new TOML keys
+- [ ] stage 3: create shared helpers (core libraries, logging and server backend)
+- [ ] stage 4: set up basic input
+- [ ] stage 5: get the WM to start and show windows
+- [ ] stage 6: implement layout constraints w/ single demo layout
+- [ ] stage 7: implement tags
+- [ ] stage 8: implement basic decorations
+- [ ] stage 9: implement animations
+- [ ] stage 10: implement more advanced input
+- [ ] stage 11: implement more advanced decorations
+- [ ] stage 12: implement fake client drawing (custom UI elements)
+- [ ] stage 13: implement background rendering + infinite canvas background rendering
+- [ ] stage 14: implement vector line objects
