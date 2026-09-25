@@ -203,7 +203,7 @@ Decided defaults:
 
 ## 11. Socket facade (optional convenience)
 
-The socket is a thin JSON facade over the exact same primitives, for people who do not want to map the block. A well-written library never needs it.
+The socket is a thin JSON facade over the exact same primitives, for people who do not want to map the block. A well-written library never needs it. Protocol spec: devnotes/ipc.md.
 
 - `get <key>`: read current value from the catalog.
 - `set <key> <typed value>`: commit protocol, single or grouped.
@@ -236,9 +236,15 @@ Free win: because bad data is a designed-for state, hardening is fuzzable. Garba
 
 ## 14. Deferred, flagged for later
 
-- Exact field-level struct definitions and byte offsets (next drafting pass).
-- Catalog and arena capacity budgets / defaults at v1.
-- Whether journal ring capacity should become configurable (constant at v1).
+Resolved during the field-level drafting pass (see `configstorelayout.md`):
+
+- Fixed: exact field-level struct definitions, byte offsets, alignment and
+  capacities -> devnotes/configstorelayout.md.
+- Fixed: journal ring capacity is a constant at v1 (`OMNI_JOURNAL_CAPACITY`),
+  defined once in `include/shared/omni_layout.h` per decision 6.
+
+Still deferred:
+
 - Multi-painter arbitration on a single region (out of scope: one painter per region).
 - Value transactions beyond grouped commits (no CAS at v1).
 - Mixed-endianness hosts (native, tied to format_version).
