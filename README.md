@@ -8,7 +8,7 @@ The way I intend to design this is as follows:
 
 ## Any Language:
 
-OmniWM will come with a built-in TOML parser for configuration, but OmniWM will actually be driven and configured entirely through a *socket API*, this means that anyone can take that API and easily build a parser for any config format they want, or build a library to allow scriptable configuration in any language. Because both of these are external tools, it keeps OmniWM itself maintainable as it only has to support the socket itself. built-in TOML parser will serve as the entry point for new users and a sensible default.
+OmniWM will come with a built-in TOML parser for configuration, but OmniWM will actually be driven and configured entirely through a *socket/SHM API*, this means that anyone can take that API and easily build a parser for any config format they want, or build a library to allow scriptable configuration in any language. Because both of these are external tools, it keeps OmniWM itself maintainable as it only has to support the socket itself. built-in TOML parser will serve as the entry point for new users and a sensible default.
 
 
 ## Any Layout:
@@ -23,7 +23,7 @@ I intend to make OmniWM the *most riceable* window manager currently on the mark
 
 ## New-User friendliness:
 
-unlike many other "hyper-configurable" window managers, OmniWM aims to still be super new-user friendly, that's why OmniWM will ship with "Macro" options that activate various included presets.
+unlike many other "hyper-configurable" window managers, OmniWM aims to still be super new-user friendly, that's why OmniWM will ship with "Macro" options that activate various included presets. OmniWM's API-driven design will also allow for the thing that "drives" the WM to be a graphical application.
 
 
 ## The power of the API:
@@ -49,3 +49,8 @@ I am still a newbie C developer (yes, this project will be built in C), so this 
 - [ ] stage 12: implement fake client drawing (custom UI elements)
 - [ ] stage 13: implement background rendering + infinite canvas background rendering
 - [ ] stage 14: implement vector line objects
+- [ ] stage 15: example scripting lib - python based config
+- [ ] stage 16: example interpreter - mango config interpreter
+- [ ] stage 17: example scripting lib - lua
+- [ ] stage 18: example interpreter - hyprland config interpreter
+

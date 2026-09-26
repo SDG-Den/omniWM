@@ -1,0 +1,1132 @@
+# Mock layouts for the rules-based surface syntax
+
+Companion to `layoutlanguage.md`, which is normative. **These are mock designs, not
+specifications.** Their purpose is to find places where the syntax is awkward,
+ambiguous, or missing a key, and to cover every key at least once. Where this file
+and the language disagree, the language is right and this file is a bug report.
+
+Revisited for revision 9. The changes from the eighth revision's file are:
+
+- client rule sets split into `omniwm.clients.<set>.rules` and
+  `omniwm.snaps.<set>.rules`, because a set is reached in two ways and the flat
+  namespace did not say which, §14 finding 19
+- an empty group dissolves, so nothing has to describe what one draws; a group that
+  must stay visible holds a placeholder client, §14 finding 20
+
+The changes from the third revision to the eighth were:
+
+- every program is now rules and spaces, no `pattern` and no `constraints`
+- every layout lost its `groups` array and its `group =` fields, because a rule list
+  is a program and a second one nests, §14 finding 18
+- `x`, `y`, `w`, `h` came back as optional static pins on a space, §14 finding 12
+- `when` went, because a rule's family is its trigger, §14 finding 15
+- a declared space name lost its trailing index, because the index is the system's,
+  §14 finding 16
+- a space with a `layout` is a **group** again, in `generaldesign.md` §8's sense, and
+  the word `container` is gone, §14 finding 18
+- sizes that were space fields (`size`, `pixels`, `hundredths`) are now `share`
+  rules, so a space is identity plus a rectangle
+- counts are bare integers or bare strings
+- `unbounded` and `virtual_origin` moved to `viewport`
+
+## 1. Master and stack
+
+```toml
+[[omniwm.layouts.master_stack.rules]]
+rule = "run"
+axis = "x"
+
+[[omniwm.layouts.master_stack.rules]]
+rule = "share"
+subject = "master"
+of = 0.5
+
+[[omniwm.layouts.master_stack.rules]]
+rule = "push"
+keep = "old"
+to = "stack.main"
+
+[[omniwm.layouts.master_stack.spaces]]
+name = "master"
+
+[[omniwm.layouts.master_stack.spaces]]
+name = "stack"
+layout = "vertical_stack"
+```
+
+One rule list, at program level, and it applies to both spaces. `stack` is a
+**group** because it has a `layout`, and that is the only thing that says so, so the
+program has a group and no second rule list. `pinned` has no group at all, and the
+difference is the whole of §5.
+
+The push target is `stack.main`: the `main` space of the program `stack` refers to,
+read left to right rather than by its shape, §3.2. `main` is *declared* by
+`vertical_stack` rather than grown by it, so the order property of §6.2 is checked
+against a name that resolves through a group into a different program's space
+list, which is the part of the address worth testing. The earlier revisions of this
+file claimed the name was generated, which was never true.
+
+`vertical_stack` is a four-line program of its own, which is the point of having a
+nesting reference instead of a nested table:
+
+```toml
+[[omniwm.layouts.vertical_stack.rules]]
+rule = "run"
+axis = "y"
+
+[[omniwm.layouts.vertical_stack.rules]]
+rule = "spawn"
+keep = "old"
+
+[[omniwm.layouts.vertical_stack.spaces]]
+name = "main"
+```
+
+## 2. Grid
+
+```toml
+[[omniwm.layouts.grid.rules]]
+rule = "grid"
+columns = "sqrt"
+gap = 8
+leftover = "center"
+
+[[omniwm.layouts.grid.rules]]
+rule = "spawn"
+keep = "old"
+
+[[omniwm.layouts.grid.spaces]]
+name = "main"
+```
+
+`columns = "sqrt"` is a bare string where a bare integer would be a fixed count, §3.4.
+This is the one place the two-form key appears, and it reads as intended.
+
+A single cell plus `spawn` covers the three candidate resolutions at once: a
+non-square grid, the new member, and the empty trailing cells.
+
+## 3. Fair
+
+Identical to §2 with two values changed, which is the entire difference and was
+also true in the third revision:
+
+```toml
+[[omniwm.layouts.fair.rules]]
+rule = "grid"
+columns = "sqrt"
+gap = 0
+leftover = "absorb"
+
+[[omniwm.layouts.fair.rules]]
+rule = "spawn"
+keep = "old"
+
+[[omniwm.layouts.fair.spaces]]
+name = "main"
+```
+
+`leftover = "absorb"` is the only key in the language that makes members cover a
+group exactly rather than approximately, and it is a single word rather than the
+`gap = 0` plus implied sizing the third revision used.
+
+### 3.1 Mixed leftovers are not reachable
+
+A run of both values, which a real user will want and which the current syntax
+cannot express:
+
+> 1 chrome, 12 middles, 1 remainder, `gap = 0`, the remainder centred, 1 absorb and 2
+> centre among the middles.
+
+`leftover` is per grid, not per member, so the answer is either one behaviour for
+all of them or none. Three candidates, all rejected:
+
+| candidate | why not |
+|---|---|
+| `leftover = "auto"` and a heuristic | a layout author should not be guessing at a distribution the compositor can measure |
+| a geometry rule per leftover member | the leftovers are generated by `spawn`, so they have no names to write rules about |
+| `leftover = "absorb"` always | loses centring, which is the visible behaviour of every other grid |
+
+The `bar` design in §12.1 reaches the same visual result by declaring its members,
+which is the honest workaround: if you want per-member behaviour, name the members.
+
+## 4. Scroller
+
+```toml
+[[omniwm.layouts.scroller.rules]]
+rule = "run"
+axis = "x"
+self = "content"
+gap = 8
+
+[[omniwm.layouts.scroller.rules]]
+rule = "spawn"
+keep = "old"
+
+[[omniwm.layouts.scroller.viewport]]
+axis = "x"
+pan = true
+
+[[omniwm.layouts.scroller.spaces]]
+name = "main"
+```
+
+`self = "content"` with `pan = true` is the whole scroller. The group is as long as
+its members need, the viewport is as long as the group is allowed to be, and the
+transform between them lives in compositor state rather than here, §7.
+
+The third revision carried a `raise` argument here. There is no `raise` on `run`,
+and there should not be: raising a window to see it is a viewport action, and the
+second candidate for it was a `viewport.raise` key that was removed for the same
+reason. Pan and zoom are the only transforms.
+
+## 5. Dwindle
+
+```toml
+[[omniwm.layouts.dwindle.rules]]
+rule = "run"
+axis = "x"
+reflow = "sticky"
+
+[[omniwm.layouts.dwindle.rules]]
+rule = "split"
+keep = "old"
+
+[[omniwm.layouts.dwindle.spaces]]
+name = "main"
+```
+
+Five lines, and the same layout in the third revision was nine. Three of the four lines
+saved were `pattern`, `on_full` and `when`, each one restating something the `rule`
+value already said: `rule = "run"` says the group arranges, `rule = "split"` says the
+group is one that grows, and the family says the growth happens when a member is full.
+The third revision could not say that in one line because `rule`, `on_full` and `when`
+were three keys for one fact, and it needed all three to be unambiguous.
+
+`reflow = "sticky"` is required here, not preferred, because `split` needs it, §3.3.
+
+## 6. Monocle
+
+```toml
+[[omniwm.layouts.monocle.rules]]
+rule = "stack"
+axis = "y"
+
+[[omniwm.layouts.monocle.rules]]
+rule = "spawn"
+keep = "old"
+
+[[omniwm.layouts.monocle.spaces]]
+name = "main"
+```
+
+`raise = 0` was removed. It is the default, it never did anything, and a key that
+is written out to say nothing is a key a reader has to check.
+
+## 7. Deck
+
+Deck is master and stack whose stack is a monocle, so it is §1 with three values
+changed and a layout reference swapped:
+
+```toml
+[[omniwm.layouts.deck.rules]]
+rule = "run"
+axis = "y"
+
+[[omniwm.layouts.deck.rules]]
+rule = "push"
+keep = "old"
+to = "stack.main"
+
+[[omniwm.layouts.deck.spaces]]
+name = "master"
+
+[[omniwm.layouts.deck.spaces]]
+name = "stack"
+layout = "monocle"
+```
+
+No `share` rule, because `run` divides equally and the deck is half and half. §1
+needed one because the master is 50 percent and the stack takes the rest. The
+third revision spelled both out as `hundredths`; equal division now covers the deck
+without a key, which is a small readability win from the rule merge.
+
+### 7.1 Side by side
+
+| | master / stack | deck |
+|---|---|---|
+| arrangement | `run`, `axis = "x"` | `run`, `axis = "y"` |
+| sizing | `share` on `master`, `of = 0.5` | equal, implicit |
+| stack's layout | `vertical_stack` | `monocle` |
+| overflow | `push` to `stack.main` | `push` to `stack.main` |
+| members | 2, one of them a group | 2, one of them a group |
+
+Three values, and the third one is only a swap of which existing program is
+referenced. `monocle` is §6 and is also a layout a user can select directly, which
+is the argument for referencing programs rather than parameterising a layout: the
+stack of a master and stack and the stack of a deck are the same object, and the
+specification should say so.
+
+### 7.2 No `raise` on the deck
+
+A deck shows the next item while the top is focused, and that needs the stack's
+monocle to raise its focused member. It cannot get it:
+
+- `raise` is an argument of the `stack` arrangement, and `monocle` declares its own.
+  A reference to `monocle` inherits `raise = 0` and cannot be given another.
+- Making the reference carry parameters, `layout = { program = "monocle", raise = 12 }`,
+  turns the space's most useful key into a general parameter mechanism, and then
+  every layout needs one, and §3.3's "one space, one layout" stops being checkable.
+- A `viewport.raise` key was proposed and removed in the third revision for the same
+  reason: it is a transform, and the file should have one transform.
+
+The visible behaviour is a **peek**, and a peek is a compositor action on the tag,
+the same family as pan and zoom, triggered by a key or a pointer. The deck's member
+stack is not a thing a user should have to be told is being peeked at, so this is a
+`peeking` tag flag and not a layout key.
+
+## 8. Infinite canvas, floating
+
+```toml
+[[omniwm.layouts.canvas_float.rules]]
+rule = "scatter"
+
+[[omniwm.layouts.canvas_float.viewport]]
+axis = "xy"
+extent = "unbounded"
+pan = true
+zoom = true
+virtual_origin = { x = 0, y = 0 }
+
+[[omniwm.layouts.canvas_float.spaces]]
+name = "main"
+```
+
+`scatter` is the whole placement model: the client brings its own rectangle and the
+arrangement asks it rather than computing. `extent = "unbounded"` with a
+`virtual_origin` is the only claim to be unbounded in the file, and
+`virtual_origin` appears in exactly one place, §3.1 and §7.
+
+The space is one key long. There is no key for the group's background either, because
+the group's rect is the viewport's and the viewport covers the canvas. The third
+revision's `background` member went for the same reason `rect` went: both were
+geometry stated in a program that computes it somewhere else.
+
+## 9. Infinite canvas, auto-tiling
+
+```toml
+[[omniwm.layouts.canvas_tile.rules]]
+rule = "run"
+axis = "x"
+reflow = "sticky"
+self = "content"
+
+[[omniwm.layouts.canvas_tile.rules]]
+rule = "split"
+keep = "old"
+
+[[omniwm.layouts.canvas_tile.viewport]]
+axis = "xy"
+extent = "unbounded"
+pan = true
+virtual_origin = { x = 0, y = 0 }
+
+[[omniwm.layouts.canvas_tile.spaces]]
+name = "main"
+```
+
+§5 on a canvas, with a viewport. `self = "content"` grows the tiling outward from
+`virtual_origin` as windows arrive, and `pan = true` is what makes the growth
+reachable, which validation rule 10 now requires rather than assumes.
+
+## 10. Fullscreen, then float
+
+The first float action the third revision found a use for, in a layout with no
+geometry of its own:
+
+```toml
+[[omniwm.layouts.fullscreen_float.rules]]
+rule = "scatter"
+
+[[omniwm.layouts.fullscreen_float.rules]]
+rule = "float"
+keep = "old"
+
+[[omniwm.layouts.fullscreen_float.spaces]]
+name = "main"
+```
+
+A single space that always fills, and overflows by leaving. This is what a
+fullscreen-floating layout is, and it needed three lines before `float` was a rule
+kind: a pattern, an `on_full`, and a `spawn`.
+
+## 11. Newest on top
+
+The `keep = "new"` value test, and the leak it exposes:
+
+```toml
+[[omniwm.layouts.newest_fullscreen.rules]]
+rule = "stack"
+axis = "y"
+
+[[omniwm.layouts.newest_fullscreen.rules]]
+rule = "spawn"
+keep = "new"
+
+[[omniwm.layouts.newest_fullscreen.spaces]]
+name = "main"
+```
+
+Every new member is raised, so the newest is on top, and the member count grows
+without bound while dead members accumulate underneath. The third revision's
+statement still stands: making a stack recycle the members it no longer shows is
+§6 work and needs a key that has not been invented yet. This program exists to
+exercise `keep = "new"` and the leak is the finding.
+
+## 12. Bars, frames, and a pinned column
+
+### 12.1 A group bar is a clustered fake client, not a group
+
+The third revision drew this as a second group with a `role = "chrome"` member. Both
+parts of that were wrong. A bar is a fake client, which `generaldesign.md` §13 says
+takes part in layout exactly as a window does, and it reaches its group's rectangle
+by being clustered with the group rather than by being a member of a sibling group.
+
+So there is no layout program for a bar. There is a client:
+
+```toml
+[[omniwm.clients.bar.rules]]
+rule = "align"
+against = "client"
+edge = "top"
+
+[[omniwm.clients.bar.rules]]
+rule = "match"
+against = "client"
+axis = "x"
+
+[[omniwm.clients.bar.rules]]
+rule = "size"
+height = 50
+```
+
+Three rules, and they are the three relations from the third revision's
+`fill_parent` plus `gap_around` plus a fixed height, arriving in the place they
+belong. `align` is the duckWM `top_of`, `match` is its width, and `size` is the 50
+pixels.
+
+Which means the program that gets the bar is unchanged. `master_stack` from §1 gains
+nothing:
+
+```toml
+[[omniwm.layouts.master_stack.rules]]
+rule = "run"
+axis = "x"
+
+[[omniwm.layouts.master_stack.rules]]
+rule = "share"
+subject = "master"
+of = 0.5
+
+[[omniwm.layouts.master_stack.rules]]
+rule = "push"
+keep = "old"
+to = "stack.main"
+
+[[omniwm.layouts.master_stack.spaces]]
+name = "master"
+
+[[omniwm.layouts.master_stack.spaces]]
+name = "stack"
+layout = "vertical_stack"
+```
+
+The bar fake client is clustered with the group it decorates, the solver makes one
+virtual client of the two per §3.8, and `master_stack` places that virtual client
+exactly as it would place the group alone. The 50 pixels make the group 50 pixels
+taller and the bar sits at the top of the result.
+
+This is the case the third revision could not express at all, and it is why §3.8
+exists. It is also the answer to "why does the client layer need weights when the
+program layer does not": nothing here conflicts, and if a second bar were clustered
+with the same group the two would need to be told apart.
+
+### 12.2 Pinned, which needed two groups until it did not
+
+This program used to be the file's only user of `groups[]`, and it is worth keeping
+because the version below is the *result* of deleting the key rather than a design
+that happened to avoid it. The two-`groups[]` version is in §14 finding 18.
+
+```toml
+[[omniwm.layouts.pinned.rules]]
+rule = "run"
+axis = "x"
+
+[[omniwm.layouts.pinned.rules]]
+rule = "share"
+subject = "left"
+of = 0.3
+
+[[omniwm.layouts.pinned.rules]]
+rule = "push"
+keep = "old"
+to = "right"
+
+[[omniwm.layouts.pinned.spaces]]
+name = "left"
+order = 0
+
+[[omniwm.layouts.pinned.spaces]]
+name = "right"
+order = 1```
+
+There is no `group =` on either space, because there is nothing for it to say. A 30
+percent left column is a `run` along `x` with a `share` on the member that is narrower,
+and the member that is full width is simply the one with no `share` rule. This is the
+design that in the third revision would have needed `members = ["left"]` and
+`members = ["right"]` as well, and the two lists could have disagreed.
+
+The old version's two `groups[]` entries each held **one** member, so each group's `run`
+divided an axis among a single space and handed it everything, and the two groups had
+no rectangle of their own to divide. They both claimed the program's whole rect and
+overlapped, and the author had to repair the overlap with `fill` and `beside`, which
+is the only reason those two rules had a user at all. The overlap is visible in the
+old file: group `right` was `run axis = "x"` and group `left` was `run axis = "y"`, and
+neither axis meant anything for a group of one.
+
+`order` is here for the `push` in §6.2: `right` is `1` and `left` is `0`, so
+`0 < 1` and the chain terminates. Reverse the two `order` values and the program is
+a load error naming `pinned`.
+
+**Deleting `groups[]` killed the last user of two geometry rules.** This program
+carried `fill` and `beside` only to repair the overlap that two one-member groups
+created, and with the groups gone neither has anywhere to apply: `fill` set a member
+to its group's rect, which only ever mattered when a group had one member, and
+`beside` reordered members that `run` already places in declaration order.
+
+| rule | distinct from `run`? | has a user? |
+|---|---|---|
+| `share` | yes, `run` divides equally and the left is 30 percent | yes, this program |
+| `fill` | no, and its only user was the overlap `groups[]` created | **no** |
+| `beside` | no, declaration order already puts `left` first | **no** |
+| `inset` | yes, no arrangement rule insets anything, §13.1 | yes, §13.1 |
+
+So the fourth revision's standing note that `fill` and `beside` "are carried purely so
+the keys are exercised" is no longer bookkeeping. They are dead, and they were dead
+for a reason: of the four duckWM relations that reached the program layer, two are
+things an arrangement cannot say and the other two were repairs for a mechanism that
+should not have existed. The bars in §12.1 and §12.3 show where the ones that survive
+belong: on the client, where they are the whole mechanism rather than a restatement.
+
+### 12.3 A framed group is the same three rules again
+
+A frame is a bar on the outside rather than the inside, so it is `align` to the
+bottom, `match` the width, and a size, and the group it frames is a program that does
+not know:
+
+```toml
+[[omniwm.clients.frame.rules]]
+rule = "align"
+against = "client"
+edge = "bottom"
+
+[[omniwm.clients.frame.rules]]
+rule = "match"
+against = "client"
+axis = "x"
+
+[[omniwm.clients.frame.rules]]
+rule = "size"
+height = 2
+
+[[omniwm.clients.frame.rules]]
+rule = "offset"
+against = "client"
+by = 4
+```
+
+`offset` is the only one of the five client kinds that §12.1 does not use, and it is
+what makes a frame a frame rather than a bar: the frame sits four pixels away from
+the client, so the client is inset from the group's edge and a gap appears. That gap
+cannot be expressed by any program rule, because the gap is between a client and the
+edge of the box the client is in, which is the client layer's business.
+
+A bar on the right instead, which needs three more of the vocabulary than §12.1 did:
+`edge = "right"`, `axis = "y"`, and `size` with a width rather than a height.
+
+```toml
+[[omniwm.clients.side_bar.rules]]
+rule = "align"
+against = "client"
+edge = "right"
+
+[[omniwm.clients.side_bar.rules]]
+rule = "match"
+against = "client"
+axis = "y"
+
+[[omniwm.clients.side_bar.rules]]
+rule = "size"
+width = 2
+```
+
+And a counter pinned to the client's top centre, which is the only use of
+`edge = "center_x"` and the only client with two `align` rules:
+
+```toml
+[[omniwm.clients.counter.rules]]
+rule = "align"
+against = "client"
+edge = "center_x"
+
+[[omniwm.clients.counter.rules]]
+rule = "align"
+against = "client"
+edge = "top"
+
+[[omniwm.clients.counter.rules]]
+rule = "size"
+width = 24
+height = 24
+```
+
+**Two `align` rules on one client are allowed, and the program layer's one-rule-per-
+subject rule does not carry over.** §3.5 forbids two geometry rules naming one subject
+because two rules would write the same rectangle and one would be silently discarded.
+Client rules do not have that failure mode: each pins a different aspect, and a top
+centre needs two of them. The restriction is a consequence of the program's
+representation, not a principle, so it stops at the boundary where the
+representation changes.
+
+`snap` is the fifth kind and is §15.
+
+### 12.4 A static width, which is not a small `share`
+
+§12.2 gives the left column 30 percent of the screen and the width follows the
+monitor. Pinning says something different: 300 pixels, whatever the monitor is.
+
+```toml
+[[omniwm.layouts.sidebar.rules]]
+rule = "run"
+axis = "x"
+
+[[omniwm.layouts.sidebar.rules]]
+rule = "push"
+keep = "old"
+to = "content"
+
+[[omniwm.layouts.sidebar.spaces]]
+name = "side"
+w = 300
+
+[[omniwm.layouts.sidebar.spaces]]
+name = "content"```
+
+One key on the space. The arrangement places `side` as it would any member, and
+then the pinned width replaces the computed one, so the origin and the height are
+still the arrangement's. That is the case that `share` cannot express, since `share`
+is proportional, and it is the reason the four keys are worth keeping: not for
+layouts, which want ratios, but for the one member per layout that wants pixels.
+
+### 12.5 A fully pinned space
+
+```toml
+[[omniwm.layouts.hud.rules]]
+rule = "run"
+axis = "y"
+
+[[omniwm.layouts.hud.spaces]]
+name = "main"
+x = 0
+y = 0
+w = 200
+h = 40
+```
+
+All four components pinned, so the arrangement has nothing left to say about this
+space. It is a fixed rectangle in the corner: a clock, a panel, a status readout.
+
+`x = 0` and `y = 0` are the reason presence is the claim rather than the value. Read
+as a value, a default of `0` would make these two lines indistinguishable from leaving
+them out, and a HUD in the top-left corner would be the one thing the four keys could
+not say. A program says geometry only where it means to, and the check's stale-token
+count is what stops the `0` defaults from spreading back over the other fourteen
+programs.
+
+## 13. Mechanical check
+
+Run over this file, counting keys and enumerations in the `toml` blocks only, so
+that prose mentions are not counted. It found two bugs in itself before it found
+anything in the syntax: a value regex that took the second character of each match
+rather than the whole value, and a table regex that could not match a nested inline
+table such as `virtual_origin = { x = 0, y = 0 }`.
+
+```text
+toml blocks scanned: 26  (programs 17, client rule sets 18)
+keys used: 24
+undefined keys: none
+enumerated values used: 83
+undefined values: none
+programs defined: 16
+layout references: ['monocle', 'vertical_stack']
+dangling layout references: none
+push targets: ['master_stack->stack.main', 'deck->stack.main', 'master_stack->stack.main', 'pinned->right', 'sidebar->content']
+space addresses checked: 10  (to 5, subject/operand 5)
+unresolved space addresses: none
+declared names carrying an index: none
+stale capability tokens: 0
+values used only as defaults: ['rows=derived', 'reflow=flow', 'self=parent', 'extent=parent']
+spec values never exercised: ['rule=beside', 'rule=fill']
+client rule sets: 18 in 29 rule tables  (clients 6, snaps 12)
+sets whose rule count does not match their namespace: ['clients.canvas_marker holds 1 rule(s); a snaps set holds exactly one snap, a clients set stacks several']
+client keys used: 8
+undefined client keys: none
+client enumerated values used: 70
+undefined client values: none
+client values used only as defaults: ['edge=left']
+client spec values never exercised: none
+```
+
+The check is per key and per layer rather than global, which is what caught
+`operand = "status"` in the third revision: `operand` accepts a space name *or* the
+literal `group`, so a single global set of enumerated values flags every legal
+operand as undefined. The client layer needs the same separation for a different
+reason, and it is the reason the two layers are not one vocabulary: `rule` names
+twelve program kinds and five client kinds, and `axis` carries `x`, `y` and `xy` in
+the program and only `x` and `y` on a client. A merged set would accept
+`rule = "snap"` in a program and `edge = "xy"` on a client.
+
+`values used only as defaults` is separated from `spec values never exercised`
+because the first is harmless and the second is a gap. `rows = "derived"`,
+`reflow = "flow"`, `self = "parent"` and `extent = "parent"` are the documented
+defaults and no program needs to write them. A value that is neither a default nor
+written anywhere has not been looked at by anyone, and there are none in either
+layer.
+
+`stale capability tokens` counts the keys the third revision used and this one does
+not, including `role`. It is at 0, which is the mechanical form of "a bar is a
+client".
+
+This checker has now found six bugs in itself across three revisions: a value regex
+that took the second character of each match, a table regex that could not match a
+nested inline table, a push-target pattern that could not match a digit, a key
+extractor that read only single-key table rows, a scope filter that tested the wrong
+line of each block, and a section slicer that truncated §11 to its own heading. All
+six were in the checker. None were in the syntax, and that is worth knowing before
+trusting the next run of it.
+
+### 13.1 Two members, two different insets
+
+```toml
+[[omniwm.layouts.strip.rules]]
+rule = "run"
+axis = "y"
+reflow = "sticky"
+
+[[omniwm.layouts.strip.rules]]
+rule = "split"
+keep = "old"
+
+[[omniwm.layouts.strip.rules]]
+rule = "inset"
+subject = "main"
+by = 2
+edges = ["left", "right"]
+
+[[omniwm.layouts.strip.rules]]
+rule = "inset"
+subject = "main.1"
+by = 6
+edges = ["top", "bottom"]
+
+[[omniwm.layouts.strip.spaces]]
+name = "main"
+```
+
+A vertical strip whose first member has side gutters and whose second has vertical
+padding, and neither is expressible by any other rule: `run` divides equally and
+`split` produces equal halves, so `edges` is the only key that can say "gutter".
+
+Two insets appear because they are about two different subjects, which §3.5 allows
+and which is the composition case the current-rect semantics exist for. They cannot
+both be about `main`, and that is the deliberate constraint from §3.5 rather than an
+omission. `main.1` is legal to write about because it is a generated name of the form
+guard 5 accepts, so a rule about it can exist before the space does, and this program
+is the one case in the suite where the two forms of address sit next to each other: a
+bare `main` the author declared and a `main.1` the group's `split` will create at
+position 1. That is what the pair is for.
+
+`inset` is the fourth program-level geometry rule and the only one of the four that
+is unambiguously necessary: no arrangement rule insets anything. The three client
+rules of §12.1 and §12.3 use `align` and `match` instead, which is a different
+vocabulary entirely, so the two halves of the language do not overlap here.
+
+## 14. What the fourth revision found, and what the fifth reversed
+
+The fourth revision's finding 1 was wrong and the fifth corrects it. Findings 6, 7,
+8 and 9 survive unchanged. The rest are new.
+
+1. **Reversed. The relations were not vestigial, they were in the wrong file.** The
+   fourth revision put the duckWM relations in the program and concluded from nine
+   layouts that none of them needed one. None of them did, because none of them had a
+   bar. A bar is three relations on a client, and the mechanism is not optional and
+   was never close to being vestigial. The error was looking for the constraint
+   system's use inside the thing the constraint system was never for.
+
+2. **Two layers, one idiom.** A program places spaces and a client places itself
+   inside a box, and both are lists of rules with a `rule` key. The program layer
+   dropped `priority` because its rules cannot conflict. The client layer keeps
+   weights because its rules can, §15.2. Same syntax, different cost model, and the
+   reason is a real property of each layer rather than an inconsistency.
+
+3. **`role = "chrome"` is not expressible and was never needed.** A fake client takes
+   part in layout and focus exactly as a window does, so the key could only have
+   described a difference the project does not permit. It had exactly two uses in the
+   third revision's tests, the `status` space and the `frame.0` space, and both are
+   now ordinary clustered fake clients.
+
+4. **A cluster needs a resolution pass before mapping, and it is the union of the
+   members' minimum boxes.** The virtual client's size is not the size the program
+   gives it, it is the union of what its members need, which is why a bar makes its
+   group taller instead of overlapping it. And a rule measuring against a client
+   contributes no minimum, because it is waiting for the box the program has not given
+   out yet. `layoutengine.md`'s pipeline is nine steps, not eight.
+
+5. **Snapping is a client rule and needs no program key.** A snap is a client at a
+   moment. Putting it in a program would make the program's geometry depend on which
+   window moved, which is the same defect as a per-member `leftover`.
+
+6. **Unchanged. `fill` and `beside` are `run` restated.** Of the four duckWM relations
+   that reached the program layer, `share` and `inset` are the ones an arrangement
+   cannot express. The other two should leave, and §12.2 is the evidence.
+
+7. **Unchanged. Per-member `leftover` is unreachable.** §3.1. One `leftover` per
+   grid, and generated members have no names to hang a per-member rule on.
+
+8. **Unchanged. A stack cannot recycle.** §11. Every new member is raised and the
+   count grows without bound. A key meaning "the member this stack is no longer
+   showing" has not been invented.
+
+9. **Unchanged. Deck's peek is compositor state.** §7.2. Three candidate solutions
+   rejected, each because it makes a space's `layout` key a parameter block.
+
+10. **Unchanged in conclusion, universal in scope.** No program needs group syntax at
+    all. What made the third revision hard to read was a one-element `groups` array per
+    layout, a `group` on every space, and a `members` list saying it again. Finding 18
+    removes the array as well, so there is no longer any form in which a program states
+    its membership twice, or at all.
+
+11. **Superseded by finding 18, and it is the same finding.** The bars made two of the
+    geometry rules unnecessary at the program level. `share` survives as a genuine 30
+    percent in §12.2 and `inset` as a genuine gutter in §13.1, and `fill` and `beside`
+    were being carried in §12.2 only to repair the overlap `groups[]` created, so they
+    are now dead rather than merely unexercised.
+
+12. **New, and nearly deleted in the wrong direction. Every `x`, `y`, `w`, `h` in the
+    fourth revision was `0`,** which is what made them look vestigial. They were the
+    arrangement's output restated in its input, which is what the `hundredths` and
+    `pixels` fields were, so the first instinct was to remove them. Removing them
+    would have been wrong twice over: layouts want ratios and get them from `share`,
+    but the one member per layout that wants pixels cannot be expressed at all, and a
+    fixed rectangle in a corner is the case the keys exist for.
+
+13. **New. A pin is a claim by being present, not by its value.** This is the
+    `layout` field's rule applied to a rectangle, and it is the only thing that makes
+    a default of `0` safe. Read as a value, `x = 0` and an absent `x` are the same
+    file and a corner is unreachable; read as presence, a program states geometry
+    only where it means to. §12.4 and §12.5 are the two cases that need it: a static
+    width on one member, and a fixed rectangle on all four.
+
+20. **New, and the empty-group question closes by dissolving the group.** §3.8 makes a
+    group bar's `against = "client"` resolve to the group's virtual client, and a
+    group with no members has none, so the bar had nothing to align to. Three closures
+    were available. A fallback, so `against` degrades to the container's rect when the
+    reference is missing, invents a silent second answer in a language whose whole
+    argument is that a rule is either satisfied or reported, §8. A key on a space
+    saying what an empty group draws, is a key that exists only for a degenerate case,
+    which is the same mistake as `capacity`. Or dissolve the group, which needs no key
+    at all.
+
+    Dissolving is the one that is actually true to the model, and it is better than
+    either alternative for a reason neither of the others noticed: an empty group is
+    transient. It stops existing before anything is drawn with it, so the state the
+    fallback would have had to describe is never reached, and a fallback for it would
+    be a rule with a second meaning that no author asked for. So a group with no
+    members is removed, its space goes the way any member's does, and the parent
+    re-solves around the gap.
+
+    The consequence is that a group which must stay visible while empty is given
+    something to hold, and `generaldesign.md` §13 already says the something need not
+    be a window: a fake client occupies a space, is placed by the program, is a member
+    of whatever group holds it, and is solved like any other client. A placeholder
+    member therefore keeps the group present, the border it wants is a client rule
+    set that already exists (`clients.frame` is a bottom-aligned two pixel rule four
+    pixels off the edge), and the group bar needs no rule of its own, because the
+    placeholder is a member and so the group's virtual client is the placeholder's
+    box. `layoutlanguage.md` §5 has this.
+
+    Whether a layout does that is its author's business, and the asymmetry is
+    deliberate rather than a gap. A user layout that does not dissolves when it
+    empties and nothing warns it first; a built-in layout that has to survive being
+    empty ships the placeholder with it. So the built-ins and a user's layout differ
+    in what is shipped, not in what the language permits, which is the only place a
+    difference like that can live without a key. One consequence is already open and is
+    not new: a member leaving a stack lands on finding 8, since nothing recycles a
+    stack's members and no key names the member a stack is no longer showing.
+
+19. **New, and the flat `omniwm.<set>.rules` namespace was hiding two mechanisms.**
+    The suite had eighteen client rule sets in one list and nothing said which of two
+    different things any of them was. Six were per-fakeclient rules: `bar`, `frame`,
+    `side_bar`, `counter`, `scroll_marker`, `canvas_marker`. Every rule in all six
+    measures `against = "client"` or `viewport`, and read together they say what the
+    surface *is* — a top bar, a bottom frame, a right edge, a counter, a marker that
+    follows the viewport. The other twelve were named destinations: one `snap` rule
+    with a `region` each, against `output` or `client`, which is the "named area" that
+    `layoutengine.md` §7.6 records wayfire needing and that must be reachable by drag
+    and by keybind.
+
+    The two are reached in opposite ways. A destination is named by a *move*: a
+    keybind or a drag region names the set and the rules apply to whichever client is
+    being moved, so the set describes a place and has no parts, which is why all
+    twelve hold exactly one rule. A fakeclient's set is named by the *action that
+    creates the surface*, and it is a property of the thing rather than of a move, so
+    it stacks several rules and all six do. One namespace for both left a reader with
+    no way to tell "this surface is a bar" from "this is where a drag goes", and the
+    suite had no term for the difference at all.
+
+    `omniwm.clients.<set>.rules` and `omniwm.snaps.<set>.rules` now say it in the
+    path, which is the only place the two mechanisms were ever going to be told apart
+    without a new key. That was the reason for the split rather than a `kind` key:
+    `kind` was removed in the third revision and `role` in the fourth, both because a
+    field's presence was already the claim and naming the inferred category asserted
+    it twice, and a path segment costs no key and cannot go stale against a name. The
+    one substantive difference in the shared keys is `against`'s default, which is
+    `client` for a set that relates to its own group and `output` for a destination
+    that must not silently mean "the left half of whatever is beside me" — that is
+    `snap_beside` already, under a worse name.
+
+18. **New, and it removes a key that was never the design's.** `groups[]` was mine,
+    not `generaldesign.md`'s. §8 there defines a group as a nested layout: a space may
+    hold a group, the group names a layout, that layout is a child solver instance with
+    its own constraint set, and a group is picked up and moved as a single window with
+    a titlebar. `layoutengine.md` §3.1 and §3.6 say the same, and neither has any
+    program-level array of named rule sets anywhere in it. Every layout has one rule
+    set, and two regions with two internal layouts are two spaces that are each a
+    group. So `groups[]` was nesting rebuilt one level down, under the design's own
+    word for the thing it was duplicating.
+
+    It was also broken, which is how the duplication became visible. The geometry rules
+    measure against "the group's rect" and a `groups[]` entry had no rect anywhere in
+    the file, so every group in a program claimed the program's whole rectangle and
+    overlapped its neighbours. `pinned` had to repair that overlap with `fill` and
+    `beside`, and it needed both because neither group's `run` meant anything: each
+    group held exactly one member, so each divided an axis among a single space and
+    handed it everything.
+
+    Both uses in the suite were that same shape, a set of columns with one member each.
+    `pinned` written flat is `run axis = "x"` with `share left of = 0.3`, and
+    `sidebar` is `run axis = "x"` with a pinned `w`. Neither needed a second rule list,
+    and the `push` targets that motivated the ordering survive unchanged because a
+    `to` names a space and not a group.
+
+    Two things follow that are not about this file. The first is that `fill` and
+    `beside` are now dead, which closes a note that has been open since the fourth
+    revision, and the reason they existed is the reason `groups[]` should not have: of
+    the four duckWM relations that reached the program layer, two are things an
+    arrangement cannot say and the other two were repairs for a mechanism that invented
+    the problem it solved. The second is that `group` goes back to meaning what the
+    authoritative docs mean, and the word `container` leaves this file entirely. I had
+    renamed the design's group to "container" three revisions earlier while keeping
+    `groups[]` as a key name, which inverted the word: the authoritative sense became
+    the minority one in the file that was supposed to be implementing it. The rename
+    was not the mistake. Having two objects compete for one name was, and the fix is
+    to delete one of them.
+
+16. **New, and the reason the address question was worth asking twice. The `0` in
+    `main.0` was the system's index sitting in the author's file.** Nine programs
+    declared `name = "main.0"` and two more declared `left.0`, `right.0`, `side.0` and
+    `content.0`, so the author was writing a trailing index on every space and the
+    system was agreeing by starting its own numbering at 1. Two things were wrong
+    with that. The index is not the author's to write, and more importantly an address
+    became ambiguous: `right.0` could be a space the author named or the first space a
+    group created, and nothing in the string said which, so guard 3 could not even
+    state the rule without the file telling it which reading was meant.
+
+    Declared names are now bare and guard 3 forbids a trailing `.<digits>` on one, so
+    the two forms cannot collide. The index survives where it earns its place, on
+    spaces the program creates: `n` is the position the new space takes in its group,
+    declared members holding the positions before it, so a group with one declared
+    space creates `main.1` first and a group with none creates `main.0`.
+
+    What this exposes is that the address is decided by the data and not by the
+    punctuation, which is the property worth having. Read left to right: a component
+    that is a space carrying a `layout` continues inside that program, a component
+    that is a group is followed by one position, and anything else is not an address.
+    So `stack.main` is a path and `main.1` is a position, and the checker can tell them
+    apart without guessing from the shape. Before this, the checker guessed from the
+    shape, guessed wrong, and reported both `pinned` and `sidebar` as resolving when
+    neither target existed.
+
+15. **New. `when = "full"` was a required key with one legal value, on all four
+    occupancy kinds, and it went.** The rule name already says what fires it:
+    `spawn` is the rule you write when a member is full, `split` likewise, and an
+    arrangement or geometry rule has no trigger to name. So the key was `full` in
+    every file that could contain it and absent in every file that could not, which
+    makes it a constant dressed as a key, and the language has now removed six keys
+    that were each one of those.
+
+    The honest counterargument is that it was the only *extensible* slot in the rule
+    vocabulary, and losing it means the second trigger needs a new key rather than a
+    new value. That is a real cost and it is recorded, but the trigger set does not
+    have a second member: shrink needs no rule, because a `flow` group re-divides and
+    a `sticky` group scales, focus is the `stack` arrangement's `raise`, and a
+    neighbour filling is `push` targeting a space and firing that group's rule in
+    turn, which §6 already describes. Keeping a key open for a trigger that cannot be
+    named is the same mistake as keeping `members` for a membership the `group` field
+    already stated, so `when` is in §11.10 with `rect` and `kind`.
+
+    The rule that replaced it is the one that was already true: a rule's family is its
+    trigger. That is a constraint on future kinds, not only on future syntax, since a
+    new kind with a different trigger would have to be a new family, and the twelve
+    kinds would stop being twelve.
+
+14. **New. The checker cannot tell a pin from a default, and should not try.** It
+    counts occurrences, so a program that pins `w = 0` and one that omits `w` look
+    alike to it. That is a limit of the check rather than a defect in the language,
+    and it is recorded here because the next person to extend the checker will try to
+    close it and should decide not to. Detecting it needs a real parser, and the
+    parser is `tomlparser.md`'s job, not the checker's.
+
+## 15. Snapping, which is a client rule and not a program
+
+Ten regions, `against = "output"`, which is a Wayfire zone set expressed as client
+rules on a client that happens to be snapping:
+
+```toml
+[[omniwm.snaps.snap_left.rules]]
+rule = "snap"
+against = "output"
+region = "left"
+
+[[omniwm.snaps.snap_top_left.rules]]
+rule = "snap"
+against = "output"
+region = "top_left"
+
+[[omniwm.snaps.snap_center.rules]]
+rule = "snap"
+against = "output"
+region = "center"
+
+[[omniwm.snaps.snap_full.rules]]
+rule = "snap"
+against = "output"
+region = "full"
+```
+
+Four of the ten regions above, and the other six, which omit `against`
+because `output` is the default and writing it on every snap would be noise:
+
+```toml
+[[omniwm.snaps.snap_right.rules]]
+rule = "snap"
+region = "right"
+
+[[omniwm.snaps.snap_top.rules]]
+rule = "snap"
+region = "top"
+
+[[omniwm.snaps.snap_bottom.rules]]
+rule = "snap"
+region = "bottom"
+
+[[omniwm.snaps.snap_top_right.rules]]
+rule = "snap"
+region = "top_right"
+
+[[omniwm.snaps.snap_bottom_left.rules]]
+rule = "snap"
+region = "bottom_left"
+
+[[omniwm.snaps.snap_bottom_right.rules]]
+rule = "snap"
+region = "bottom_right"
+```
+
+All ten regions are now written rather than merely listed, and the check in §13 counts
+written occurrences, so an unused one shows up rather than being claimed by a table.
+
+Snap to a window rather than to the monitor, which is Wayfire's other half and the
+reason `against` has three values:
+
+```toml
+[[omniwm.snaps.snap_beside.rules]]
+rule = "snap"
+against = "client"
+region = "left"
+
+[[omniwm.snaps.snap_under.rules]]
+rule = "snap"
+against = "client"
+region = "full"
+```
+
+And a snap into a transformed space, which is the third value of `against` and
+the only one the canvas programs of §8 and §9 can use:
+
+```toml
+[[omniwm.clients.canvas_marker.rules]]
+rule = "snap"
+against = "viewport"
+region = "center"
+```
+
+And `edge = "center_y"`, which has no other use in this file: a scroll indicator on
+the horizontal scroller of §4, a hairline at the vertical middle of the viewport and
+as wide as the client it tracks.
+
+```toml
+[[omniwm.clients.scroll_marker.rules]]
+rule = "align"
+against = "viewport"
+edge = "center_y"
+
+[[omniwm.clients.scroll_marker.rules]]
+rule = "match"
+against = "client"
+axis = "x"
+
+[[omniwm.clients.scroll_marker.rules]]
+rule = "size"
+height = 1
+```
+
+`region = "full"` against a client means "fill the neighbour", which is not a region
+of the neighbour, it is the neighbour itself, and it is a legitimate reading: the
+region names a position in the reference and `full` names all of it. It is also the
+one reading where `against` is load-bearing in a way a reader might miss, so it is
+the clearest argument for `against` staying explicit.
+
+### 15.1 What snapping costs, and what it does not
+
+A snapped client is floating per §3.7, so:
+
+- it keeps its space, and therefore its place in the focus order and its identity in
+  a save record, and neither needs a special case
+- its group's arrangement rules are not applied to it, so a snapped window in a
+  dwindle leaves the rest of the dwindle alone
+- the animation endpoint is the same rectangle field a float uses, so a snap
+  animates exactly as a float does
+- it contributes its minimum box to nothing, because it is not in a group
+
+It is also why snapping got no program-level key. A snap is a client at a moment, and
+a `snap` rule in a program would make the program's geometry a function of which
+window moved, which is the same mistake as a per-member `leftover` in §3.1.
+
+### 15.2 The conflict the weights are for
+
+A client with a snap against the output *and* a snap against a neighbour has two
+contradictory equations, and unlike a bar's three rules these genuinely disagree.
+That is the case for keeping weights on the client layer after the program layer
+dropped `priority`, and it is the reason the two layers are not unified all the way
+into one vocabulary: the program layer's rules never conflict, so order is enough
+there, and the client layer's rules can, so it needs a cost function.
