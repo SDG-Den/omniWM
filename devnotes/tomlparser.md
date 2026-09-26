@@ -61,9 +61,17 @@ states for integers.
 |---|---|---|
 | a binding table | `binding` | `args` is an array of strings, absent is none |
 | a client rule table | `client_rule` | `rule`/`against`/`edge`/`axis`/`width`/`height`/`by`/`region` |
-| a layout program | `layout` | `rules` and `spaces` are arrays of tables, `viewport` is a table |
-| a layout rule table | `layout_rule` | `rule` plus that kind's own arguments |
-| a space table | `space` | `name`/`layout`/`x`/`y`/`w`/`h`/`order` |
+| a layout program | `constraint` | the tag is `0x32`, named `constraint` in `configstorage.md` §4 |
+| a window rule table | `map` | a rule block, `if` and `then`, at `omniwm.window_rules.<name>` |
+| a space, or a rule inside one | no tag of its own | a space is an `option` (`0x25`) and a rule is a named key of it |
+
+There are no `layout`, `layout_rule` or `space` tags. An earlier draft of this
+table listed all three, and they named nothing that exists: the store has no
+`layout` tag, a program is `constraint`, and a space and a rule are the two
+levels inside a `constraint` value rather than values in their own right
+(`configstorage.md` §4, `omni_layout.h` section 7). A TOML table for a space is
+therefore an `option` table and a rule is a key within it, and the reader in
+§6 must nest them rather than bind each to a distinct tag.
 
 A binding, a layout program and a client rule table are all tables, and §6 would
 otherwise bind each to a `tuple` whose `field_types` come from field order. That is
@@ -248,8 +256,9 @@ explicit table form, which is why that form exists in the input direction too.
 
 ## 10. Relationship to other facades
 
-- The parser is a facade in exactly the sense `configstorage.md` §11 and §12
-  describe: in-process, over the block, a client rather than a peer.
+- The parser is a facade in exactly the sense `configstorage.md` §11
+  describes: in-process, over the block, a client rather than a peer. §12 is the
+  guard rules and is a separate concern, applied to whatever the parser writes.
 - It reuses the typed-value encoder and decoder from `ipc.md` §3 verbatim. There
   is no second value format, which is the reason a value does not change meaning
   when it arrives through a different surface.

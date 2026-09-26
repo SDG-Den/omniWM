@@ -497,24 +497,26 @@ neither axis meant anything for a group of one.
 `0 < 1` and the chain terminates. Reverse the two `order` values and the program is
 a load error naming `pinned`.
 
-**Deleting `groups[]` killed the last user of two geometry rules.** This program
-carried `fill` and `beside` only to repair the overlap that two one-member groups
-created, and with the groups gone neither has anywhere to apply: `fill` set a member
-to its group's rect, which only ever mattered when a group had one member, and
-`beside` reordered members that `run` already places in declaration order.
+**Deleting `groups[]` killed the last user of two geometry rules, and they are gone
+from the language.** This program used to carry `fill` and `beside`, and it carried
+them only to repair the overlap that two one-member groups created. With the groups
+gone neither had anywhere to apply: `fill` set a member to its group's rect, which
+only ever mattered when a group had one member, and `beside` reordered members that
+`run` already places in declaration order.
 
-| rule | distinct from `run`? | has a user? |
+| rule | distinct from `run`? | in the language? |
 |---|---|---|
 | `share` | yes, `run` divides equally and the left is 30 percent | yes, this program |
-| `fill` | no, and its only user was the overlap `groups[]` created | **no** |
-| `beside` | no, declaration order already puts `left` first | **no** |
+| `fill` | no, and its only user was the overlap `groups[]` created | **removed** |
+| `beside` | no, declaration order already puts `left` first | **removed** |
 | `inset` | yes, no arrangement rule insets anything, §13.1 | yes, §13.1 |
 
-So the fourth revision's standing note that `fill` and `beside` "are carried purely so
-the keys are exercised" is no longer bookkeeping. They are dead, and they were dead
-for a reason: of the four duckWM relations that reached the program layer, two are
-things an arrangement cannot say and the other two were repairs for a mechanism that
-should not have existed. The bars in §12.1 and §12.3 show where the ones that survive
+Removing `beside` took `operand` with it, since `operand` belonged to `beside` and
+nothing else, so the geometry layer is now two rules and three arguments. The fourth
+revision's standing note that `fill` and `beside` were "carried purely so the keys are
+exercised" was never more than bookkeeping, and it was bookkeeping for a mechanism
+that should not have existed: of the four duckWM relations that reached the program
+layer, two are things an arrangement cannot say and the other two were repairs. The bars in §12.1 and §12.3 show where the ones that survive
 belong: on the client, where they are the whole mechanism rather than a restatement.
 
 ### 12.3 A framed group is the same three rules again
@@ -670,14 +672,14 @@ programs defined: 16
 layout references: ['monocle', 'vertical_stack']
 dangling layout references: none
 push targets: ['master_stack->stack.main', 'deck->stack.main', 'master_stack->stack.main', 'pinned->right', 'sidebar->content']
-space addresses checked: 10  (to 5, subject/operand 5)
+space addresses checked: 10  (to 5, subject 5)
 unresolved space addresses: none
 declared names carrying an index: none
 stale capability tokens: 0
 values used only as defaults: ['rows=derived', 'reflow=flow', 'self=parent', 'extent=parent']
-spec values never exercised: ['rule=beside', 'rule=fill']
-client rule sets: 18 in 29 rule tables  (clients 6, snaps 12)
-sets whose rule count does not match their namespace: ['clients.canvas_marker holds 1 rule(s); a snaps set holds exactly one snap, a clients set stacks several']
+spec values never exercised: none
+client rule sets: 18 in 29 rule tables  (clients 5, snaps 13)
+sets whose rule count does not match their namespace: none
 client keys used: 8
 undefined client keys: none
 client enumerated values used: 70
@@ -795,9 +797,10 @@ The fourth revision's finding 1 was wrong and the fifth corrects it. Findings 6,
    moment. Putting it in a program would make the program's geometry depend on which
    window moved, which is the same defect as a per-member `leftover`.
 
-6. **Unchanged. `fill` and `beside` are `run` restated.** Of the four duckWM relations
-   that reached the program layer, `share` and `inset` are the ones an arrangement
-   cannot express. The other two should leave, and §12.2 is the evidence.
+6. **Now acted on. `fill` and `beside` were `run` restated, and both are removed.**
+   Of the four duckWM relations that reached the program layer, `share` and `inset`
+   are the ones an arrangement cannot express. The other two have left, and §12.2 is
+   the evidence.
 
 7. **Unchanged. Per-member `leftover` is unreachable.** §3.1. One `leftover` per
    grid, and generated members have no names to hang a per-member rule on.
@@ -815,11 +818,11 @@ The fourth revision's finding 1 was wrong and the fifth corrects it. Findings 6,
     removes the array as well, so there is no longer any form in which a program states
     its membership twice, or at all.
 
-11. **Superseded by finding 18, and it is the same finding.** The bars made two of the
-    geometry rules unnecessary at the program level. `share` survives as a genuine 30
-    percent in §12.2 and `inset` as a genuine gutter in §13.1, and `fill` and `beside`
-    were being carried in §12.2 only to repair the overlap `groups[]` created, so they
-    are now dead rather than merely unexercised.
+11. **Superseded by finding 18, and it is the same finding.** The bars made two of
+    the geometry rules unnecessary at the program level. `share` survives as a genuine
+    30 percent in §12.2 and `inset` as a genuine gutter in §13.1, and `fill` and
+    `beside` were being carried in §12.2 only to repair the overlap `groups[]`
+    created, so they are removed rather than merely unexercised.
 
 12. **New, and nearly deleted in the wrong direction. Every `x`, `y`, `w`, `h` in the
     fourth revision was `0`,** which is what made them look vestigial. They were the
@@ -876,10 +879,12 @@ The fourth revision's finding 1 was wrong and the fifth corrects it. Findings 6,
 19. **New, and the flat `omniwm.<set>.rules` namespace was hiding two mechanisms.**
     The suite had eighteen client rule sets in one list and nothing said which of two
     different things any of them was. Six were per-fakeclient rules: `bar`, `frame`,
-    `side_bar`, `counter`, `scroll_marker`, `canvas_marker`. Every rule in all six
-    measures `against = "client"` or `viewport`, and read together they say what the
-    surface *is* — a top bar, a bottom frame, a right edge, a counter, a marker that
-    follows the viewport. The other twelve were named destinations: one `snap` rule
+    `side_bar`, `counter`, `scroll_marker`, and the one that has since moved,
+    `canvas_marker`, which is now the destination `snaps.snap_canvas_center`. Every
+    rule in the five that remain measures `against = "client"` or `viewport`, and read
+    together they say what the
+    surface *is*: a top bar, a bottom frame, a right edge, and a counter. The other
+    thirteen are named destinations: one `snap` rule
     with a `region` each, against `output` or `client`, which is the "named area" that
     `layoutengine.md` §7.6 records wayfire needing and that must be reachable by drag
     and by keybind.
@@ -929,8 +934,9 @@ The fourth revision's finding 1 was wrong and the fifth corrects it. Findings 6,
     `to` names a space and not a group.
 
     Two things follow that are not about this file. The first is that `fill` and
-    `beside` are now dead, which closes a note that has been open since the fourth
-    revision, and the reason they existed is the reason `groups[]` should not have: of
+    `beside` had no user left and were removed, which closes a note open since the
+    fourth revision, and the reason they existed is the reason `groups[]` should not
+    have: of
     the four duckWM relations that reached the program layer, two are things an
     arrangement cannot say and the other two were repairs for a mechanism that invented
     the problem it solved. The second is that `group` goes back to meaning what the
@@ -986,8 +992,8 @@ The fourth revision's finding 1 was wrong and the fifth corrects it. Findings 6,
 
     The rule that replaced it is the one that was already true: a rule's family is its
     trigger. That is a constraint on future kinds, not only on future syntax, since a
-    new kind with a different trigger would have to be a new family, and the twelve
-    kinds would stop being twelve.
+    new kind with a different trigger would have to be a new family, and the ten
+    kinds would stop being ten.
 
 14. **New. The checker cannot tell a pin from a default, and should not try.** It
     counts occurrences, so a program that pins `w = 0` and one that omits `w` look
@@ -1074,7 +1080,7 @@ And a snap into a transformed space, which is the third value of `against` and
 the only one the canvas programs of §8 and §9 can use:
 
 ```toml
-[[omniwm.clients.canvas_marker.rules]]
+[[omniwm.snaps.snap_canvas_center.rules]]
 rule = "snap"
 against = "viewport"
 region = "center"

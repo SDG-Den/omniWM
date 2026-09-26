@@ -1,6 +1,6 @@
 # The layout language
 
-The normative reference for how a layout is written: the model, the twelve rule
+The normative reference for how a layout is written: the model, the ten rule
 kinds, the keys at each level, the guards a program must pass, and the limits that
 are frozen. Where `devnotes/layoutengine.md` records what was decided and why, and
 `devnotes/tomlparser.md` records how the bytes are read, this file records what the
@@ -18,8 +18,22 @@ written against an earlier draft of this language can be read rather than guesse
 
 ## 1. What a program is
 
-One composite value bound to the `constraint` tag of `devnotes/tomlparser.md`
-§2, at `omniwm.layouts.<name>`. Three optional parts:
+A program is **three keys** under one prefix, and it is three because this
+document and `layout-test-examples.md` are the authority on keys. Both say
+`rules`, `spaces` and `viewport`, and the 1,138-line suite is written in that
+form throughout, so the form is settled and every other document conforms to it.
+
+```
+omniwm.layouts.<name>.rules     array of rule
+omniwm.layouts.<name>.spaces    array of space
+omniwm.layouts.<name>.viewport  the viewport, at most one
+```
+
+The tag is read off the key rather than declared once, which is the same rule
+`tomlparser.md` §3 states for integers. `spaces` is an `OMNI_TAG_CONSTRAINT` at
+`0x32`; `rules` is an array of `option`, one per rule, because a rule is a
+named-key table of its own kind's arguments; `viewport` is an `option`. Three
+parts:
 
 | part | role |
 |---|---|
@@ -41,7 +55,7 @@ word needed a table this badly.**
 
 | word | means | declared by |
 |---|---|---|
-| program | a named layout, one entry of `omniwm.layouts`, holding **one** rule list | `omniwm.layouts.<name>` |
+| program | a named layout, one prefix of `omniwm.layouts`, holding **one** rule list | `omniwm.layouts.<name>.*` |
 | space | one rectangle holding zero or one occupant | `spaces[]` |
 | group | a space carrying a `layout`, so it holds a nested program | the space's `layout` field |
 | cluster | a runtime set of clients occupying one space as one occupant | §3.8 |
@@ -97,9 +111,7 @@ Every rule is a table. `rule` names its kind and is required. The kinds are:
 | `spawn` | occupancy | full | add a member and give it to the leaver |
 | `push` | occupancy | full | move the leaver to another space |
 | `float` | occupancy | full | the leaver leaves the group entirely |
-| `fill` | geometry | none | the subject fills its group on an axis |
-| `share` | geometry | none | the subject takes a fraction of its group |
-| `beside` | geometry | none | the subject sits next to the operand |
+| `share` | geometry | none | the subject takes a fraction of the program |
 | `inset` | geometry | none | the subject's edges pull in by a distance |
 
 A group has **at most one** arrangement rule and it must come first. Occupancy and
@@ -112,7 +124,7 @@ restated something the reader can infer, and a key that can only be written one 
 carries nothing. §8 records where a second trigger would go.
 
 **Rules are tried in order and the first that fits wins.** There is no `priority`
-and no weight band. A later `share` cannot override an earlier `fill`, and to
+and no weight band. A later `share` cannot override an earlier `inset`, and to
 change the order you move the rule. This is both the readable form and the honest
 one: the duckWM weights existed to make a least-squares solve converge, and a
 layout with four geometry rules does not need a solver to decide between them.
@@ -251,27 +263,19 @@ Neither form is arithmetic, so no expression syntax is implied;
 
 | argument | applies to | values | default | meaning |
 |---|---|---|---|---|
-| `subject` | all four | space name | required | the space being placed |
-| `axis` | `fill`, `share`, `beside` | `x`, `y`, `xy` | `xy` | the axis the relation applies to |
+| `subject` | both | space name | required | the space being placed |
+| `axis` | `share` | `x`, `y`, `xy` | `xy` | the axis the relation applies to |
 | `of` | `share` | number > 0 | required | the fraction, so `0.3` is three tenths |
-| `operand` | `beside` | space address, or `parent` | `parent` | what the subject sits next to |
 | `by` | `inset` | integer >= 0 | required | the inset distance in pixels |
 | `edges` | `inset` | array of `left`, `right`, `top`, `bottom` | all four | which edges pull in |
 
 Each geometry rule takes the subject's **current** rectangle and adjusts it. The
-arrangement rule placed it first; these refine it. That is what lets `fill` and
-`inset` compose as fill-then-inset instead of competing, and it is the reason a
+arrangement rule placed it first; these refine it. That is what lets `share` and
+`inset` compose as share-then-inset instead of competing, and it is the reason a
 geometry rule is stated in terms of the program's rect only where it must be.
 
-- `fill` sets the subject's rectangle to the program's, on `axis`.
-- `share` sets the subject's extent on `axis` to `of` of the program's.
-- `beside` sets the subject's origin on `axis` to the operand's far edge plus a
-  gap, so `operand.origin = subject.origin + subject.extent`. `operand = "parent"`
-  is the whole rect the program was given, which is why it is the default: a subject
-  beside the parent sits against the far edge of everything. Separate `left_of` and
-  `adjacent` kinds collapse into this one, because they were the same equation and
-  the difference was a gap that `run`'s `gap` argument already
-  expresses.
+- `share` sets the subject's extent on `axis` to `of` of the program's, which is why
+  it is the only geometry rule that measures the whole rect.
 - `inset` pulls the subject's current edges in by `by`.
 
 **A subject is named by at most one geometry rule.** Two rules naming the same
@@ -352,17 +356,34 @@ presence was the claim and naming the inferred category asserted it a second tim
 and putting the name in the namespace lets a reader tell the two mechanisms apart
 without a key that repeats what the path already said.
 
+That reasoning is about fake clients, and `windows.md` §9.5 is where a real client
+reaches the same namespace, so the two are worth telling apart rather than leaving a
+reader to assume the table covers both. **A fake client has nothing to match**: the
+action that creates it already names the set, and matching a compositor-drawn surface
+against its own name would be a comparison that can only succeed. **A real client is
+bound by a window rule matching it**, one named child per set on the client's entry,
+because there is no creating action to name a set on its behalf. The syntax is
+unchanged either way: what lands on the client is a `0x33` record from
+`omniwm.clients.<set>.rules` in both cases, and the matcher selects *which* sets, not
+what is in one. That is why `0x33` needs no matchers
+(`configstorage.md` §4) and why the block encoding is the open ABI question there.
+A set may be reached by more than one rule, so the order in which two bound sets
+resolve the same client is the rule list's name order, sorted, with the naming doing
+the work (`windows.md` §9.7) rather than a `priority` key: the language states no
+priority, for the same reason it states no `role`.
+
 A snap set is the "named area" that `layoutengine.md` §7.6 records wayfire needing,
 reachable by drag and by keybind. A keybind or a drag region names the set, and the
 rules apply to whichever client is being moved, so a snap set describes a place
 rather than a thing. A destination has no parts, and in the suite that shows up as
-shape: all twelve `snaps` sets hold exactly one `snap` rule and all six `clients`
+shape: all twelve `snaps` sets hold exactly one `snap` rule and all five `clients`
 sets hold three or four. The shape is a checkable consequence of the split rather
-than a rule of the language, and the one set that does not match it is
-`clients.canvas_marker`, which is a single snap against `viewport` and is therefore a
+than a rule of the language, and every set in the suite now matches it. The one that
+did not was `clients.canvas_marker`, a single snap against `viewport` and therefore a
 canvas-relative `center` destination that `snaps.snap_center` already provides for
-`output`. It is filed as a client because it is named as furniture, and that is a
-naming question rather than a mechanism one.
+`output`. It was filed as a client because it was named as furniture, which was a
+naming question and not a mechanism one, so it is now `snaps.snap_canvas_center` and
+the shape is uniform.
 
 The two share their keys, their solver and their weights, and nothing else. Nothing
 in either namespace can be reached from a program, and a program cannot name a set.
@@ -624,8 +645,8 @@ of named rule sets inside one program, with a space's `group` field saying which
 it was in.
 It duplicated nesting one level down, and it had no rectangle: the geometry rules
 measure against "the group's rect" and a `groups[]` entry had none, so every group in a
-program claimed the whole program and the author had to carve them apart with `fill`
-and `beside`. Both of its uses in the test suite were a set of columns with one member
+program claimed the whole program and the author had to carve them apart with
+geometry rules that had no other purpose. Both of its uses in the test suite were a set of columns with one member
 each, which is `run` plus `share` or a pinned `w`, written flat. A rule list is a
 program, so a program that wants a second one nests.
 
@@ -716,14 +737,14 @@ held per tag. `devnotes/layoutengine.md` §3.3 reached this already.
 Load-time validation of a program, all in the semantic guard of
 `devnotes/configstorage.md` §12, because each is a mistake the user can correct:
 
-1. `rule` is one of the twelve kinds, and only the arguments belonging to it are
+1. `rule` is one of the ten kinds, and only the arguments belonging to it are
    present.
 2. The first rule of the program is an arrangement rule, and there is at most one.
 3. Every `name` is unique within the program and no `name` ends in `.<digits>`, so a
    declared name cannot collide with a generated one.
 4. Every `layout` names a program that exists, no program transitively contains
    itself, and nesting depth is at most `OMNI_LAYOUT_MAX_NEST_DEPTH`.
-5. Every `to`, `subject` and `operand` is a space address read left to right, §3.2: a
+5. Every `to` and `subject` is a space address read left to right, §3.2: a
    single component is a declared space of this program, a longer one is `main`
    followed by one decimal position, and anything else must name a space carrying a
    `layout` and continue inside that program. A group on its own is not an address,
@@ -761,9 +782,12 @@ fixed-width record in this language, because every argument is either a small
 enumeration, a number, or a name. A program is a table, and it is stored as one.
 
 That reverses `devnotes/layoutengine.md` §2.10's claim that a record is 16 bytes,
-and it is worth being blunt about the consequence: the header's
-`OMNI_TAG_CONSTRAINT` block does not describe this language and would need to
-become a composite-value tag rather than a record array.
+and the header has been changed to match: `OMNI_TAG_CONSTRAINT` at `0x32` is a
+composite value rather than a record array, and its payload is
+`constraint := array of space` with a space being an `option` and a rule a named
+key of that option (`configstorage.md` §4, `omni_layout.h` section 7). The
+"would need to become" above was written before that change and is now a
+description of the tag as it stands.
 
 ## 10. Consequences worth recording
 
@@ -772,10 +796,10 @@ values and names, so `save` produces something a user can edit by hand, which
 `devnotes/layoutengine.md` §4.6 requires and which a record array could not
 provide at any width.
 
-**The duckWM lineage is now confined to four rule kinds.** `fill`, `share`,
-`beside` and `inset` are its relations, they are solved as soft weighted
+**The duckWM lineage is now confined to two rule kinds.** `share` and `inset` are
+its relations, they are solved as soft weighted
 constraints, and nothing else in the language is one. The weighted solver survives
-as the implementation of those four and stops being the architecture.
+as the implementation of those two and stops being the architecture.
 
 **A rule is not a constraint and a constraint is not a rule, but they are both
 rules.** Keeping one list means an author does not learn two vocabularies, and it
@@ -808,7 +832,7 @@ Its rules live in the program it names, at that program's program level.
 
 | key | values | present | meaning |
 |---|---|---|---|
-| `rule` | the twelve kinds in §3 | required, first key | which kind of rule this is, and its family, and its trigger |
+| `rule` | the ten kinds in §3 | required, first key | which kind of rule this is, and its family, and its trigger |
 | `keep` | `new`, `old` | required on the four occupancy rules | who keeps the full space |
 
 There is no `when` key. The `rule` value carries the family, the family carries the
@@ -842,10 +866,9 @@ The other three occupancy rules take no argument beyond `keep`.
 
 | key | applies to | values | default |
 |---|---|---|---|
-| `subject` | `fill`, `share`, `beside`, `inset` | space name | required |
-| `axis` | `fill`, `share`, `beside` | `x`, `y`, `xy` | `xy` |
+| `subject` | `share`, `inset` | space name | required |
+| `axis` | `share` | `x`, `y`, `xy` | `xy` |
 | `of` | `share` | number > 0 | required |
-| `operand` | `beside` | space address, or `parent` | `parent` |
 | `by` | `inset` | integer >= 0 | required |
 | `edges` | `inset` | array of `left`, `right`, `top`, `bottom` | all four |
 
@@ -924,7 +947,9 @@ because those drafts are not part of the set; what is worth keeping is the reaso
 | `when` | the family is the trigger, and `full` is the only trigger, §3 |
 | a trailing index on a declared `name` | the index is the system's, and it made an address ambiguous, §4 |
 | `groups`, `groups[].name`, `groups[].rules`, `group` | a rule list is a program, so a second one nests; and a `groups[]` entry had no rectangle, §5 |
-| `operand = "group"` | the value is `parent`, because a rule that measures the whole rect measures the program, §3.5 |
+| `fill` | it set a member to the group's rect, which only ever mattered when a group had one member, and there was never more than one |
+| `beside` | it reordered members that `run` already places in declaration order, and its gap was `run`'s `gap` argument |
+| `operand` | it belonged to `beside` only, so removing `beside` removed it |
 | `hundredths`, `pixels` | the unit is implied, and sizing is a `share` rule or a client `size` |
 
 ### 11.11 Client rule keys

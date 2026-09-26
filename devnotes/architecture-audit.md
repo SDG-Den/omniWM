@@ -11,6 +11,15 @@ Scope: OmniWM design documents and source-tree structure compared with selected 
 > §8. Findings outside that scope are recorded as deferred, not as outstanding
 > work, and §4 and Gate 4 in particular are not gaps to be closed before
 > implementation begins.
+>
+> **This document is not a readiness gate.** It is dated 2026-09-25 and the
+> repository has moved since. `server.md`, `tomlparser.md`, `layoutengine.md`,
+> `layoutlanguage.md`, `windows.md` and `tags.md` are all written, and
+> `include/shared/omni_layout.h` exists, so the "at the time of review" list in
+> the next section is false if read as present tense. §8, the deferral table, is
+> the part that still carries weight, and two of its rows (the keybinding path at
+> §8 and the log/util contracts) turned out to block roadmap stages 3 and 4 rather
+> than merely deferring them; see `audit-2-findings.md` items 3.2, 3.8 and 4.3.
 
 ## Executive assessment
 

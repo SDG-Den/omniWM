@@ -37,7 +37,7 @@ I am still a newbie C developer (yes, this project will be built in C), so this 
 
 - [ ] stage 1: config store and ipc functional, simple write+read test. 
 - [ ] stage 2: TOML parser for config store functional + helper for registering new TOML keys
-- [ ] stage 3: create shared helpers (core libraries, logging and server backend)
+- [ ] stage 3: create shared helpers and scaffolding (core libraries, logging and server backend)
 - [ ] stage 4: set up basic input
 - [ ] stage 5: get the WM to start and show windows
 - [ ] stage 6: implement layout constraints w/ single demo layout

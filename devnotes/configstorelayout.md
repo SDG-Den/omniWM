@@ -17,10 +17,13 @@ concepts in `configstorage.md` are not what was frozen and are not in question;
 what is reopened is the tag table, the composite payload shapes, the fixed
 section set, and the v1 capacity constants. `devnotes/layoutengine.md` §2.9
 states the reopening and §2.10 lists the changes the layout engine asked for.
-That list has been applied here: two tags (`OMNI_TAG_CONSTRAINT`,
-`OMNI_TAG_CLIENT_RULE`), a framed `OMNI_TAG_BINDING`, and a seventh fixed
-section for the solved layout. `OMNI_FORMAT_VERSION` stays 1, because the first
-runnable build is v1 and there is no earlier format to be incompatible with.
+That list has been applied here: two tags (`OMNI_TAG_CONSTRAINT` as the
+composite program tree, `OMNI_TAG_CLIENT_RULE` as a 24-byte record with no
+payload), a framed `OMNI_TAG_BINDING`, a composite `OMNI_TAG_MAP` for the
+window-rule block, and a seventh fixed section for the solved layout.
+`OMNI_TAG_MAX_KNOWN` is `0x34` and the unassigned hole starts at `0x35`.
+`OMNI_FORMAT_VERSION` stays 1, because the first runnable build is v1 and there
+is no earlier format to be incompatible with.
 Every number here still has exactly one home, `include/shared/omni_layout.h`,
 per §14.
 
@@ -66,29 +69,34 @@ is ever duplicated elsewhere (`filestructure.md`, `include/shared`).
 | `OMNI_CATALOG_SLOT_COUNT` | `16384` | fixed catalog capacity |
 | `OMNI_CATALOG_ENTRY_SIZE` | `32 B` | catalog entry size |
 | `OMNI_ENTRY_NAME_MAX` | `4095 B` | max name bytes including NUL |
-| `OMNI_JOURNAL_OFF` | `0x81000` | journal section base |
+| `OMNI_CATALOG_INDEX_OFF` | `0x81000` | catalog name index section base |
+| `OMNI_CATALOG_INDEX_HEADER_SIZE` | `32 B` | name index header |
+| `OMNI_CATALOG_INDEX_SLOT_COUNT` | `16384` | one index slot per catalog slot |
+| `OMNI_CATALOG_INDEX_SLOT_SIZE` | `16 B` | hash, entry_id, generation low half |
+| `OMNI_JOURNAL_OFF` | `0xC2000` | journal section base |
 | `OMNI_JOURNAL_HEADER_SIZE` | `32 B` | journal ring metadata |
 | `OMNI_JOURNAL_CAPACITY` | `4096` | ring slots, constant at v1 |
 | `OMNI_JOURNAL_SLOT_SIZE` | `64 B` | fixed-size ring slot |
 | `OMNI_JOURNAL_INLINE_LIMIT` | `8 B` | values <= 8 bytes go inline |
-| `OMNI_REQUESTS_OFF` | `0xC2000` | request section base |
+| `OMNI_REQUESTS_OFF` | `0x103000` | request section base |
 | `OMNI_REQUEST_SLOT_COUNT` | `256` | fixed request slots |
-| `OMNI_REQUEST_SLOT_SIZE` | `0x1100` | fixed request slot size |
+| `OMNI_REQUEST_SLOT_SIZE` | `256 B` | fixed request slot size |
 | `OMNI_REQUEST_NAME_MAX` | `4095 B` | max name bytes including NUL |
 | `OMNI_REQUEST_VALUE_MAX` | `128 B` | inline request initial-value cap |
 | `OMNI_REQUEST_RECLAIM_MS` | `5000` | terminal-slot reclaim deadline |
-| `OMNI_REGION_DESC_OFF` | `0x1D2000` | fixed region descriptor table |
+| `OMNI_REGION_DESC_OFF` | `0x113000` | fixed region descriptor table |
 | `OMNI_REGION_DESC_SIZE` | `32 B` | region descriptor size |
 | `OMNI_REGION_DESC_COUNT` | `64` | fixed region descriptors |
 | `OMNI_REGION_SLOT_COUNT_MAX` | `2` | double buffering is 1 or 2 |
 | `OMNI_REGION_FRAME_MAX_BYTES` | `34 MiB` | one frame maximum |
 | `OMNI_REGION_TOTAL_MAX_BYTES` | `68 MiB` | two-frame maximum |
-| `OMNI_SOLVED_OFF` | `0x1D2800` | solved layout section base |
+| `OMNI_SOLVED_OFF` | `0x113800` | solved layout section base |
 | `OMNI_SOLVED_SECTION_SIZE` | `0x8000` | solved layout section size |
 | `OMNI_SOLVED_HEADER_SIZE` | `16 B` | solved layout section header |
 | `OMNI_SOLVED_NODE_SIZE` | `24 B` | one placed node |
 | `OMNI_SOLVED_SLOT_COUNT_MAX` | `1024` | maximum nodes in one solve |
-| `OMNI_POOL_OFF` | `0x1DB000` | storage pool base |
+| `OMNI_HDR_OFF_ARENA_FREE_HEAD` | `164` | arena free-list head, in the header |
+| `OMNI_POOL_OFF` | `0x11C000` | storage pool base |
 | `OMNI_POOL_GROWTH` | `2` | doubling factor on pool growth |
 
 Derived values for v1 (formulas, not constants):
@@ -96,28 +104,33 @@ Derived values for v1 (formulas, not constants):
 ```
 CATALOG_SIZE   = OMNI_CATALOG_SLOT_COUNT * OMNI_CATALOG_ENTRY_SIZE
                = 0x80000
-JOURNAL_OFF    = align16(OMNI_CATALOG_OFF + CATALOG_SIZE, 0x1000)
+CATALOG_INDEX_OFF = align16(OMNI_CATALOG_OFF + CATALOG_SIZE, 0x1000)
                = 0x81000
+CATALOG_INDEX_SIZE = OMNI_CATALOG_INDEX_HEADER_SIZE
+               + OMNI_CATALOG_INDEX_SLOT_COUNT * OMNI_CATALOG_INDEX_SLOT_SIZE
+               = 0x40020
+JOURNAL_OFF    = align16(CATALOG_INDEX_OFF + CATALOG_INDEX_SIZE, 0x1000)
+               = 0xC2000
 JOURNAL_SIZE   = OMNI_JOURNAL_HEADER_SIZE
                + OMNI_JOURNAL_CAPACITY * OMNI_JOURNAL_SLOT_SIZE
                = 0x40020
 REQUESTS_OFF   = align16(JOURNAL_OFF + JOURNAL_SIZE, 0x1000)
-               = 0xC2000
+               = 0x103000
 REQUESTS_SIZE  = OMNI_REQUEST_SLOT_COUNT * OMNI_REQUEST_SLOT_SIZE
-               = 0x110000
+               = 0x10000
 REGION_DESC_OFF = REQUESTS_OFF + REQUESTS_SIZE
-               = 0x1D2000
+               = 0x113000
 REGION_DESC_SIZE = OMNI_REGION_DESC_COUNT * OMNI_REGION_DESC_SIZE
                = 0x800
 SOLVED_OFF      = REGION_DESC_OFF + REGION_DESC_SIZE
-               = 0x1D2800
+               = 0x113800
 SOLVED_BYTES    = OMNI_SOLVED_HEADER_SIZE
                + OMNI_SOLVED_NODE_SIZE * OMNI_SOLVED_SLOT_COUNT_MAX
                = 0x6010
 FIXED_END       = align16(SOLVED_OFF + OMNI_SOLVED_SECTION_SIZE, 0x1000)
-               = 0x1DB000
-INITIAL_POOL    = OMNI_BLOCK_INITIAL_SIZE - FIXED_END = 0x225000
-MAX_POOL        = OMNI_BLOCK_MAX_SIZE - FIXED_END = 0x1FE25000
+               = 0x11C000
+INITIAL_POOL    = OMNI_BLOCK_INITIAL_SIZE - FIXED_END = 0x2E4000
+MAX_POOL        = OMNI_BLOCK_MAX_SIZE - FIXED_END = 0x1FEE4000
 ```
 
 `SOLVED_BYTES` must be less than `OMNI_SOLVED_SECTION_SIZE`, or a full solve
@@ -126,29 +139,37 @@ unused, which is deliberate slack rather than a value to spend: a solve that
 fills the section exactly has no room for a count that disagrees with the
 header, and the section is single-buffered, so a partial write is visible.
 
-`OMNI_POOL_OFF` is `FIXED_END`. The initial block is 4 MiB because 256 request
-slots consume most of the fixed region; at 2 MiB the initial pool would be
-`0x25000` (148 KiB), less than one 1080p RGBA frame. The mapping is
-demand-paged, so the untouched tail of a 4 MiB block costs no memory.
+`OMNI_POOL_OFF` is `FIXED_END`. The initial block is 4 MiB because the fixed
+region is now dominated by the catalog and its index, 768KB together; at 2 MiB
+the initial pool would be `0x25000` (148 KiB), less than one 1080p RGBA frame.
+The mapping is demand-paged, so the untouched tail of a 4 MiB block costs no
+memory.
+
+**The request queue no longer sets the fixed-region size.** It was 1.1MB of the
+old 1.86MB fixed area, entirely because of 256 inline 4096-byte name buffers,
+and moving the name into the arena cut it to 64KB. The index added 256KB back,
+so the fixed area is `0x11C000` against the previous `0x1DB000`: the block is
+764KB smaller overall while `get` gained a lookup structure it did not have.
 
 Layout overview (one contiguous mapping):
 
 ```
-0x000000  header fields: 0x000..0x087; reserved through 0x0FF
+0x000000  header fields: 0x000..0x0A7; reserved through 0x0FF
 0x000100  section table : 16 x 32 B (0x200 bytes)
 0x001000  catalog      : 16,384 x 32 B entry headers (fixed)
-0x081000  journal      : 32 B ring metadata + 4,096 x 64 B slots (fixed)
-0x0C2000  requests     : 256 x 0x1100 B slots (fixed)
-0x1D2000  region desc  : 64 x 32 B descriptors (fixed)
-0x1D2800  solved layout: 16 B header + up to 1,024 x 24 B nodes (fixed)
-0x1DB000  pool         : growable arena + region payload tail
+0x081000  catalog index: 32 B header + 16,384 x 16 B, sorted by name hash
+0x0C2000  journal      : 32 B ring metadata + 4,096 x 64 B slots (fixed)
+0x103000  requests     : 256 x 256 B slots (fixed)
+0x113000  region desc  : 64 x 32 B descriptors (fixed)
+0x113800  solved layout: 16 B header + up to 1,024 x 24 B nodes (fixed)
+0x11C000  pool         : growable arena + region payload tail
 ```
 
 The pool is the only growable region. Everything before it is fixed at block
 creation; the pool absorbs all mremap growth. The initial block is 4 MiB, so the
 initial pool is `0x225000` bytes and grows toward `OMNI_BLOCK_MAX_SIZE`.
 
-## 3. Header (offset 0, fields 0x000..0x087, region 0x300)
+## 3. Header (offset 0, fields 0x000..0x0A7, region 0x300)
 
 | off | size | field | meaning |
 |---|---|---|---|
@@ -184,11 +205,19 @@ initial pool is `0x225000` bytes and grows toward `OMNI_BLOCK_MAX_SIZE`.
 | 148 | 4 | `reserved` | zero |
 | 152 | 8 | `active_commit_id` | commit being published, or zero when idle |
 | 160 | 4 | `ready` | `0` NOT_READY, `1` READY, `2` DEGRADED, `3` FAILED |
-| 164 | 92 | `reserved` | zero through offset 255 |
+| 164 | 4 | `arena_free_head` | arena free-list head frame offset, or `OMNI_REF_NONE` |
+| 168 | 88 | `reserved` | zero through offset 255 |
 
 The section table starts at `0x100`, so the complete header region is
-`OMNI_HEADER_SIZE == 0x300`. Fields from `0x088` through `0x0FF` are reserved
-and must be zero on creation. `commit_state` and `active_commit_id` are
+`OMNI_HEADER_SIZE == 0x300`. The last defined field is `arena_free_head` at
+`0x0A4`, so fields from `0x0A8` through `0x0FF` are reserved and must be zero on
+creation, which is the row above stating it as `reserved` from offset 168. The
+free-list head was the last field added; before it the tail began at `0x0A4`. An earlier
+draft of this section said the defined fields ended at `0x087`, which is where
+an intermediate layout stopped before `region_head` and the readiness word were
+added; the table has always been the authority and `OMNI_HDR_RESERVED_TAIL_START`
+in `omni_layout.h` is 168, matching it (it was 164 before the free-list head
+took the word at `0x0A4`). `commit_state` and `active_commit_id` are
 accessed with aligned atomic operations. `writer_pid` and `writer_token` are
 meaningful only while `futex == 1`.
 
@@ -199,9 +228,18 @@ bit 0  HAS_CATALOG       bit 4  HAS_REGION_DESC
 bit 1  HAS_ARENA         bit 5  HAS_REGION_PAYLOAD
 bit 2  HAS_JOURNAL       bit 6  HAS_SOCKET (optional facade)
 bit 3  HAS_REQUESTS      bit 7  HAS_SOLVED_LAYOUT
+bit 8  HAS_CATALOG_INDEX (not optional; see below)
 ```
 
-Bit 7 is not optional. A consumer that sees `0x7F` is looking at a block written
+Bit 7 is not optional, and bit 8 is not either, which is the one place where
+this table has an answer with no fallback. A `get` by name reads the index or
+it has no answer, and there is deliberately no catalog scan behind it, because
+the alternative is a read path whose cost depends on how many unrelated keys the
+user has configured, which is how a configuration file turns into a latency
+problem for every client on the socket. So a block whose index row is absent or
+malformed, or whose `OMNI_CATALOG_INDEX_VERSION` does not match, is one this
+build cannot read: `get` returns `BLOCK_UNSUPPORTED` rather than scanning.
+A consumer that sees `0x7F` is looking at a block written
 before the solved layout section existed, and it must not read section 7; a
 consumer that sees bit 7 clear must not read section 7 either. Either way the
 absence is a fact about the block rather than an error, so the bit is a presence
@@ -283,26 +321,115 @@ pool_base                            pool_base + pool_size
   `frame_bytes = stride * height`. If `region_head - need < arena_end`, grow
   first. Otherwise set `region_head -= need`; the new payload offset is the
   new `region_head`.
-- Reclaim: arena space is never reclaimed except the in-place overwrite of an
-  existing value (§6, decision 4). Region space is reclaimed only when the
-  destroyed region is the trailing allocation (highest offset), then
-  `region_head += freed`.
+- Reclaim, arena: a frame is freed to a free list, not leaked. The free list is
+  a singly linked chain threaded through the free frame's own header
+  (`OMNI_FRAME_OFF_NEXT_FREE`), headed by `OMNI_HDR_OFF_ARENA_FREE_HEAD`, and
+  allocation is first-fit over the chain before falling back to the bump
+  cursor. A free frame's `length` holds its **total** frame bytes rather than a
+  payload length, so a split writes a valid header into the remainder; that is
+  what lets first-fit satisfy a small request from a large freed frame.
+  Coalescing adjacent free frames is an optimization, not a requirement: without
+  it the pool fragments, and with it the pool does not.
+- Reclaim, region: region space is reclaimed only when the destroyed region is
+  the trailing allocation (highest offset), then `region_head += freed`.
 - Alignment: every allocation base is 16-aligned. Zero pages only hold at
   creation; after reuse, writers initialize every byte they own.
 
 ### Arena value frame (every named/value payload)
 
 ```
+live frame
 +0  u32 length       payload bytes, not counting the 16-byte header
-+4  u32 reserved (0)
++4  u32 next_free    0; non-zero means the frame is on the free list
 +8  u64 reserved (0)
 +16 payload[length]  -> allocation continues to next multiple of 16
+
+free frame, same bytes
++0  u32 length       total frame bytes, header included
++4  u32 next_free    next free frame offset, or OMNI_REF_NONE for the tail
++8  u32 free_size    == length; present so a split can rewrite this header
++12 u32 reserved (0)
 ```
+
+The live layout is byte-identical to what it was before the free list existed;
+only the meaning of the reserved bytes for a *free* frame is new. `length` is
+therefore the discriminator's companion: a reader following a `body_ref` must
+reject a frame whose `next_free` is non-zero, because that frame has been
+recycled and its contents are a free-list link rather than a value. §6's guard
+tiers apply this at L4.
 
 `name_ref` and framed `body_ref` point at the frame start (offset +0). A name
 is a UTF-8 string frame: `length = strlen + 1` including the NUL. Names are
 immutable for the lifetime of the catalog entry; replacing a name creates a
 new entry identity. A frame is not used for an inline value.
+
+### Composite payload records (tags with a fixed-shape header)
+
+Not every payload is a tree. Four tags carry a fixed-size record, and this
+document owns their bytes, so they are tabulated here rather than only in
+`configstorage.md` §4, which owns what each field *means*. The constants are
+`OMNI_BINDING_OFF_*` and `OMNI_CLIENT_RULE_OFF_*`, both in `omni_layout.h`
+section 7, and each record has a static assert on its tail.
+
+`binding` is `0x2B`, a fixed header with the argument array inline after it, so
+the whole payload is one frame of `header_bytes + array_bytes`:
+
+| off | size | field | notes |
+|---|---|---|---|
+| 0 | 4 | `modmask` | u32 bitmask, positions in `configstorage.md` §4 |
+| 4 | 4 | `keysym` | u32 XKB keysym |
+| 8 | 4 | `keycode` | u32 evdev code, one of three |
+| 12 | 4 | `action_ref` | u32, see below |
+| 16 | 4 | `args_ref` | u32 frame offset, or `OMNI_REF_NONE` |
+| 20 | 4 | `flags` | u32, bit 0 `USE_KEYSYM` |
+| 24 | .. | `args` | `array` of `string`, inline, positional |
+
+**This table is the v1 minimum and it is now known to be too small**, which is
+recorded here rather than left to be discovered during the port. `generaldesign.md`
+§14.1 puts all of Mango's `KeyBinding` fields in the block, and this table has
+room for one keycode of three, no keysym-vs-keycode discriminant beyond one flag
+bit, no mode, and none of Mango's four remaining behaviour flags. The fields that
+must exist are listed in `generaldesign.md` §14.1's table. The offsets are
+**still deferred**, deliberately: the record grows again the moment tablet and
+stylus bindings arrive in stage 10, and Mango has no struct for those to copy, so
+fixing offsets now would fix them against a shape that stage 10 revises. What is
+settled is the tag, the field set, and that the header is fixed-width with a kind
+discriminant so `generaldesign.md` §14.4's index can hash the trigger fields
+without walking a variable-length record.
+
+`client_rule` is `0x33`, 24 bytes with no payload, so a frame of exactly 24:
+
+| off | size | field | notes |
+|---|---|---|---|
+| 0 | 2 | `rule` | u16 `ALIGN`/`MATCH`/`SIZE`/`OFFSET`/`SNAP` |
+| 2 | 2 | `against` | u16 `CLIENT`/`VIEWPORT`/`OUTPUT` |
+| 4 | 2 | `axis` | u16 `X`/`Y`, `MATCH` only |
+| 6 | 2 | `edge` | u16, `ALIGN` only |
+| 8 | 2 | `region` | u16, the ten regions of `layoutengine.md` §3.7, `SNAP` only |
+| 10 | 2 | reserved | zero |
+| 12 | 4 | `width` | u32, `SIZE` only |
+| 16 | 4 | `height` | u32, `SIZE` only |
+| 20 | 4 | `by` | i32, `OFFSET` only, may be negative |
+
+The other two composite tags have no byte table because they are not
+fixed-shape. `constraint` is `0x32` and its payload is
+`array of option`, one per space, with a rule as a named key of that option, so
+its size is whatever those nested frames come to. `map` is `0x34` and its
+payload is `array of entry` where an entry is a `tuple` of a framed key string
+and any value, so likewise. Both are bounded by
+`OMNI_VALUE_MAX_ARRAY_ELEMS` and `OMNI_VALUE_MAX_FRAMED` rather than by a
+length this document could tabulate, and the nesting bound is
+`OMNI_VALUE_MAX_NESTING`.
+
+`action_ref` at offset 12 is a frame offset holding the action's name, and that
+is settled: `helpers.md` §6.2 originally read it as a registry handle, which is
+wrong because a binding is in the block and the block is the user's editable
+configuration. A handle is a process-local index, so storing one would put a
+value nobody can read in a file people edit, and it would not survive a restart
+or a `save` and reload. The name is resolved through the registry when the key
+fires, and an unregistered name is `ACTION_NOT_FOUND` on use rather than at set
+time, because refusing the write would mean refusing to store a binding for a
+component that has not activated yet, which is the normal state during boot.
 
 ## 6. Catalog (section base 0x1000, 16,384 x 32 B)
 
@@ -378,14 +505,97 @@ extension semantics.
 
 Overwrite rule (decision 4): on `set` of an existing key, if the new payload
 fits the existing frame (`align16(new_len) <= align16(old_len)`), write in
-place and update `length`. Otherwise bump a new frame and update `body_ref` plus
-`length`; the old frame leaks until the block is recreated. The name frame is
-never replaced in place because names are immutable.
+place and update `length`. Otherwise allocate a new frame, first-fit from the
+§5 free list and then from the bump cursor, and **free the old frame**. The
+name frame is never replaced in place because names are immutable.
 
-Delete: mark `DESTROYED`, then set `FREE` and push the slot to the freelist.
-The name and payload frames remain in the arena. A journal key reference
-remains tied to the deleted entry generation and can never resolve to a reused
-slot.
+Delete: mark `DESTROYED`, tombstone the name's index slot in §6.1, then set
+`FREE` and push the slot to the catalog freelist. **The name and payload frames
+are freed to the arena free list.** A journal key reference remains tied to the
+deleted entry generation and can never resolve to a reused slot, so freeing the
+frames cannot resurrect it.
+
+**This reverses a leak that was previously written into the design.** The earlier
+text said the old frame "leaks until the block is recreated" and that a deleted
+entry's "name and payload frames remain in the arena". Both were true, and both
+meant a client that looped `set` and `delete` exhausted the pool with no way to
+recover but block recreation, which is a denial of service reachable from the
+socket. Freeing the frames closes it. Two properties make it safe:
+
+- a stale `body_ref` cannot read recycled bytes as a value, because §12's L4 tier
+  rejects a frame whose `next_free` is non-zero, and because the entry
+  generation it was read under no longer matches;
+- a freed frame is not zeroed, so anything that does read it sees a free-list
+  header rather than a plausible-looking value, which is the failure mode the
+  guards prefer.
+
+## 6.1 Catalog name index (section base 0x81000, 16,384 x 16 B)
+
+The index exists so that `get` never walks the catalog. It is a second, sorted
+view of the same entries, not a second source of truth: the catalog slot is still
+the entry, and `entry_id` is still the slot index.
+
+```
+header, 32 bytes
++0  u32 live_count     non-tombstone slots
++4  u32 used_count     live + tombstones; slots past this are unused
++8..31 reserved, zero
+
+slot, 16 bytes, sorted ascending by (name_hash, entry_id)
++0  u64 name_hash      FNV-1a 64 then splitmix64, over the name bytes
++8  u32 entry_id       0xFFFFFFFF when the slot is a tombstone or unused
++12 u32 generation_lo  low half of the entry generation when inserted
+```
+
+- **The catalog itself is not sorted**, and this is the one place the design
+  departs from the obvious implementation. `entry_id` is the slot index, live
+  entries never move (§6), and the freelist chains through slots, so sorting the
+  catalog in place would move live entries, invalidate every held
+  `(entry_id, entry_generation)`, and make delete an O(n) memmove of the catalog
+  rather than of a derived index. A separate index leaves the catalog alone and
+  confines the cost of a delete to the index.
+- **Lookup is a binary search, then a run walk.** Binary search on `name_hash`
+  descends 14 levels for 16,384 slots, all within one 256KB section. A hash
+  collision means several slots share a value, and because the array is sorted
+  they are *contiguous*, so a hit walks the equal-hash run and compares names.
+  The normal run length is 1, so a successful lookup costs one string compare,
+  which it would need anyway to confirm the match, and a miss costs none.
+- **Insert** places the slot at the upper bound of its hash and shifts the tail
+  up, so insert is O(n) memmove of 16-byte slots. That is the cost of a sorted
+  array and it is paid on `CREATE_ENTRY`, which is a configuration write.
+- **Delete does not memmove.** It sets `entry_id` to
+  `OMNI_CATALOG_INDEX_ENTRY_ID_TOMB`, which keeps the sort order intact, and
+  compaction runs inside a commit when `used_count` exceeds twice `live_count`.
+  This matters more than it looks: an O(n) delete is a loop a client can run,
+  and delete-in-a-loop must not become a quadratic-cost denial of service.
+- **The writer maintains it transactionally**, under the commit futex, in the
+  same commit as the catalog mutation. It is therefore never stale, never
+  rebuilt, and never a source of divergence: there is no window in which the
+  catalog and the index disagree, because they are updated together or not at
+  all.
+- `generation_lo` is a filter, not the authority. A hit whose stored low half
+  does not match the live catalog entry is skipped without reading further; the
+  authoritative check remains §12's L3 test against the full u64 generation in
+  the catalog slot.
+- The L2 section guard applies here unchanged: `id == row`, 16-aligned offset,
+  non-wrapping size inside `[0, block_size)`. Unlike every other section, a
+  missing or malformed row is not a degradation: §3 above makes capability bit 8
+  mandatory, so the block is one this build refuses rather than one it reads
+  slowly.
+- This interacts with §12.5's truncation rule and the two are consistent. §12.5
+  covers a block *smaller* than the layout, where a reader uses the sections it
+  can see. Growth here is end-append only and cursors never move, so a block
+  cannot lose a fixed section it once had; an index that is gone or short is a
+  block this build does not support, which is a different condition and gets a
+  different answer.
+- The result code for that refusal is **not yet decided**, and it is a real gap
+  rather than an oversight: `omni_layout.h` enumerates request results
+  (`OMNI_REQ_ERR_*`) for the queue, but a direct `get` has no read-result
+  vocabulary at all, so there is nothing today to return. One is needed before
+  this is implementable. It should be a separate `OMNI_GET_*` set rather than a
+  reuse of `OMNI_REQ_ERR_*`, because a read has no slot to hold a `ticket` and a
+  reused code would imply a request lifecycle that does not happen. This is
+  recorded in §14.
 
 ## 7. Growth
 
@@ -407,7 +617,7 @@ handed-out offsets stay valid.
 Exhaustion: when the cap blocks a needed allocation on either side, the
 request fails with `BLOCK_EXHAUSTED`; the block never silently truncates.
 
-## 8. Journal (section base 0x81000)
+## 8. Journal (section base 0xC2000)
 
 The journal section starts with a 32-byte ring metadata block:
 
@@ -431,7 +641,7 @@ i * OMNI_JOURNAL_SLOT_SIZE`. The slot layout is exactly 64 bytes:
 | 32 | 8 | `entry_generation` | catalog allocation lifetime, or 0 for EVENT |
 | 40 | 4 | `entry_id` | catalog slot, or 0 for EVENT |
 | 44 | 2 | `type_tag` | KEY_SET value type, EVENT category, or 0 |
-| 46 | 1 | `kind` | 1 KEY_SET, 2 KEY_DELETE, 3 EVENT, 4 COMMIT_END |
+| 46 | 1 | `kind` | 1 KEY_SET, 2 KEY_DELETE, 3 EVENT, 4 COMMIT_END, 5 BINDS_UPDATED |
 | 47 | 1 | `flags` | bit0 VALUE_FRAMED, bit1 ENTRY_VALID, bit2 EVENT_REF_VALID |
 | 48 | 8 | `value_inline` | inline value bytes, zero-padded |
 | 56 | 4 | `body_ref` | framed payload or EVENT payload reference, else 0 |
@@ -450,6 +660,17 @@ A region lifecycle payload contains `epoch`, `entry_id`, `entry_generation`,
 `descriptor_index`, and `region_generation`. A request-completion payload
 contains `epoch` and `request_ticket`. `event_ref` is reserved for an
 extension-defined reference and is zero for these core events.
+
+`kind == BINDS_UPDATED` is `5`. It is a separate kind rather than a run of
+`KEY_SET` entries because a binding change invalidates a *derived structure*, not
+one cached value: a process-private binding index (`generaldesign.md` §14.4) has
+to be rebuilt, and a client that only needs to know "the binds are not what I
+read" needs one event rather than one per binding. It has no catalog identity, no
+value, and `event_ref` counts the bindings changed in the group, so a watcher can
+tell one rebind from a config reload. The writer appends it in the same commit as
+the `KEY_SET` entries it summarises, which means a reader that processes the
+journal in order sees the individual changes first and the invalidation last,
+never the reverse.
 
 `kind == COMMIT_END` has zero catalog identity, no value, and `event_ref`
 equal to the number of preceding journal entries in the same commit. It is the
@@ -492,7 +713,7 @@ A consumer whose `epoch` differs from the header cannot use its cursor at all.
 It reports `WATCH_EPOCH_CHANGED` and re-discovers the instance; no cursor
 value recovers data from a previous block.
 
-## 9. Request queue (section base 0xC2000, 256 x 0x1100 B)
+## 9. Request queue (section base 0x103000, 256 x 256 B)
 
 | off | size | field | meaning |
 |---|---|---|---|
@@ -513,19 +734,34 @@ value recovers data from a previous block.
 | 40 | 4 | `value_len` | CREATE_ENTRY initial payload bytes (<= 128) |
 | 44 | 4 | `name_len` | name bytes including NUL; <= `OMNI_REQUEST_NAME_MAX` |
 | 48 | 8 | `target_generation` | destroy target generation; 0 for create |
-| 56 | 4096 | `name` | NUL-terminated UTF-8 name field |
-| 4152 | 128 | `value` | CREATE_ENTRY initial payload |
-| 4280 | 4 | `requester_start_id` | process start time; disambiguates a reused pid |
-| 4284 | 4 | `reserved` | zero; exists to 8-align `terminal_at_ms` |
-| 4288 | 8 | `terminal_at_ms` | CLOCK_MONOTONIC ms the slot became terminal; 0 otherwise |
-| 4296 | 56 | `reserved` | zero |
-| 4352 | total | | |
+| 56 | 4 | `name_ref` | arena frame offset of the name, or `OMNI_REF_NONE` |
+| 60 | 4 | `reserved` | zero |
+| 64 | 128 | `value` | CREATE_ENTRY initial payload |
+| 192 | 4 | `requester_start_id` | process start time; disambiguates a reused pid |
+| 196 | 4 | `reserved` | zero; exists to 8-align `terminal_at_ms` |
+| 200 | 8 | `terminal_at_ms` | CLOCK_MONOTONIC ms the slot became terminal; 0 otherwise |
+| 208 | 48 | `reserved` | zero |
+| 256 | total | | |
 
-The `name` field has a fixed 4096-byte capacity even though
-`OMNI_REQUEST_NAME_MAX` is 4095 bytes including the NUL. `name_len` must
-include the terminating NUL and identify the first zero after a valid string;
-an oversized or unterminated name is `PARAM_INVALID`. A request with a value
-larger than 128 bytes creates an empty entry and uses `set` afterward.
+**The name is an arena frame, not an inline field**, which is what shrinks the
+slot from `0x1100` to 256 bytes. The queue was 1.1MB, about 58% of the block's
+fixed area, and essentially all of that was 256 copies of a 4096-byte name
+buffer, while the catalog got 512KB for 16,384 entries. The queue is now 64KB.
+
+The ownership rule is what makes this correct rather than merely smaller: the
+name frame belongs to the slot from submission until the slot is released or
+reclaimed, and is freed to the §5 arena free list at that point. It is not
+freed earlier, so the WM can always read the name while draining, and the
+requester copies the name out of the arena *before* it releases the slot, for
+the same reason it copies the whole slot: the results live in the slot, and the
+name now lives next door.
+
+`name_len` must include the terminating NUL and match the frame's payload
+length, and `name_ref` must be 16-aligned inside `[pool_base, arena_end)` with
+`next_free == 0`, so a name that has been freed and reused is detected rather
+than read. An oversized or unterminated name is `PARAM_INVALID` and takes no
+slot. A request with a value larger than 128 bytes creates an empty entry and
+uses `set` afterward.
 
 Protocol (`configstorage.md` §8). Submission takes the commit futex, finds a
 `FREE` slot, fills it completely (`PENDING`, new `ticket`, current `epoch`,
@@ -593,7 +829,7 @@ Error codes:
 7 BLOCK_EXHAUSTED 8 BAD_TARGET
 ```
 
-## 10. Region descriptors (fixed section 0x1D2000, 64 x 32 B)
+## 10. Region descriptors (fixed section 0x113000, 64 x 32 B)
 
 A `CREATE_REGION` produces one catalog entry of type `region_ref` and one
 descriptor. Descriptors are a fixed linear array at
@@ -673,7 +909,7 @@ The active bits are protocol markers, not ownership or access control. A
 producer or consumer that dies while active leaves its bit set; the safe
 response is to skip reuse and reclamation, not to trust a PID or timeout.
 
-## 11. Solved layout (fixed section 0x1D2800, 0x8000 bytes)
+## 11. Solved layout (fixed section 0x113800, 0x8000 bytes)
 
 A readable projection of the most recent solve, so a script can ask where a
 window is without reconstructing the program that placed it. It is overwritten,
@@ -702,7 +938,8 @@ off  size  field
 `entry_id` plus `entry_generation` identifies the node, and the epoch is
 implied: a solve only concerns the current epoch, so a node naming another epoch
 is malformed rather than a dangling reference. The four extents are the whole of
-the record. What a node was placed against is in the constraint program, not
+the record. What a node was placed against is the address in the constraint
+program, not
 here, which is the difference between this section and a second copy of the
 layout: geometry is a fact, relationships are configuration.
 
@@ -755,9 +992,10 @@ L3    a terminal request slot carries a non-zero terminal_at_ms from the commit 
 L3    a PENDING request slot carries terminal_at_ms == 0 and is never deadline-reclaimed
 L3    a request refused for readiness never consumed a slot or a ticket
 L4    framed values and region payloads stay within their declared section windows
+L4    a body_ref resolving to a frame whose next_free is non-zero is refused as free
 L4    inline values have body_ref == 0 and a type-valid length
 L4    extension tags are accepted only with a structurally valid framed payload
-L4    an unassigned low tag (0x00, 0x34..0x7FFF) is refused, not read as an extension
+L4    an unassigned low tag (0x00, 0x35..0x7FFF) is refused, not read as an extension
 L4    request names include NUL, respect the fixed limit, and target generations match
 L4    CREATE_REGION width and height fit the descriptor u16 fields and slot_count is within range
 L4    a requester validates (epoch, ticket) before trusting any field of a terminal slot
@@ -801,9 +1039,12 @@ Writer sequence:
    the request normally; a partially applied resize marks the block `BROKEN`.
 4. Store `active_commit_id = new_commit_id` and release-store
    `commit_state = ACTIVE`.
-5. Mutate catalog, arena, region descriptors, request slots, and section
-   metadata. From this point any failure or writer death marks the block
-   `BROKEN`.
+5. Mutate catalog, catalog name index, arena, region descriptors, request
+   slots, and section metadata. **The name index is mutated in this step, in the
+   same commit as the catalog entry it describes**, so the two are never
+   observably inconsistent; there is no state in which an index lookup returns a
+   slot whose catalog entry has not been written. From this point any failure or
+   writer death marks the block `BROKEN`.
 6. Write every journal slot for the commit, ending with `COMMIT_END`, then
    publish the ring metadata with the even `publish_seq`.
 7. Release-store `commit_id = new_commit_id`, then release-store
@@ -846,9 +1087,23 @@ is required, so `commit_state` goes straight from `IDLE` to `ACTIVE`, and the
 
 ## 14. Open items
 
+- **A direct `get` has no result vocabulary.** `omni_layout.h` enumerates
+  `OMNI_REQ_ERR_*` for the request queue, but `get` is a plain memory read and
+  has nothing to return. §6.1 needs one, because an absent or malformed
+  catalog index is now a refusal rather than a slow answer, and refusal needs a
+  code. It should be a separate `OMNI_GET_*` set: a read has no slot, no ticket
+  and no lifecycle, so reusing `OMNI_REQ_ERR_*` would imply machinery that does
+  not exist. Deciding it is a prerequisite for implementing §3.1, and it also
+  forces the other `get` failures to be named at the same time: name not found,
+  free slot, entry generation mismatch, block broken, block truncated, and block
+  unsupported.
 - `OMNI_CATALOG_SLOT_COUNT = 16384` and `OMNI_ENTRY_NAME_MAX = 4095` are v1
   limits; changing either changes a fixed section size and every derived
   offset.
+- `OMNI_CATALOG_INDEX_SLOT_COUNT` is tied to `OMNI_CATALOG_SLOT_COUNT` at one
+  index slot per catalog slot, so it is a derived constant rather than an
+  independent one; both are v1 limits and changing the catalog count changes
+  §6.1's size and the offsets that follow it.
 - Two-slot double buffering with sample revalidation is the v1 region
   contract; a lease or larger slot count may be added if sustained painter
   rates outrun the reader.

@@ -19,13 +19,13 @@ than mango: one concern per file, all under `core/`.
 
 ```
 core/
-  registry.{c,h}   global registry, register API, omni_boot sort+activate
+  registry.{c,h}   global registry, register API, omni_boot sort+activate body
   component.{c,h}  the record type, option/action/trigger arrays, toggle engine
   events.{c,h}     journal-backed subscription: pattern -> callback
   actions.{c,h}    namespaced control/action registry + dispatch
   log.{c,h}        logging (mango port) + component-name prefixes
   util.{c,h}       container kit (mango port + additions)
-  server.{c,h}     server struct, wl_display lifecycle, register-table, omni_boot
+  server.{c,h}     server struct, wl_display lifecycle, register-table, omni_boot call
 ```
 
 Umbrella header `include/commonheaders.h` includes every public core header;
@@ -46,6 +46,13 @@ It appends descriptors to the global registry via an append API. Registration
 never runs `init` and never creates an instance; it only records what the
 component is. No linking magic: one fixed table of register functions lives in
 `core/server.c`, known at compile time (static registry, v1).
+
+`omni_boot()` has one home. The sort-and-activate sequence below is its body and
+lives in `core/registry.c`, because activating the registry is the registry's
+own work; `core/server.c` owns the fixed table of register functions and calls
+`omni_boot()` as `server.md` §4 step 4. An earlier draft of this section
+assigned `omni_boot` to both files, which is the same two-homes problem
+`server.md` §1 names for the server struct.
 
 Phase 2, activate: `omni_boot()` is the only entry point that turns descriptors
 into live instances:
@@ -407,7 +414,7 @@ by handle:
 { "type": "binding", "value": { "mods": "ctrl+alt",
                                 "key": "Shift+Return",
                                 "action": "wm.cycle_layout",
-                                "args": ["alpha"] } }
+                                "args": ["master_stack"] } }
 ```
 
 `args` is optional and positional, and when it is absent the binding has none:
@@ -416,10 +423,21 @@ absent `args` and an empty `args` are the same value, because a binding whose
 action takes no argument and one whose action was given nothing are not
 distinguishable at dispatch.
 
-`action_ref` in the block is the u32 handle, and it is resolved through the same
-registry lookup on the IPC and in-process paths. A stored handle whose
-registration is gone is reported as `ACTION_NOT_FOUND` on use, never dispatched
-to nothing.
+`action_ref` in the block is a **frame offset holding the action name**, not a
+registry handle. This document used to say it was the `omni_action_handle`, and
+that was wrong on the one fact that matters most: a binding lives in the block,
+the block is the user's editable configuration, and a user editing a binding has
+to be editing a name they can read. A handle is an index into a process-local
+registry, so a stored handle is meaningless to anyone reading the file, is
+silently invalidated by a restart, and cannot survive a `save` and reload at all.
+
+So resolution happens on use, not at set time. A binding stores the name; the
+registry looks it up when the key fires; a name that is not registered is
+`ACTION_NOT_FOUND` on use. This contradicts what §6.2 said about failing at set
+time, and it is the weaker of the two checks deliberately: a store that can be
+edited by hand cannot promise that every name in it resolves, and refusing the
+write would mean refusing to store a binding for a component that has not
+activated yet, which is the normal state during boot.
 
 The argument array is where `wm.cycle_layout` finally gets its layout name, and
 it removes the reason §6.1's positional schema was previously unusable from a
@@ -454,12 +472,32 @@ client into a group, relocating it, or clustering it on attach all match a
 
 ```
 { "type": "client_rule",
-  "value": { "match": { "appid": "org.mozilla.firefox" },
-             "effect": "join_group", "target": "layout.browser", "scope": "always" } }
+  "value": { "rule": "left", "against": "master", "axis": "x", "edge": "start",
+             "region": "content", "width": 1, "height": 1, "by": 1 } }
 ```
+
+There is no `match`, no `target` and no `scope` here, and an earlier draft of
+this section carried all three. A `0x33` record constrains a window the solver
+is already at and says nothing about which window that is: the rule set it
+belongs to carries the matchers, and the two namespaces a set is under carry
+the effect (`configstorage.md` §4, `layoutengine.md` §7, `ipc.md` §3). A client
+that needs to be matched on `appid` or `title` writes a window rule at
+`omniwm.window_rules.<name>` instead, which is a `map` and not this record.
 
 One wire form per tag, because one tag carrying two schemas means a reader
 dispatches on a field it previously assumed was fixed.
+
+A kind field inside one tag is not the thing this warns about, and the
+distinction is worth keeping sharp. Two schemas means a reader cannot tell which
+fields are present, so it reads a field that may be argument padding. A kind
+field with a fixed header and a fixed set of trigger slots means the reader always
+reads the same offsets and only interprets the trigger slots differently, which is
+the same situation as a tagged union in C: one layout, one offset table, a
+discriminant. `binding` is now the second kind, because `generaldesign.md` §14.1
+puts Mango's five binding structs behind one tag, and the thing the warning is
+about, a reader assuming `modmask` is at offset 0 because the record is a
+keyboard binding, cannot happen once the offsets are declared per kind in
+`omni_layout.h`.
 
 ### 6.3 Extension boundary
 
@@ -470,36 +508,180 @@ decision and the reasoning.
 
 ## 7. Log (core/log) and util (core/util)
 
-Ports per the port rule, fresh prefixes.
+Ports per the port rule, fresh prefixes. This section is the contract and not
+the intent: it names every function, so a stage-3 implementer writes from it
+rather than from a paraphrase of it.
 
-- `log`: mango `log.c` conventions (WLR levels, file/line prefix on error)
-  plus a component-name tag: `[tags] [input] [decorate]`. Level set by a
-  block key `wm.log.level` at boot.
-- `util`: mango `util.c` patterns (string_printf, monotonic clock) extended
-  with the container kit components reach for: dynamic array, hash map,
-  linked list, string builder, ring buffer. No component writes its own
-  container.
+### 7.1 log
+
+Mango's `log.c` is 37 lines wrapping `wlr_log_init` and `_wlr_vlog`, and it
+ports as-is with one addition. Its two paths are kept because they do different
+jobs: `through_wlr = true` goes through wlroots with a `[file:line]` prefix, and
+`through_wlr = false` prints straight to stderr with ANSI colour, which is what
+reaches the user when the message is more important than wlroots' own
+verbosity.
+
+```c
+enum omni_log_level {             /* mirrors wlr_log_importance exactly */
+    OMNI_LOG_SILENT     = 0,
+    OMNI_LOG_ERROR      = 1,
+    OMNI_LOG_INFO       = 2,
+    OMNI_LOG_IMPORTANCE = 3,      /* nil */
+    OMNI_LOG_DEBUG      = 4,
+};
+
+void omni_log_init(enum omni_log_level level);   /* before wlr_log_init */
+void omni_log_set_level(enum omni_log_level level);
+void omni_log_impl(bool through_wlr, enum omni_log_level level,
+                   const char *file, int line, const char *fmt, ...)
+    __attribute__((format(printf, 5, 6)));
+
+#define omni_log_at(through_wlr, level, ...) \
+    omni_log_impl((through_wlr), (level), __FILE__, __LINE__, __VA_ARGS__)
+
+#define omni_error(...) omni_log_at(true,  OMNI_LOG_ERROR, __VA_ARGS__)
+#define omni_warn(...)  omni_log_at(true,  OMNI_LOG_INFO,  __VA_ARGS__)
+#define omni_info(...)  omni_log_at(false, OMNI_LOG_INFO,  __VA_ARGS__)
+#define omni_debug(...) omni_log_at(false, OMNI_LOG_DEBUG, __VA_ARGS__)
+```
+
+Four levels and no more, because the set is wlroots' and wlroots' version is
+not pinned yet (`build.md` does not exist). A fifth level invented here would
+mean maintaining a translation table the day wlroots' enum changes.
+
+`wm.log.level` is a `wm.*` key, so it is saved and restored like any other. It
+is read in `omni_boot()` step 4, before any component's `init` runs, because a
+component that logs from `init` and is silenced because nothing read the level
+first is a confusing first impression. `ERROR` and above go to stderr
+regardless of the level for the same reason §4 gives for refusing writes before
+`READY`: a compositor that can only be reached through a log it has silenced is
+worse than a noisy one.
+
+The component tag is applied by the caller, not by a per-component logger
+object, and it lives in a thread-local slot rather than in a field the call site
+has to pass:
+
+```c
+void omni_log_tag_bind(const char *component);  /* once, from init() */
+```
+
+A call site reads the same at every position, and the tag cannot be forgotten at
+the point of the call, which is the failure a per-call-prefix argument invites.
+`[tags]`, `[input]`, `[decorate]`. A component that logs before binding logs
+untagged, which is correct rather than a bug.
+
+There is no file sink and no ring sink at v1. A ring sink is a real want later
+for a crash report, and the way to add one is the `wlr_log_func_t` callback
+`wlr_log_init` already takes, so the log does not have to know in advance that
+one will be wanted.
+
+### 7.2 util
+
+Mango's `util.h` is 39 lines and ports whole, with the prefix rule and one
+change per row below.
+
+| function | from | note |
+|---|---|---|
+| `void omni_die(const char *fmt, ...)` | `die` | logs at `ERROR`, then `exit(1)` |
+| `void *omni_ecalloc(size_t n, size_t size)` | `ecalloc` | zeroed or die; no component checks for null |
+| `int omni_fd_set_nonblock(int fd)` | `fd_set_nonblock` | as-is |
+| `bool omni_regex_match(const char *pattern, const char *string)` | `regex_match` | **PCRE2**, so rule filters, `watch` patterns and future gesture patterns share one engine |
+| `void omni_list_append(struct wl_list *, struct wl_list *)` | `wl_list_append` | as-is |
+| `void omni_list_swap(struct wl_list *, struct wl_list *)` | `wl_list_swap` | as-is |
+| `void omni_list_safe_reinsert_prev(struct wl_list *, struct wl_list *)` | same | as-is |
+| `void omni_list_safe_reinsert_next(struct wl_list *, struct wl_list *)` | same | as-is |
+| `uint64_t omni_now_ms(void)` | `get_now_in_ms` | **u64, not u32**; see below |
+| `uint64_t omni_timespec_to_ms(const struct timespec *)` | `timespec_to_ms` | as-is |
+| `char *omni_string_printf(const char *fmt, ...)` | `string_printf` | heap, caller frees |
+| `char *omni_join_strings(char *const *arr, const char *sep)` | `join_strings` | heap, caller frees |
+| `char *omni_join_strings_with_suffix(char *const *arr, const char *suffix, const char *sep)` | same | heap, caller frees |
+
+`omni_now_ms` is u64 rather than Mango's u32, which wraps in 49.7 days. A
+compositor's animation clock, its idle timer and its region buffer all
+subtract timestamps, and a wrapped `uint32_t` makes that subtraction a very large
+number rather than a small one, so the bug is a compositor that suddenly animates
+as fast as the wrap. A u64 cost nothing and the bug cannot be written.
+
+`omni_regex_match` is the row that decides something outside this section.
+`windows.md` §9 settled PCRE2 as the sole filter operator, and this is where
+that engine lives, so a window rule, a `watch` pattern check, and a gesture
+pattern in `input.md` all reach for one call. That is the argument for
+putting it in `util` rather than in whichever component needs a filter first: a
+second engine would mean a rule written in one dialect failing in another.
+
+The macros port whole with the prefix rule and no changes: `OMNI_MAX`,
+`OMNI_MIN`, `OMNI_GEZERO`, `OMNI_LENGTH`, `OMNI_END`, `OMNI_LISTEN`,
+`OMNI_LISTEN_STATIC`. They are dwm's, carry no design weight, and renaming them
+is the whole of the port.
+
+### 7.3 The container kit
+
+**This is the part that has to be right, because these utilities have two jobs
+that are easy to confuse.** The first is ordinary: a component needs somewhere
+to put a growable list. The second is the extensibility surface, where adding a
+layout, an action or an option should be a matter of adding a descriptor and
+nothing else.
+
+Mango reaches for the second job with a 40-field `ConfigWinRule` struct and an
+`APPLY_INT_PROP` macro per field, where a new property is a struct field, a
+macro invocation, and a place for the compiler to catch you. `windows.md` §5
+replaced the struct with `if`/`then` blocks and a `map` in the block, so the
+question this section answers is whether the utilities make the second job as
+cheap as the first.
+
+| container | shape | why |
+|---|---|---|
+| dynamic array | `struct omni_dynarr`, contiguous, doubles on growth | the workhorse: any component's list of anything, and the substrate the registry's own sorted lists are built on |
+| string builder | `struct omni_strbuf`, append and format | building a key path while walking the catalog |
+| hash map | open-addressed, string to `uintptr_t` | name to `entry_id` for layout, action and set names, and for the catalog's own name index (`configstorage.md` §3.1); three lookups per keypress plus a name resolution per `get`, so it has to be O(1) |
+| ring buffer | `struct omni_ringbuf`, fixed capacity, no allocation | the journal is one of these in the block already; a native one serves the region buffer and the solver's iterations |
+| interning | `struct omni_interns`, string to `uint32_t` | layout and action names are compared constantly and there are few enough to hold once |
+| linked list | `wl_list` only | Wayland's is intrusive, allocation-free and already in every component, so a second list is a second convention |
+
+**No component writes its own container.** One dynamic array, one hash map, one
+string builder. The reason is narrower than consistency: §2's registry has to
+resolve names and sort descriptors, and a component with its own hash map means
+the registry's lookup is not the one everything else uses. That is exactly the
+coupling which makes a new action more than a descriptor.
+
+Interning pays for itself on the first keypress rather than later, because
+`wm.cycle_layout`'s argument is a layout name, and resolving a name to a slot
+twice per lookup is a string compare per lookup.
+
+### 7.4 What this section deliberately does not do yet
+
+The kit above is chosen for components that read and write values. When
+registering a layout, an action or an option becomes user-facing, three more
+things are needed, and **none of them is a container**:
+
+- a **declarative** descriptor form, so a component publishes its options as
+  data rather than as a C array the registry walks with a callback;
+- a **validation** step, so a declared option's type tag is checked against the
+  store before a value is read, which is `tomlparser.md` §3's key registration
+  arriving for real and `struct omni_option` in §3.1 being its shape;
+- **introspection**, so something can ask the registry what a component offers
+  instead of having to know in advance.
+
+What §7.3 commits to is the substrate all three need, and nothing in it has to
+be thrown away when they land. That is the constraint to hold this section to:
+utilities here are chosen so the later extensibility work builds on them, not
+so it has to replace them.
 
 ## 8. Server (core/server.{c,h})
 
-Owns lifecycle and produces the ordering the registry relies on:
+`server.md` is the authority for all of this and it is where `struct omni_server`
+is declared, along with the boot order, the readiness mapping, the dispatch
+model, and the shutdown sequence. An earlier draft of this section carried a
+second copy of the struct with a `void *block` where `server.md` §1 has a
+`struct omni_store *store`, and restated the boot order verbatim. Both are the
+failure mode `server.md` §1 names, and they are removed here rather than
+reconciled: a second copy of a struct is a second contract.
 
-```
-struct omni_server {
-    struct wl_display *display;
-    struct wl_event_loop *loop;
-    void *block;                /* config store instance */
-    int sock_fd;                /* socket facade fd */
-    struct omni_registry *registry;
-};
-```
-
-Boot order: create store (seed `wm.*`), start socket, run the register-function
-table, `omni_boot()`, set the header `ready` field per §2.1, enter the display
-event loop. Shutdown: close socket, unlink block, then `destroy` components in
-reverse priority order, calling it only for instances that reached `ACTIVE`.
-The instance records are released last, after every `destroy` has returned, so
-no callback can observe a freed instance.
+What helpers.md contributes is the one thing server.md cannot know, which is
+that the registry this section is about produces the ordering server.md's boot
+order consumes. So the only restatement is that direction: `omni_boot()` in
+`server.md`'s step 4 is this registry's Phase 2 (§2), and it is called once,
+after the register-function table has run.
 
 `server.md` is the authority for all of the above. This section records where the
 struct is declared and the shutdown note about instance release; the boot order,
@@ -583,12 +765,18 @@ component reading config keys instead of `#ifdef`d options.
   §8); richer in-process payloads need a follow-up design if components want
   them (metadata beyond journal entries).
 - The action argument schema and result typing are fixed in §6.1: positional
-  typed tags plus one declared result tag. What is still open is the `binding`
-  key-to-action binding path for the input subsystem, which consumes the
-  `binding` type this step defines but is not yet designed.
-- The `modmask` text grammar (`"ctrl+alt"`) and the keysym name table are still
-  open, and they are what a keybinding author actually types, so they belong
-  with the input design rather than here.
+  typed tags plus one declared result tag.
+- ~~The `binding` key-to-action path, the `modmask` text grammar, and the keysym
+  name table.~~ **Closed by decision, not by design here.**
+  `generaldesign.md` §14 decides that input is MangoWM's implementation ported
+  wholesale, and Mango's `KeyBinding` already carries `mod`, a `KeySymCode` and
+  an `Arg` array, with `parse_bind_flags` and the XKB keysym table supplying the
+  grammar and the names. So the key-to-action path is Mango's, the `Arg` array
+  is this document's `args`, and the modmask and keysym spellings come across
+  with the code rather than being specified twice. What the port does still owe
+  this document is a decision on `action_ref`, which is recorded in
+  `configstorelayout.md` §5 and is the one field in the `binding` record whose
+  meaning is unsettled.
 - Component dependency edges beyond plain priority (a hard "requires X")
   do not exist at v1, and are not planned; priority ordering is the mechanism
   permanently unless a real dependency failure appears. The observable

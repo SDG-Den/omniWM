@@ -80,6 +80,19 @@ Both of those are conveniences a user interface may present, and neither is
 identity, for the reason `configstorage.md` §0.1 already gives: a recycled slot is
 never accepted as the same object without its generation.
 
+That is a statement about *references*, not about *addressing*, and the difference
+matters to anything a human authors. A rule written by a user cannot hold an
+`entry_ref`, because the epoch and generation in one are not stable across a restart
+(`windows.md` §9.4's `then.tags` is the case), so it names a tag the way every other
+piece of configuration names anything: by the string a user would type. Resolution is
+a lookup of that name in the catalog, which is a key-value store keyed by name
+(`configstorage.md` §3), so a name does select exactly one tag at the moment it is
+resolved. Every check after that uses the `entry_ref` the lookup produced, and
+staleness is detected the way §5 requires, by comparing all three components. So a
+name is a way to *find* a tag and an `entry_ref` is the only thing a *reference* may
+hold, and the rule that identity is neither its name nor its number is not weakened
+by anything in this section.
+
 Tag numbers are worth calling out because they are the thing Mango gets wrong and
 `generaldesign.md` §6 explicitly departs from. A tag is not a bit position, a tag
 is not an index into a per-monitor array, and a layout is never stored against a
@@ -163,17 +176,19 @@ staying here:
   on two tags does not get two arrangements, because nothing about it is per tag
   except where it is placed.
 
-One case the list order used to make visible, and which `layoutlanguage.md` §3.8 has
-reopened: whether a **cluster can cross a tag boundary**. A cluster is a movement
-relationship, and it used to be defined as windows that each keep their own place in
-the parent layout, which made a straddling cluster coherent by definition: one layout
-placed some of the members while they travelled with the others. A cluster now
-occupies one space of its parent instead, and a space belongs to exactly one layout,
-so the straddling case has no obvious answer. Either the cluster as a unit belongs to
-one tag and the other tag's window sits inside a space the first tag placed, or
-crossing is refused. The first contradicts the solve input in `layoutengine.md` §2,
-which takes the union of the client sets of the monitor's tags, so the second looks
-more likely, but this has not been decided and it is not this document's to decide.
+One case the list order used to make visible, and which `layoutlanguage.md` §3.8
+reopened, is now settled and it is not a case at all: **nothing inside a group or a
+cluster is on a tag, so nothing inside one can straddle a tag boundary.** A group or
+a cluster is one occupant of its parent, and the tag's member set holds the occupant.
+The contents are in the container, not in the tag, and they carry no membership of
+their own. §5 has the storage shape.
+
+This is why a cluster occupying one space was not the regression it first looked
+like. Under the old definition, where a cluster's members each kept their own place
+in the parent, straddling was coherent by definition and this question never had to
+be asked. Resolving clusters to one virtual client made the containment explicit
+rather than changing the answer, and the answer was always going to be that a member
+of a container is placed by the container.
 
 ## 5. What a tag stores, and where membership lives
 
@@ -186,9 +201,15 @@ A tag is a catalog entry, so its parts are children of that entry, and the
 | each member | a client `entry_ref` | see below |
 | viewport and other data | per whatever it turns out to need | not designed here |
 
-**Membership is stored on the tag, as one child entry per member client.** The
-alternative, storing a back-reference on each client, is what makes the "which
-tags is this client on" question answerable directly, and the direction matters
+**Membership is stored on the tag, as one child entry per member client.** A group
+or a cluster is a member in its own right, and its contents are not members of the
+tag at all: they are in the container, which is itself a member, so their tag scope
+is the container's and not their own. This is the containment rule from §4 and it is
+what makes the entry list flat. A group on three tags has three entries pointing at
+the group; the windows inside it have none, because a window inside a group is not in
+a tag directly. The alternative, storing a back-reference on each client, is what
+makes the "which tags is this client on" question answerable directly, and the
+direction matters
 because the two have very different access patterns. The layout engine needs the
 union of the client sets of a monitor's whole tag list on every solve, and solves
 are frequent, so that direction must not be a scan of every client in the
@@ -200,6 +221,40 @@ This also makes multi-tag clients fall out rather than needing a feature: a clie
 with three tags has three member entries pointing at it, and the same client
 `entry_ref` appears in three different unions. Nothing needs to know how many tags
 a client is on.
+
+Containment costs the reverse question one hop, and the reverse question is the rare
+one. "Which tags is this client on" is now "which tags is this client's container on",
+or the client's own entries when it is not inside anything, so a client inside a
+group resolves by walking up to the group and reading its entries. §5's own reasoning
+puts that question behind a switcher, so a walk is affordable there and would not be
+in the solve path, which is the direction that had to stay a walk of only the tags
+actually displayed. A client that is inside a group and also carries its own entries
+is not a state the store can represent, and refusing to represent it is the point:
+it is the straddling case §4 rules out, and it would be a client placed by one
+layout while counted by another.
+
+**Membership is the only place tags are stored, and a client has no tag field.**
+That is this section's own storage decision, and it is worth stating against the
+alternative because Mango does the opposite: `client->tags` is a `uint32_t` bitmask
+on the client (`include/mango/manage/client.h:122`), so in Mango a client does carry
+its tags. Here the direction is chosen for the access pattern in the paragraphs above,
+and the consequence is that anything wanting to *read* a client's tags has to walk
+membership rather than read a field.
+
+So the tags a window rule sees are a **derived read-only value**, and it is derived
+from membership with one rule:
+
+- a client inside a container is on whatever tags that container is on, since its own
+  member entries are not consulted;
+- a client inside nothing is on the tags whose entries name it.
+
+That derived value is exposed to filters as `tags` (`windows.md` §9.3) and it is
+never written, which is what keeps §4's straddling refusal intact: a rule that *sets*
+tags does so by adding a member child to a tag's entry, and if the client is inside a
+container that would be the refused state, so the write is deferred until the client
+leaves rather than applied to the container or dropped. The deferral is the one piece
+of that mechanism whose storage is not settled; `windows.md` §9.3 records where it
+would go and why.
 
 The membership child is `WINDOW_DEPENDENT`. It is scoped to a live client, so
 `configstorage.md` §8 excludes it from `save` and from a soft reset, which is
@@ -239,9 +294,9 @@ Two consequences, and the first is a simplification rather than a new mechanism:
 
 Floating state is `WINDOW_DEPENDENT` like the rest of a client's values, and that
 is not a problem for a preference the user expects to survive a restart. A window
-rule seeds it by the same match-and-replace mechanism §3.3 gives for every other
-client value, the rule is ordinary configuration and is saved, and on restart it
-re-applies to the new client entry. Seeded state does not need to be saved twice.
+rule seeds it by the if/then seed `windows.md` §9.2 and §9.4 defines, the rule is
+ordinary configuration held in the block and is saved, and on restart it re-applies
+to the new client entry. Seeded state does not need to be saved twice.
 
 ## 7. Moving a tag, and what has to be true of the store
 
@@ -345,7 +400,7 @@ Open, and the ones that bear on the layout engine:
 | `generaldesign.md` §7 | layout is a solver, the built-in boundary, and the per tag per monitor and floating wording §4 amends |
 | `generaldesign.md` §8 | groups, clusters, window rules, and the floating layer, which §6 confirms belongs to the client |
 | `configstorage.md` §0, §0.1 | the open catalog, and the identity vocabulary including the generation rule |
-| `configstorage.md` §8 | `WINDOW_DEPENDENT` scope, and the `save` and reset classification |
+| `configstorage.md` §3, §12, §13 | `WINDOW_DEPENDENT` scope, and the `save` and reset classification |
 | `configstorelayout.md` §6, §11 | the catalog entry, and the solved layout node keyed by `entry_id` and `entry_generation` |
 | `layoutengine.md` §3.1, §3.5, §7.7 | the questions this document answers, and the ones it does not |
 | `omni_layout.h` | `OMNI_SOLVED_NODE_OFF_REF_ID` and `OMNI_SOLVED_NODE_OFF_REF_GEN`, the entry-scoped identity the solver publishes, which §2 relies on |

@@ -3,7 +3,7 @@
 The socket is the thin JSON facade over the store primitives defined in
 `configstorage.md` §11 and laid out byte-exactly in `configstorelayout.md`.
 Every verb is a wrapper around one of: the catalog read path, the commit
-protocol (§12 of configstorelayout.md), the request queue, or the action
+protocol (configstorelayout.md §13), the request queue, or the action
 registry. There is no key-specific handling anywhere: unknown keys are served
 verbatim.
 
@@ -182,10 +182,16 @@ Request:
 string or number. Responses are exactly one per request, in order:
 
 ```
-ok      : { "ok": true,  "result": <type-specific>, "epoch": <u64>, "commit_id": <u64>, "id": <any> }
+ok      : { "ok": true,  "result": <type-specific>, "epoch": <wide>, "commit_id": <wide>, "id": <any> }
 failure : { "ok": false, "error": { "code": "...", "message": "..." },
-            "epoch": <u64|null>, "commit_id": <u64|null>, "id": <any> }
+            "epoch": <wide|null>, "commit_id": <wide|null>, "id": <any> }
 ```
+
+`<wide>` is the wrapped spelling from §3.2, so `"epoch": {"$u64":"7"}` and
+`"commit_id": null` rather than a bare JSON number. A bare `7` would be a
+syntax error, because JSON has one number type and a u64 is not representable
+in it. The notation is abbreviated here so the envelope shape stays readable,
+not because the value is a plain number.
 
 `epoch` identifies the compositor instance. `commit_id` identifies the
 committed store state on which a read or write landed. Commands that expose a
@@ -289,10 +295,11 @@ Decoder input rules for `set` / `exec` args; encoder output rules for
 | option | `{"type": <tag>, "value": <typed> or null}` | same |
 | array | `{"type":"array", "elem_type": <tag>, "value": [...]}` | same, `elem_type` retained |
 | tuple | `{"type":"tuple", "field_types": [<tag>...], "value": [...]}` | same |
-| binding | object `{"mods","key","cmd","args"?}` | same; encoding settled in `helpers.md` §6.2 |
+| binding | object `{"mods","key","action","args"?}` | same; encoding settled in `helpers.md` §6.2 |
 | rule | object `{"match":{},"replace":{}}` | same; schema in `helpers.md` §6.2 |
-| constraint | object `{"records":[...]}` | same; records in `configstorage.md` §4 |
-| client_rule | object `{"match":{},"effect","target","scope"}` | same |
+| constraint | a tree of `{"spaces":[...]}` | same; a program, in `configstorage.md` §4 |
+| client_rule | object `{"rule","against","axis","edge","region","width","height","by"}` | same |
+| map | `{"type":"map","value":[{"key": string, "value": <typed>}, ...]}` | same, order preserved |
 | gradient | `{"type":"gradient", "stops":[{"offset","color"}]}` | same |
 
 Every type named in the storage table of `configstorage.md` §4 has a row here.
@@ -350,22 +357,28 @@ differs from `field_types` is `BAD_VALUE` rather than a silent truncation.
 
 `binding` and `rule` are settled in the action ownership contract, `helpers.md`
 §6.2, which owns both encodings. A `binding` names its action on the wire and
-stores the resolved handle, so a binding whose action is not registered is
-`ACTION_NOT_FOUND` at `set` time rather than a dangling handle stored for later.
-Its `args` is an optional positional string array, validated against the action's
-schema at decode and again at dispatch, so `wm.snap left` is one action rather
-than four. A `rule` matches by key pattern and optionally type, and its `replace`
-is a full typed value whose type must match the match constraint.
+**stores the name, not a resolved handle**, because a binding is in the block and
+the block is the user's editable configuration. A registry handle is a
+process-local index, so storing one would put an unreadable value in a file a user
+edits and would not survive a `save` and reload. The name is resolved through the
+registry when the key fires, and an unregistered name is `ACTION_NOT_FOUND` on
+use. Its `args` is an optional positional string array, validated against the
+action's schema at decode and again at dispatch, so `wm.snap left` is one action
+rather than four. A `rule` matches by key pattern and optionally type, and its
+`replace` is a full typed value whose type must match the match constraint.
 
 `constraint` and `client_rule` are the two tags added for the layout engine, and
 both decode to objects rather than to flat tuples, because a `tuple`'s fields are
 positional and these records are read by a human writing a layout file. A
-`constraint` carries an array of 16-byte records and is refused with `BAD_VALUE`
-if the record count is not integral, a `kind` is outside
-`OMNI_CONSTRAINT_KIND_COUNT`, or a `role` is a walk index past the end of the
-walked set. A `client_rule` carries a `match`, an `effect`, a
-`target` naming a group or layout, and a `scope` of `map_only` or `always`,
-which is the pair of timings that would otherwise be indistinguishable.
+A `constraint` is a `{"spaces":[...]}` tree in which a space may hold a nested
+`constraint`, and it is refused with `BAD_VALUE` if the nesting is deeper than
+`OMNI_LAYOUT_MAX_NEST_DEPTH` or if a space carries no name. A `client_rule` is a
+flat object of the language's own keys, and the fields a rule's kind does not take
+are absent rather than null: `edge` only on `align`, `axis` only on `match`,
+`width` and `height` only on `size`, `by` only on `offset`, `region` only on
+`snap`. Which of the two namespaces a set is under is what its rules *do*, so there
+is no `effect` field to disagree with it, and nothing in a rule matches a window,
+so there is no `match`, `target` or `scope`.
 
 ### 3.3 Value limits
 
@@ -455,7 +468,7 @@ Read the current value of one key from the catalog.
 
 Unknown key: `KEY_NOT_FOUND`. `get` uses the open-catalog rule; extension keys
 are returned without interpretation beyond typing. A structurally invalid
-entry (configstorelayout.md §12 guard bundle) is reported as `BAD_VALUE`.
+entry is reported as `BAD_VALUE` once a `configstorage.md` §12 guard has refused it.
 
 ### set
 
@@ -478,7 +491,7 @@ Single-key commit or grouped commit in one message.
 - This is what makes a bare integer unambiguous: the value's type comes from the
   key's registration, not from the literal's magnitude, so `wm.gaps = 8` keeps
   the type its component declared regardless of whether the number later grows.
-- Mapped onto commit protocol §12 of configstorelayout.md: single-key = one
+- Mapped onto commit protocol configstorelayout.md §13: single-key = one
   `commit_id` and one `journal_seq`; grouped = one `commit_id` and N distinct
   `journal_seq` values.
 - Unknown keys accepted verbatim, per the open-catalog rule.
@@ -646,7 +659,7 @@ Invoke a registered action by namespace-qualified name. Bindings reference
 actions as strings, resolved via the registry at dispatch time.
 
 ```
-{ "cmd": "exec", "action": "wm.cycle_layout", "args": ["master-stack"], "id": 4 }
+{ "cmd": "exec", "action": "wm.cycle_layout", "args": ["master_stack"], "id": 4 }
 ```
 
 - `args` is a JSON array, validated positionally against the action's declared
@@ -879,7 +892,8 @@ unaffected by having connected early.
 | command | while `NOT_READY` |
 |---|---|
 | `get`, `watch` | **served**; the block is valid, there is nothing to wait for |
-| `unwatch`, `delete` | **served** |
+| `unwatch` | **served**; it removes a subscription rather than adding one |
+| `delete` | `NOT_READY`, same as `set`; it is a write, and see below |
 | `set`, `exec` | `NOT_READY`; these may depend on components that are not up |
 | `save` | **served**; a read-only serialisation of what exists |
 | `reload` | `NOT_READY`; a config references components by name |
@@ -891,6 +905,17 @@ depend on a component that does not exist yet, and refusing them would force a
 client to poll for readiness before it could do anything useful. Writes are
 refused, because `set` into a key whose owning component has not registered
 would silently write a value nobody is reading.
+
+`delete` was the one ambiguous case, and it is a write. An earlier draft of this
+table served it, on the grounds that destroying a value has no component
+dependency. That is true and it is not the test: `delete` appends to the journal
+and publishes a committed state, so it can remove state a component is about to
+populate, and the compositor is not finished initialising until `server.md` §4
+step 5. It is now refused, which also makes this table agree with
+`server.md` §4, where reads are served in every state and writes are refused
+until `READY` with no per-command exception. `unwatch` stays served because it
+removes a subscription rather than adding one, so it cannot introduce a
+dependency that does not already exist.
 
 Commands are not queued while `NOT_READY`. Queueing would mean a client cannot
 tell whether its `set` was applied, and the failure mode of a silently-dropped
@@ -926,6 +951,21 @@ necessarily already seen the new field value.
   literals to those same tags and adds none of its own.
 - A well-written omniWM library never touches this socket: it maps the block
   directly (`configstorage.md` §0).
+- **The readable client-field set and the window-rule filter vocabulary are the
+  same set, and this is a consequence rather than a new demand.** `windows.md`
+  §9.3 splits a client's fields into observable and settable, and the observable
+  half is the whole `if` vocabulary, so a rule can filter on any field a client
+  exposes. This document's mandate that the socket carry the same capability as
+  direct block access then requires that every such field also be readable over
+  the socket, because a script that cannot read a value cannot filter on it in a
+  rule it writes by hand. The check is mechanical: a field that appears in an
+  `if` block must appear in what a client read returns. The settable half is not
+  subject to the same rule, since a field a rule may write is a preference and is
+  writable by definition.
+- The socket needs no new verbs for rules. A rule is a block value, so it is
+  reached by the ordinary key verbs, and the two operations `windows.md` §9.6
+  exposes, re-applying rules to one client and to all of them, are actions in §4
+  rather than special cases in this document.
 
 ## 8. Open items
 
@@ -940,11 +980,13 @@ necessarily already seen the new field value.
 - The `wm.reset` journal event's category name and its field set are fixed here,
   but the temp-file naming and lifetime for a soft-reset snapshot are not; they
   belong with the transaction and readiness pass.
-- `binding` and `rule` wire encodings are unfinished by design. Both depend on the
-  action ownership contract, so they are settled in the action ownership pass
-  (step 16) rather than guessed here. The same pass owns the `exec` argument
-  schema, action result typing, and the runtime failure code for an action that
-  fails during execution, none of which are defined yet.
+- The `binding` and `client_rule` wire encodings are settled, in `helpers.md`
+  §6.2, and this list used to record them as unfinished by design along with the
+  `exec` argument schema, action result typing, and the runtime failure code for
+  an action that fails during execution. All five are now defined there, so this
+  bullet has nothing left in it. What is genuinely still open is the `action_ref`
+  field, where `configstorage.md` §4 says arena frame offset and `helpers.md`
+  §6.2 says registry handle; that one is a decision, not a gap.
 - The value limits in §3.3 are derived from the 4 MiB initial block. A larger
   block would raise `OMNI_VALUE_MAX_FRAMED` and `OMNI_VALUE_MAX_ARRAY_ELEMS`
   proportionally; the ratio, not the absolute numbers, is the contract.

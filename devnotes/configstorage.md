@@ -91,16 +91,30 @@ the live block is untouched.
 +--------------------------------------------------------------+
 | catalog   : fixed-capacity 32-byte entry array + freelist    |
 +--------------------------------------------------------------+
+| catindex  : 16-byte slots sorted by name hash, binary search |
++--------------------------------------------------------------+
 | journal   : fixed ring metadata + fixed 64-byte entry slots   |
 +--------------------------------------------------------------+
-| requests  : fixed 64-slot request queue with full names       |
+| requests  : fixed 256-slot request queue, names in the pool   |
 +--------------------------------------------------------------+
 | region    : fixed descriptor table outside the growable pool   |
 | desc      :                                                  |
 +--------------------------------------------------------------+
+| solved    : fixed single-buffered geometry, never journalled   |
++--------------------------------------------------------------+
 | pool      : growable arena, then region payload tail          |
 +--------------------------------------------------------------+
 ```
+
+This is an overview rather than the authority: the sizes and offsets are in
+`configstorelayout.md` §2 and the `OMNI_SECTION_*` ids in `omni_layout.h`
+section 2. There are eight of them. The first seven are ids 1 to 7 in `omni_layout.h`
+section 2, which is catalog, arena, journal, requests, region desc, region
+payload and solved, the last being `OMNI_SECTION_SOLVED_LAYOUT` at `0x113800`.
+`catindex` is the eighth, `OMNI_SECTION_CATALOG_INDEX` id 8 at `0x81000`, added
+by §3.1 below, and it sits between catalog and journal in address order even
+though its id is last. An earlier draft of this diagram omitted both `solved`
+and `catindex`.
 
 The block is one contiguous mapping. It grows via mremap (see section 9);
 the header and fixed sections stay at stable offsets, while the pool's
@@ -135,6 +149,112 @@ value_inline     : u64   low bytes of an inline value or reference generation
 - A catalog reference is `(epoch, entry_id, entry_generation)`. `entry_id` is the slot index and `entry_generation` changes whenever that slot is reused.
 - Names are immutable during one entry lifetime. A rename deletes and recreates the entry so old journal references cannot acquire a new name.
 - Structural rules for the WM read path: verify the representation-specific reference and length, type tag, commit id, entry generation, and alignment before dereferencing. See section 12.
+
+### 3.1 The read path, which is where the storage model actually costs something
+
+This subsection exists because the storage model is not Mango's and the read
+path is where that difference is paid. Mango's config is a `Config` struct
+filled once at parse time, so reading `config.gaps` is a load at a known offset
+out of a struct the parser already built. Here, a name is a string in the arena
+and a value is a typed frame reached through a catalog slot, so the equivalent
+read is: hash the name, find the slot, validate the slot, follow a frame
+reference, decode a tagged value.
+
+Done naively that is a walk of up to `OMNI_CATALOG_SLOT_COUNT` entries with a
+string comparison each, against Mango's one load. Three things fix it, and none
+of them is "make the struct access faster", because there is no struct.
+
+**1. `get` binary searches an in-block index; it never walks the catalog.**
+`configstorelayout.md` §6.1 defines a second, sorted view of the catalog: 16,384
+slots of `{u64 name_hash, u32 entry_id, u32 generation_lo}`, sorted ascending,
+looked up by binary search and then a walk of the equal-hash run to confirm the
+name. The hash is FNV-1a 64 with a splitmix64 finalizer, and the finalizer is
+load-bearing rather than decorative: the array is sorted by the full 64-bit
+value, so a binary search discriminates on the high bits first, and FNV-1a's
+high bits mix poorly for inputs as short as a key path.
+
+Two properties matter more than the asymptotics:
+
+- **The writer maintains it transactionally**, in the same commit as the catalog
+  mutation, under the futex. So it is never stale, never rebuilt, and never
+  disagrees with the catalog, because there is no window in which it could.
+- **There is no walk behind it, by design.** A missing or malformed
+  `CATALOG_INDEX` row, or a version this build does not know, makes the block
+  unreadable to this build; it does not make `get` slow. The reason is the one
+  that makes the whole design worth its 256KB: a fallback scan makes `get` cost
+  proportional to the number of configured keys, which is fine on a test machine
+  with 40 keys and not fine on a real session with 4,000, and a cost that
+  depends on unrelated configuration is exactly the cost nobody profiles. A
+  wrong answer is worse than an error, and an error is worse than a clear
+  refusal.
+
+The catalog itself is deliberately not sorted. `entry_id` is the slot index,
+live entries never move, and the freelist chains through slots, so sorting in
+place would move live entries, invalidate every held
+`(entry_id, entry_generation)`, and make delete an O(n) move of the catalog
+rather than of a derived index.
+
+**2. Hot reads use private-copy indexes, rebuilt once per change.** A process
+that reads the same keys every frame keeps its own copy of what it needs, and
+refreshes it when the store says something changed rather than re-resolving per
+frame:
+
+```
+resolve once:   name -> hash -> index -> (entry_id, entry_generation)
+per frame:      if commit_id unchanged, use the private copy
+on a change:    invalidate and re-resolve
+```
+
+The steady-state cost of forty options read every frame is forty `u64` compares
+and zero hash lookups, so the per-frame cost stops scaling with the number of
+options. This is the same pattern the binding index uses
+(`generaldesign.md` §14.4) and the same one watchers use, which is what makes it
+a project-wide convention rather than a special case.
+
+**3. Change notification is a first-class event, and bindings get their own.**
+An ordinary cached value is invalidated by `KEY_SET`, which already carries
+`(epoch, commit_id, journal_seq, time_ns, entry_id, entry_generation, type,
+value)`; a reader matching on `entry_id` needs nothing more. A *derived*
+structure needs something different, because it is not invalidated by any single
+entry, it is invalidated by the set changing. So the journal has
+`OMNI_JOURNAL_KIND_BINDS_UPDATED` (`5`), appended in the same commit as the
+`KEY_SET` entries it summarises, and any process holding a binding index
+rebuilds on it. It exists as a kind rather than as a run of `KEY_SET` entries
+because one rebind and a two-hundred-binding config reload should be one event
+to a client that only needs to know its index is stale.
+
+**No per-entry revision field.** The obvious alternative is a `revision` u32 in
+each catalog entry so a reader can poll one entry instead of the journal. The
+journal already carries the entry identity per entry and appends nothing a
+reader cares about when nothing changed, so it is the cheaper mechanism, it is
+already specified, and the entry stays 32 bytes.
+
+**Mutable per-frame state does not belong in the journalled catalog.** Every
+visible commit appends at least one journal entry plus a `COMMIT_END`, so a
+catalog entry that changes once per frame consumes a journal slot per frame,
+evicts configuration history, and makes the §5.1 gap check fire continuously.
+The block already has the right two answers and this subsection only makes them
+mandatory:
+
+- `solved` is a fixed single-buffered section that is never journalled, and it
+  is where layout results belong;
+- the region descriptor table is outside the growable pool, carries a
+  `region_revision`, and publishes with a seqlock, which is the pattern for a
+  value that changes often and whose readers need a stable sample.
+
+So the rule is: **the catalog holds configuration and state whose *changes* a
+client needs to observe. Everything a client would merely poll belongs in a
+fixed, non-journalled section read by offset.** Pointer position, scroll deltas
+and focus bookkeeping are the obvious cases.
+
+`EPHEMERAL` does **not** express this. `EPHEMERAL` is the `save` test, meaning
+"no long-term relevance, so do not write this to a config file". An ephemeral
+entry is still journalled, still costs a slot per change, and still evicts
+history. Conflating "not worth saving" with "not worth notifying about" is the
+trap here, and the two sets are genuinely different. A tag's membership is not
+worth saving to a file and is worth a journal slot, because a client watches it.
+The pointer position is not worth saving *and* is not worth a journal slot,
+because nothing watches it and everyone polls it.
 
 ## 4. Value type tags
 
@@ -191,9 +311,10 @@ The tag space is a u16. Values are stored in native endianness and alignment, ti
 | 0x2F  | exec        | string (shell command line)                 |
 | 0x30  | state       | string (free-form state token)              |
 | 0x31  | datetime    | i64 nanoseconds since the Unix epoch, UTC   |
-| 0x32  | constraint  | generic layout program, a packed array of 16 B records |
-| 0x33  | client_rule | 24 B header plus the value its effect applies |
-| 0x34..0x7FFF | reserved | the unassigned low hole, see below       |
+| 0x32  | constraint  | a nestable layout program, see below |
+| 0x33  | client_rule | one client rule, a 24 B record, see below |
+| 0x34  | map         | a keyed block of typed values, see below |
+| 0x35..0x7FFF | reserved | the unassigned low hole, see below       |
 | 0x8000.. | extension | extension range, structurally valid framed payloads |
 
 For v1 representation, fixed-size scalars and fixed-size composite types whose
@@ -223,7 +344,7 @@ off  size  field
 0    4     modmask      u32
 4    4     keysym       u32
 8    4     keycode      u32
-12   4     action_ref   u32 arena frame offset, the action name
+12   4     action_ref   u32 frame offset of the action's name, never a handle
 16   4     args_ref     u32 arena frame offset, or OMNI_REF_NONE
 20   4     flags        u32, bit 0 USE_KEYSYM
 24   ...   args         array value of strings, inline
@@ -233,63 +354,124 @@ The header is fixed and the array is variable, which is why this is a framing
 change and not a new tag: a binding without arguments is still a binding, and
 `args_ref == OMNI_REF_NONE` says so without a length comparison. The argument
 array is positional and every element is a string, matching what `exec` already
-accepts, so `wm.cycle_layout alpha` and a TOML
-`args = ["alpha"]` are the same value in two syntaxes. Argument count and types
+accepts, so `wm.cycle_layout master_stack` and a TOML
+`args = ["master_stack"]` are the same value in two syntaxes. Argument count and types
 are the action's business, not the store's.
 
-`constraint` is a packed array of 16-byte records with no header, so the record
-count is derived from the value length and order is the evaluation order:
+`constraint` was a packed array of 16-byte records with no header, and it cannot
+express `layoutlanguage.md` §3, because a program's spaces form a tree: a list of
+spaces where a space may name a nested `layout`, up to
+`OMNI_LAYOUT_MAX_NEST_DEPTH`. A flat record array has no place to put a child
+program. So the tag still marks the domain, and the payload became the tree
+itself, composed of tags that already exist. It is the tag of
+`omniwm.layouts.<name>.spaces`; the sibling keys `.rules` and `.viewport` are an
+array of `option` and an `option` respectively (`layoutlanguage.md` §1):
+
+```
+constraint := array of space
+space      := option          (framed: name string, then the value)
+value      := the space's own arguments, in `layoutlanguage.md` §11.2 and §11.7
+            | constraint       (a nested `layout`, absent unless the space is a group)
+```
+
+`kind` became the `rule` key of the language and the record's `flags`, `edges`, `axis`
+and `role` went with it, because they described one fixed-width record where the
+language has one argument per rule kind and a rule states only the arguments its own
+kind takes. `priority` is gone because the language has no priority: `layoutlanguage.md`
+§3 says order in the list is the order, and a linear weight was a solver artefact from
+the weighted formulation `share` and `inset` still use. `role`, and with it
+`ROLE_PARENT`, went because `operand` did; there is no rule that measures a parent
+rectangle any more. Order is the array's order and needs no field to say so.
+
+A program is therefore a value like any other, which is what
+`layoutengine.md` §4.6 asks for: `save` writes the tree and a user can edit it,
+where a record array was a positional tuple in a file nobody reads. The tag is worth
+keeping because a core reader can recognise a layout program without a schema, and
+`0x32` costs one row in three tables.
+
+`client_rule` is one rule of one client rule set, 24 bytes with no payload, and its
+fields are the keys of `layoutlanguage.md` §11.11:
 
 ```
 off  size  field
-0    2     kind         u16
-2    2     flags        u16
-4    2     priority     u16, linear weight
-6    1     edges        u8, edge mask
-7    1     axis         u8
-8    4     role         u32, walk index or ROLE_PARENT / ROLE_NONE
-12   4     literal      i32
+0    2     rule      u16, ALIGN | MATCH | SIZE | OFFSET | SNAP
+2    2     against   u16, CLIENT | VIEWPORT | OUTPUT
+4    2     axis      u16, X | Y, MATCH only
+6    2     edge      u16, LEFT | RIGHT | TOP | BOTTOM | CENTER_X | CENTER_Y, ALIGN only
+8    2     region    u16, the ten regions of §3.7, SNAP only
+10   2     reserved  zero
+12   4     width     u32, SIZE only, pixels
+16   4     height    u32, SIZE only, pixels
+20   4     by        i32, OFFSET only, pixels, may be negative
 ```
 
-There is no subject and no entry identity in a record. The program is the named
-layout, stored once and shared by every client it arranges, so a record
-constrains the window the solver is currently at and the walk supplies which
-window that is. `role` is the operand as a position in the walked set rather than
-as a window, which is what lets one program say "left-of the master" without
-knowing which window is the master.
+The record lost five fields it used to have, and each loss is a decision the language
+made rather than a simplification. `match_appid`, `match_title` and the `TITLE_REGEX`
+flag are gone **from this record**, because this record is a solve-time constraint
+rather than a selector. A `clients` set is reached by name, not by a property
+comparison against a surface, and a `snaps` set is reached by a drag region or a
+keybind that names it. `rule = "match"` is a geometry relation that takes the
+reference's extent on an axis, and it is a different thing from matching a window's
+title, which is the confusion that had `match` carrying a matcher. `target_id` and
+`target_gen` are gone for the same reason: a rule names no target, it is reached by
+name. `scope`, and with it `MAP_ONLY` and `ALWAYS`, is gone because a set is resolved
+when it is reached and the language states no re-resolve timing; the reload case is
+the store replaying the config, not a second timing for a rule.
 
-`priority` is a weight, not a rank, and the four bands
-(`DOMINANT` 60000, `STRONG` 6000, `MEDIUM` 600, `WEAK` 60) are an order of
-magnitude apart so one band dominates the compromise rather than competing with
-it. `0` means no opinion, which is what an absent record means, so the lowest
-useful value is `1`. The `edges` bit positions are the same four river's
-`set_tiled` and Hyprland's `Layout::eRectCorner` use, so an adjacency computed
-here is the value those protocols already carry. Subject and operand are
-`entry_id` plus `entry_generation`; the epoch is implied, and a program naming
-another epoch is malformed rather than a dangling reference. A `length` that is
-not a multiple of 32 is malformed.
+What reaches a set is a separate concern from what a record inside one contains, and
+`windows.md` §9 settles the first without reopening the second. A fake client is
+bound by the creating action naming the set, and a real client is bound by a window
+rule matching it, but in both cases the set is named and what lands on the client is a
+`0x33` record. The matcher therefore has no reason to return to this record: it lives
+in a block-structured if/then at `omniwm.window_rules.<name>`, and its `then` side
+binds sets by name.
 
-`client_rule` is a 24-byte header followed by the value its effect applies:
+`map` is the other way: a value that is a keyed block of typed values, which the
+store did not have. Section 3 is an open key-value catalog, so a TOML table flattens
+into a key path rather than becoming a value, and every "block" in the design so far
+has been a key path. A window rule is the first thing that needs a block to *be* a
+value, and a map is the shape it needs:
 
 ```
-off  size  field
-0    4     match_appid  u32 arena frame offset, or OMNI_REF_NONE
-4    4     match_title  u32 arena frame offset, or OMNI_REF_NONE
-8    2     effect       u16
-10   2     flags        u16, bit 0 TITLE_REGEX
-12   4     target_id    u32
-16   4     target_gen   u32
-20   2     scope        u16
-22   2     reserved     zero
-24   ...   payload      the value the effect applies
+map := array of entry
+entry := tuple          (framed: the key string, then the value)
 ```
 
-`client_rule` is not `rule` with a flag set. `rule` matches a key and replaces a
-value; every rule the layout set needs matches a client and changes which scopes
-contain it, so it is a different record rather than a variant of one. `scope`
-separates the two timings that are otherwise indistinguishable: `MAP_ONLY` is
-evaluated when the client maps, `ALWAYS` is re-resolved on reload, which is what
-makes a rule survive a restart instead of applying once and being lost.
+It is an array of pairs and not a hash table, which is the same choice `binding`
+makes in being a positional array rather than a structure with named offsets. The
+order of the entries is the order they were written, it is not semantically
+meaningful, and a reader that cares about a key finds it by comparison. Keys are
+UTF-8 strings, unique within one map, and the same immutability rule as a catalog
+entry's own name applies to them: a rename is a delete and a create.
+
+**A window rule is a `map` with two well-known keys, `if` and `then`, and it gets no
+tag of its own.** That is the same argument this section already made when it dropped
+the `effect` enum from `client_rule`: the namespace carries the meaning, so
+`omniwm.window_rules.<name>` already says what the value is, and a tag repeating it is
+a second place for the two to disagree. Every value in an `if` map is a `string`
+holding a pattern, and every value in a `then` map is whatever type that field is
+(`windows.md` §9.3). The cost of no dedicated tag is that nothing structural stops
+`if` from holding a non-string or `then` from holding a read-only field, so a rule's
+validation is semantic rather than framing-level, and it lands in the bucket §14
+already defers. A dedicated tag would make the core recognise a rule without a
+schema, at the price of a tag per block-shaped type for as long as that holds.
+
+This is a design-stage decision and cheap to revisit, which is the reason to make it
+now rather than defer it: the compositor does not exist, so there is no
+compatibility cost to changing the tag or promoting the rule to one of its own before
+any code is written, and §14's list is where that would be recorded if it happens.
+
+`effect` is gone too, and the namespace carries it instead: a set under
+`omniwm.clients` arranges a surface and a set under `omniwm.snaps` names a
+destination, so which of the two a rule belongs to is what its effect is, and an enum
+repeating it would let the two disagree. `by` is signed while `layoutlanguage.md`
+§11.6's `by` is not, because an `offset` may be negative and an `inset` may not; that
+is the one place where the program layer's argument and the client layer's argument
+share a name and differ in range, and the record is where it is visible.
+
+`client_rule` is still not `rule` with a flag set. `rule` matches a key and replaces
+a value; these match nothing and solve a set of soft equations, so it remains a
+different record rather than a variant of one.
 
 ## 5. Journal / event stream (single unified ring)
 
@@ -448,7 +630,14 @@ A region is a catalog entry of type `region_ref`; its descriptor lives in a fixe
 
 Requests are how socket-free programs ask the WM to create or destroy catalog entries and regions.
 
-- 256 fixed request slots, sized for the queue's real load rather than the region count. The queue carries CREATE_ENTRY and CREATE_REGION alike while the catalog holds 16,384 entries, and nothing in the protocol bounds a client's in-flight requests, so a batching client that submits a 200-key theme is legal and would exhaust a 64-slot queue. Each slot contains `{epoch, status: FREE/PENDING/DONE/ERROR, ticket, requester_pid, requester_start_id, type, target, target_generation, params, response, terminal_at_ms}`. The name field is 4096 bytes and accepts names up to 4095 bytes including the terminating NUL; initial values are limited to 128 bytes.
+- 256 fixed request slots of 256 bytes. The name is an arena frame referenced by
+  `name_ref` rather than an inline field, which is what makes the slot 256 bytes
+  instead of `0x1100` and the queue 64KB instead of 1.1MB. The frame belongs to
+  the slot from submission until release or reclaim and is freed to the §5 arena
+  free list then, so it is readable for the whole drain and reclaimed exactly
+  once. The requester copies the name out of the arena before releasing the
+  slot.
+- The slot count is sized for the queue's real load rather than the region count. The queue carries CREATE_ENTRY and CREATE_REGION alike while the catalog holds 16,384 entries, and nothing in the protocol bounds a client's in-flight requests, so a batching client that submits a 200-key theme is legal and would exhaust a 64-slot queue. Each slot contains `{epoch, status: FREE/PENDING/DONE/ERROR, ticket, requester_pid, requester_start_id, type, target, target_generation, name_ref, params, response, terminal_at_ms}`; `params`, `response` and `name_ref` are u32 arena frame offsets, so no field is large enough to set the slot size, and a name is bounded by the frame allocator rather than by the slot.
 - Submission takes the commit futex, finds a FREE slot, writes the complete slot (`PENDING`, a new `ticket` within the current epoch, `requester_pid`, `requester_start_id`), and releases. A request is refused before any slot is taken when the block is not READY or is BROKEN, so a refused request never consumes a ticket. With no free slot the request fails immediately rather than waiting, so a stuck requester cannot stall a live one. `(epoch, ticket)` is the complete request identity.
 - The status is a state machine, not a set of labels. `FREE -> PENDING` on submission; `PENDING -> DONE` when the WM applied the request in full; `PENDING -> ERROR` when it refused, with no partial mutation existing; `DONE|ERROR -> FREE` on acknowledgement or reclaim. Only the requester returns a terminal slot to FREE voluntarily, and the WM does so only through reclaim, so the acknowledgement path and the reclaim path can never both free one slot.
 - WM drain, once per tick: validate params and target generation structurally, apply, then publish `DONE` or `ERROR` together with the new identity and a `terminal_at_ms` stamp in a single commit. The `REQUEST_DONE` event is appended by a later commit, never the same one, so a client that trusts the event never reads a slot still marked PENDING. A region create rejects dimensions that do not fit the u16 descriptor fields or that exceed the frame maximum under subtraction-first arithmetic, normalizes `slot_count == 0` to `1`, and treats a count above the maximum as `PARAM_INVALID` rather than clamping it. A rejected request allocates no descriptor and consumes no pool space.
@@ -532,11 +721,11 @@ the core carry extension values it cannot interpret while still refusing its own
 malformed values.
 
 ```
-0x01..0x33        known:      require the tag's exact encoded length and its
+0x01..0x34        known:      require the tag's exact encoded length and its
                               representation rule (inline or framed)
 0x8000..0xFFFF     extension:  require VALUE_FRAMED, a verified frame, and a
                               length the core never interprets
-0x00, 0x34..0x7FFF unassigned: malformed, refused by the core
+0x00, 0x35..0x7FFF unassigned: malformed, refused by the core
 ```
 
 `0x00` is unassigned in the catalog and is used only by journal entries that
@@ -545,10 +734,10 @@ extension, so it is refused. Save preserves entries on the extension branch and
 skips entries that fail any structural tier.
 
 The upper end of the known range is a moving target: `0x32` and `0x33` were added
-for the layout engine, and the hole simply moved from `0x32..0x7FFF` to
-`0x34..0x7FFF`. `OMNI_TAG_MAX_KNOWN` and `OMNI_TAG_UNASSIGNED_LO` are asserted to
-be adjacent in `omni_layout.h` so the two cannot drift apart, which is the only
-thing that makes a hole detectable at all.
+for the layout engine and `0x34` for the window-rule block, and the hole simply
+moved from `0x32..0x7FFF` to `0x35..0x7FFF`. `OMNI_TAG_MAX_KNOWN` and
+`OMNI_TAG_UNASSIGNED_LO` are asserted to be adjacent in `omni_layout.h` so the two
+cannot drift apart, which is the only thing that makes a hole detectable at all.
 
 ### 12.2 Flag state
 
@@ -589,12 +778,26 @@ distinct and fail differently.
 ```
 inline   length <= 8 and length == the tag's exact encoded size
 framed   length == frame.used and the complete frame lies inside both the
-         declared arena window and block_size
+         declared arena window and block_size, and the frame is allocated
 region   length == 8, body_ref < OMNI_REGION_DESC_COUNT, generation non-zero
 ```
 
 An over-length inline value is malformed. A framed value whose declared length
 disagrees with its frame header is malformed. Neither is repaired.
+
+The "allocated" test in the `framed` line is the free list's discriminator, and
+it is the one thing that makes a recycled frame safe to hand out. A free frame
+stores its successor at `OMNI_FRAME_OFF_NEXT_FREE`, which is the first word of
+its payload (`configstorelayout.md` §5), and a live frame stores zero there, so
+the two cannot be confused: `next_free == 0` is allocated, and any non-zero
+`next_free` is on the free list. The free-list head itself
+(`OMNI_HDR_OFF_ARENA_FREE_HEAD`) and a free list's tail both use
+`OMNI_REF_NONE`, so the end of a list is not a usable offset either. A
+`body_ref` that resolves to a free frame is therefore `PARAM_INVALID` or
+`CATALOG_GENERATION` invalid, never a read of recycled bytes as a value. The
+check is two loads and a compare, and it must be applied on every `body_ref`
+dereference, not only on the path that wrote it, because the free list is what
+makes offsets reusable in the first place.
 
 ### 12.4 Overflow-safe arithmetic
 
@@ -646,7 +849,7 @@ Free win: because bad data is a designed-for state, hardening is fuzzable. Garba
   the observability consequences of doing so.
 - Partial-invalid config: the whole file still loads. Line-level failures are logged and that line is not applied, but never abort the file. Whatever reached the block stays; consumers refuse invalid keys when they parse them. The config fails per line, never as a whole. A line-level failure is distinct from exceeding `OMNI_CONFIG_MAX_OPS`, which aborts the file rather than skipping the excess.
 - Save: every live entry with `WINDOW_DEPENDENT` clear and `EPHEMERAL` clear is written out, so a config file replayed from the server's own `save` reproduces configuration rather than geometry or bookkeeping. Window-dependent state (per-client geometry, focus, per-window overrides) is excluded, as is anything a facade marked `EPHEMERAL`.
-- `save` takes an optional key-path pattern that narrows the scope, and with no argument it writes the whole block under that same test, so the argument is purely additive. The pattern is a dotted prefix with a single trailing `*` meaning the subtree below it, which is what makes a layout slot extractable: a layout authored over IPC at `omniwm.layouts.delta` is written by `save omniwm.layouts.delta.*` and nothing else is in the file. The exclusion test is identical inside a narrowed scope, so narrowing cannot leak window-dependent or ephemeral state, and it is the same test the soft reset uses, so `save`, a narrowed `save` and a soft reset can never disagree about which entries are configuration. A general glob is deliberately not supported; one trailing wildcard is enough to name a namespace, and a full pattern language would make the interaction between a pattern and the exclusion test harder to reason about than the feature is worth.
+- `save` takes an optional key-path pattern that narrows the scope, and with no argument it writes the whole block under that same test, so the argument is purely additive. The pattern is a dotted prefix with a single trailing `*` meaning the subtree below it, which is what makes a layout slot extractable: a layout authored over IPC under `omniwm.layouts.delta` is written by `save omniwm.layouts.delta.*` and nothing else is in the file. A layout is three keys, so the trailing wildcard is load-bearing here rather than a convenience: without it `delta.rules` would be written and `delta.spaces` would not. The exclusion test is identical inside a narrowed scope, so narrowing cannot leak window-dependent or ephemeral state, and it is the same test the soft reset uses, so `save`, a narrowed `save` and a soft reset can never disagree about which entries are configuration. A general glob is deliberately not supported; one trailing wildcard is enough to name a namespace, and a full pattern language would make the interaction between a pattern and the exclusion test harder to reason about than the feature is worth.
 - A soft reset uses the identical test as `save` (`WINDOW_DEPENDENT` clear and `EPHEMERAL` clear), so the two operations can never disagree about which entries are configuration.
 - Export policy for bad data: entries that fail any structural tier (L1-L4) are skipped with a warning; entries on the extension branch of the tag decision that are structurally valid are preserved as-is so their owning extensions can re-import them on the next boot. An unassigned low tag is a structural failure, not an extension, and is never exported.
 

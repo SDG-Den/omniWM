@@ -85,9 +85,20 @@ so this directory holds no capability that `ipc` does not also have.
 
 One directory per compositor subsystem, each a component in the sense of
 `helpers.md` §3 and each paired with its `include` counterpart: `input`, `windows`,
-`tags`, `monitor`, `decorate`, `draw`, `animate`, and `ext-protocol`. Their
-designs are not written, so no directory here has a documented contract yet, and
-this document does not invent one.
+`tags`, `monitor`, `decorate`, `draw`, `animate`, and `ext-protocol`.
+
+Three of those have designs now: `windows` (`windows.md`), `tags` (`tags.md`),
+and the layout solver, which is `windows`-adjacent and specified by
+`layoutengine.md` with `layoutlanguage.md` for its syntax. `input` is the
+fourth, and `input.md` §3 settles the decomposition this document previously
+declined to sanction. The other four have no design, and for those this document
+still does not invent a contract.
+
+`input.md` §3 keeps `input.c` and `binds.c`, keeps `devices.c`, `keyboard.c`,
+`mouse.c`, `tablet.c` and `trackpad.c`, drops `gestures.c` because a gesture is a
+trackpad event rather than a device, and adds `switch.c` and `touch.c` because
+Mango has both. So the empty headers on disk that no longer have a counterpart
+are removed, and the two that do are filled.
 
 `src/main.c` is the entry point and contains no logic beyond handing off to
 `omni_boot()`.

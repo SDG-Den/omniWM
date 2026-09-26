@@ -11,17 +11,36 @@
  * That list has now been applied. Four changes, all of them consequences of
  * devnotes/layoutengine.md sections 2.10 and 4.6:
  *
- *   1. OMNI_TAG_CONSTRAINT (0x32), a fixed-record constraint program, so a
- *      layout slot holds a value rather than a positional tuple.
+ *   1. OMNI_TAG_CONSTRAINT (0x32), a layout program as a nestable value, so a
+ *      layout holds a tree of named spaces rather than a positional tuple. It
+ *      began as a packed array of 16-byte records, which cannot hold a nested
+ *      program at all; devnotes/layoutlanguage.md section 3 makes nesting the
+ *      only way to use more than one arrangement, so the payload became the
+ *      tree and the tag stayed to mark the domain.
  *   2. OMNI_TAG_CLIENT_RULE (0x33), because OMNI_TAG_RULE matches keys and
- *      replaces values, and every rule the layout set needs matches a client
- *      and changes membership instead.
+ *      replaces values, and the client rules solve soft equations against a
+ *      reference instead. It is one 24-byte record per rule, with no payload,
+ *      and it carries no matchers: the matcher selects which sets a client is
+ *      bound to, and it lives in the window-rule block, not in this record.
  *   3. OMNI_TAG_BINDING is now framed and carries an argument list, because a
  *      snap-by-keybind takes a direction and wm.cycle_layout already takes a
  *      layout name in ipc.md's own example.
  *   4. OMNI_SECTION_SOLVED_LAYOUT, a non-journalled section holding the most
  *      recent solve, so an external program can read a layout and a solve does
  *      not cost a commit.
+ *
+ * One tag has since been added that is not from that list, because
+ * devnotes/windows.md section 9.3 needed it rather than the layout engine:
+ * OMNI_TAG_MAP (0x34), a keyed block of typed values. The store had no
+ * composite value with named fields, since devnotes/configstorage.md section 3
+ * is an open key-value catalog where a TOML table flattens into a key path
+ * instead of becoming a value, and a window rule is the first thing that needs a
+ * block to be a value. A window rule is a map with two well-known keys, "if"
+ * and "then"; it gets no tag of its own, for the reason devnotes/
+ * configstorage.md section 4 gives when it dropped the effect enum from
+ * client_rule: the namespace at omniwm.window_rules.<name> already says what
+ * the value is, and a tag repeating it is a second place for the two to
+ * disagree.
  *
  * OMNI_FORMAT_VERSION stays 1. The compositor does not exist yet and the first
  * runnable build is v1, so these are changes to the only format there has ever
@@ -113,21 +132,53 @@
 #define OMNI_CATALOG_ENTRY_SIZE UINT32_C(32)
 #define OMNI_ENTRY_NAME_MAX UINT32_C(4095) /* bytes including the NUL */
 
-#define OMNI_JOURNAL_OFF UINT32_C(0x81000)
+/* Catalog name index. A second, sorted view of the catalog: one slot per
+ * catalog slot, sorted by (name_hash, entry_id), binary searched. This exists
+ * so `get` never walks the catalog. It is maintained transactionally by the
+ * writer under the commit futex, so it is never stale and never rebuilt.
+ * The catalog itself is NOT sorted, because entry_id is the slot index and
+ * live entries never move; sorting them in place would invalidate every held
+ * reference and make delete O(n) on the catalog. */
+#define OMNI_CATALOG_INDEX_OFF UINT32_C(0x81000)
+#define OMNI_CATALOG_INDEX_HEADER_SIZE UINT32_C(32)
+#define OMNI_CATALOG_INDEX_SLOT_SIZE UINT32_C(16)
+#define OMNI_CATALOG_INDEX_SLOT_COUNT UINT32_C(16384) /* == catalog slots */
+#define OMNI_CATALOG_INDEX_ENTRY_ID_TOMB UINT32_C(0xFFFFFFFF)
+
+/* Name hash. FNV-1a 64 over the name bytes, then a splitmix64 finalizer.
+ * The finalizer is not optional: FNV-1a's high bits mix poorly for short
+ * inputs, and this index is *sorted* by the full 64-bit value, so the binary
+ * search discriminates on the high bits first and needs them to be good. */
+#define OMNI_NAME_HASH_OFFSET_BASIS UINT64_C(0xCBF29CE484222325)
+#define OMNI_NAME_HASH_PRIME UINT64_C(0x100000001B3)
+#define OMNI_NAME_HASH_SPLITMIX_GAMMA UINT64_C(0x9E3779B97F4A7C15)
+
+#define OMNI_CATALOG_INDEX_OFF_HASH UINT32_C(0)      /* u64, sorted ascending */
+#define OMNI_CATALOG_INDEX_OFF_ENTRY_ID UINT32_C(8) /* u32 */
+#define OMNI_CATALOG_INDEX_OFF_GENERATION_LO UINT32_C(12) /* u32, low half */
+
+#define OMNI_CATALOG_INDEX_HDR_OFF_LIVE UINT32_C(0)     /* u32 */
+#define OMNI_CATALOG_INDEX_HDR_OFF_USED UINT32_C(4)     /* u32, live + tombstones */
+#define OMNI_CATALOG_INDEX_HDR_OFF_RESERVED_0 UINT32_C(8)
+
+#define OMNI_JOURNAL_OFF UINT32_C(0xC2000)
 #define OMNI_JOURNAL_HEADER_SIZE UINT32_C(32)
 #define OMNI_JOURNAL_CAPACITY UINT32_C(4096)
 #define OMNI_JOURNAL_SLOT_SIZE UINT32_C(64)
 #define OMNI_JOURNAL_INLINE_LIMIT UINT32_C(8) /* values <= 8 B go inline */
 
-#define OMNI_REQUESTS_OFF UINT32_C(0xC2000)
+#define OMNI_REQUESTS_OFF UINT32_C(0x103000)
 #define OMNI_REQUEST_SLOT_COUNT UINT32_C(256)
-#define OMNI_REQUEST_SLOT_SIZE UINT32_C(0x1100)
+/* The name lives in the arena, referenced by body_ref, so a slot is 256 bytes
+ * instead of 0x1100. The queue was 1.1MB, about 58% of the block's fixed
+ * area, almost all of it 4096-byte inline name buffers. */
+#define OMNI_REQUEST_SLOT_SIZE UINT32_C(0x100)
 #define OMNI_REQUEST_NAME_MAX UINT32_C(4095)  /* bytes including the NUL */
 #define OMNI_REQUEST_VALUE_MAX UINT32_C(128)  /* inline initial-value cap */
 /* Terminal-slot reclaim deadline. One definition; only the WM reads it. */
 #define OMNI_REQUEST_RECLAIM_MS UINT32_C(5000)
 
-#define OMNI_REGION_DESC_OFF UINT32_C(0x1D2000)
+#define OMNI_REGION_DESC_OFF UINT32_C(0x113000)
 #define OMNI_REGION_DESC_SIZE UINT32_C(32)
 #define OMNI_REGION_DESC_COUNT UINT32_C(64)
 #define OMNI_REGION_SLOT_COUNT_MAX UINT32_C(2) /* double buffering is 1 or 2 */
@@ -137,7 +188,7 @@
 /* Solved layout section. Fixed, single-buffered, never journalled and never
  * saved: it holds the geometry the most recent solve produced, so a script can
  * read a layout, and it is overwritten rather than appended on every pass. */
-#define OMNI_SOLVED_OFF UINT32_C(0x1D2800)
+#define OMNI_SOLVED_OFF UINT32_C(0x113800)
 #define OMNI_SOLVED_SECTION_SIZE UINT32_C(0x8000)
 #define OMNI_SOLVED_HEADER_SIZE UINT32_C(16)
 #define OMNI_SOLVED_NODE_SIZE UINT32_C(24)
@@ -146,16 +197,43 @@
 #define OMNI_SOLVED_BYTES \
 	(OMNI_SOLVED_HEADER_SIZE + OMNI_SOLVED_NODE_SIZE * OMNI_SOLVED_SLOT_COUNT_MAX)
 
-#define OMNI_POOL_OFF UINT32_C(0x1DB000) /* == FIXED_END, see section 3 */
+#define OMNI_POOL_OFF UINT32_C(0x11C000) /* == FIXED_END, see section 3 */
 
 /* Sentinel stored in place of a pool offset or slot index meaning "none". */
 #define OMNI_REF_NONE UINT32_C(0xFFFFFFFF)
+
+/* --- Arena frame header (every framed payload) -------------------- *
+ *
+ * A frame is 16 bytes of header plus a payload, allocated 16-aligned. The
+ * header is shared by live frames and free frames, so recycling costs no
+ * extra space: a free frame stores its chain link and its total size in the
+ * bytes that are reserved for a live frame.
+ *
+ *   live:  +0 length (payload bytes)  +4 next_free = 0
+ *          +8..15 reserved, zero
+ *   free:  +0 total frame bytes       +4 next_free (frame offset or NONE)
+ *          +8 free_size (== +0)      +12 reserved
+ *
+ * A reader distinguishes them by next_free: a live frame has zero, a free
+ * frame has a real offset or OMNI_REF_NONE for the tail of the list. */
+#define OMNI_FRAME_OFF_LENGTH UINT32_C(0)     /* u32 */
+#define OMNI_FRAME_OFF_NEXT_FREE UINT32_C(4)  /* u32, 0 when live */
+#define OMNI_FRAME_OFF_FREE_SIZE UINT32_C(8)  /* u32, == length when free */
+#define OMNI_FRAME_HEADER_SIZE UINT32_C(16)
+#define OMNI_FRAME_ALIGN UINT32_C(16)
+
+/* Bytes a framed payload of `payload_len` occupies, header included. */
+#define OMNI_FRAME_BYTES(payload_len) \
+	OMNI_ALIGN_UP(OMNI_FRAME_HEADER_SIZE + (payload_len), OMNI_FRAME_ALIGN)
 
 /* ------------------------------------------------------------------ */
 /* 3. Derived geometry, asserted at build time                         */
 /* ------------------------------------------------------------------ */
 
 #define OMNI_CATALOG_SIZE (OMNI_CATALOG_SLOT_COUNT * OMNI_CATALOG_ENTRY_SIZE)
+#define OMNI_CATALOG_INDEX_SIZE \
+	(OMNI_CATALOG_INDEX_HEADER_SIZE + \
+	 OMNI_CATALOG_INDEX_SLOT_COUNT * OMNI_CATALOG_INDEX_SLOT_SIZE)
 #define OMNI_JOURNAL_SIZE \
 	(OMNI_JOURNAL_HEADER_SIZE + OMNI_JOURNAL_CAPACITY * OMNI_JOURNAL_SLOT_SIZE)
 #define OMNI_REQUESTS_SIZE (OMNI_REQUEST_SLOT_COUNT * OMNI_REQUEST_SLOT_SIZE)
@@ -165,8 +243,12 @@
 #define OMNI_MAX_POOL (OMNI_BLOCK_MAX_SIZE - OMNI_FIXED_END)
 
 OMNI_STATIC_ASSERT(OMNI_CATALOG_SIZE == UINT32_C(0x80000), "catalog size");
+OMNI_STATIC_ASSERT(OMNI_CATALOG_INDEX_SIZE == UINT32_C(0x40020),
+	"catalog index size");
+OMNI_STATIC_ASSERT(OMNI_CATALOG_INDEX_SLOT_COUNT == OMNI_CATALOG_SLOT_COUNT,
+	"catalog index covers catalog");
 OMNI_STATIC_ASSERT(OMNI_JOURNAL_SIZE == UINT32_C(0x40020), "journal size");
-OMNI_STATIC_ASSERT(OMNI_REQUESTS_SIZE == UINT32_C(0x110000), "request size");
+OMNI_STATIC_ASSERT(OMNI_REQUESTS_SIZE == UINT32_C(0x10000), "request size");
 OMNI_STATIC_ASSERT(OMNI_REGION_DESC_TOTAL == UINT32_C(0x800), "descriptor size");
 OMNI_STATIC_ASSERT(OMNI_SOLVED_BYTES == UINT32_C(0x6010), "solved layout bytes");
 OMNI_STATIC_ASSERT(OMNI_SOLVED_BYTES <= OMNI_SOLVED_SECTION_SIZE,
@@ -175,8 +257,12 @@ OMNI_STATIC_ASSERT(OMNI_SOLVED_OFF + OMNI_SOLVED_SECTION_SIZE <= OMNI_POOL_OFF,
 	"solved layout section");
 
 /* Section bases are derived, so assert the derivation rather than the number. */
-OMNI_STATIC_ASSERT(OMNI_JOURNAL_OFF ==
+OMNI_STATIC_ASSERT(OMNI_CATALOG_INDEX_OFF ==
                    OMNI_ALIGN_UP(OMNI_CATALOG_OFF + OMNI_CATALOG_SIZE, 0x1000),
+	"catalog index offset");
+OMNI_STATIC_ASSERT(OMNI_JOURNAL_OFF ==
+                   OMNI_ALIGN_UP(OMNI_CATALOG_INDEX_OFF + OMNI_CATALOG_INDEX_SIZE,
+                                 0x1000),
 	"journal offset");
 OMNI_STATIC_ASSERT(OMNI_REQUESTS_OFF ==
                    OMNI_ALIGN_UP(OMNI_JOURNAL_OFF + OMNI_JOURNAL_SIZE, 0x1000),
@@ -207,6 +293,8 @@ OMNI_STATIC_ASSERT(OMNI_SECTION_SLOT_COUNT * OMNI_SECTION_SLOT_SIZE ==
 	"section table size");
 OMNI_STATIC_ASSERT((OMNI_ALIGN & (OMNI_ALIGN - 1)) == 0, "align is a power of two");
 OMNI_STATIC_ASSERT(OMNI_CATALOG_OFF % 0x1000 == 0, "catalog page aligned");
+OMNI_STATIC_ASSERT(OMNI_CATALOG_INDEX_OFF % 0x1000 == 0,
+	"catalog index page aligned");
 OMNI_STATIC_ASSERT(OMNI_JOURNAL_OFF % 0x1000 == 0, "journal page aligned");
 OMNI_STATIC_ASSERT(OMNI_REQUESTS_OFF % 0x1000 == 0, "requests page aligned");
 OMNI_STATIC_ASSERT(OMNI_REGION_DESC_OFF % 0x1000 == 0, "descriptors page aligned");
@@ -249,7 +337,8 @@ OMNI_STATIC_ASSERT(OMNI_MAX_POOL > OMNI_INITIAL_POOL, "pool headroom");
 #define OMNI_HDR_OFF_COMMIT_STATE UINT32_C(144)
 #define OMNI_HDR_OFF_ACTIVE_COMMIT_ID UINT32_C(152)
 #define OMNI_HDR_OFF_READY UINT32_C(160) /* u32, service readiness */
-#define OMNI_HDR_RESERVED_TAIL_START UINT32_C(164) /* through offset 255 */
+#define OMNI_HDR_OFF_ARENA_FREE_HEAD UINT32_C(164) /* u32 frame offset or OMNI_REF_NONE */
+#define OMNI_HDR_RESERVED_TAIL_START UINT32_C(168) /* through offset 255 */
 
 /* Header state. This axis is block validity only. */
 #define OMNI_STATE_CREATING UINT8_C(0)
@@ -289,6 +378,7 @@ OMNI_STATIC_ASSERT(OMNI_MAX_POOL > OMNI_INITIAL_POOL, "pool headroom");
 #define OMNI_SECTION_REGION_DESC UINT32_C(5)
 #define OMNI_SECTION_REGION_PAYLOAD UINT32_C(6)
 #define OMNI_SECTION_SOLVED_LAYOUT UINT32_C(7)
+#define OMNI_SECTION_CATALOG_INDEX UINT32_C(8)
 
 /* Section table row field offsets. */
 #define OMNI_SECTION_ROW_OFF_ID UINT32_C(0)
@@ -300,7 +390,10 @@ OMNI_STATIC_ASSERT(OMNI_MAX_POOL > OMNI_INITIAL_POOL, "pool headroom");
 /* Section row flags. Protocol markers, not ownership or access control.
  * A section without JOURNALLED is written by the producer alone and is
  * neither appended to the journal nor included by a save. That is the
- * solved layout section's whole reason for existing. */
+ * solved layout section's whole reason for existing.
+ *
+ * A reader that cannot validate the CATALOG_INDEX row degrades `get` to a
+ * catalog walk. A slow answer is recoverable; a wrong one is not. */
 #define OMNI_SECTION_FLAG_PRESENT_0 (UINT32_C(1) << 0)
 #define OMNI_SECTION_FLAG_JOURNALLED_1 (UINT32_C(1) << 1)
 #define OMNI_SECTION_FLAG_RESERVED_MASK UINT32_C(0xFFFFFFFC)
@@ -310,8 +403,12 @@ OMNI_STATIC_ASSERT(OMNI_HDR_OFF_FUTEX % 4 == 0, "futex aligned");
 OMNI_STATIC_ASSERT(OMNI_HDR_OFF_COMMIT_STATE % 4 == 0, "commit_state aligned");
 OMNI_STATIC_ASSERT(OMNI_HDR_OFF_ACTIVE_COMMIT_ID % 8 == 0, "active id aligned");
 OMNI_STATIC_ASSERT(OMNI_HDR_OFF_READY % 4 == 0, "ready aligned");
-OMNI_STATIC_ASSERT(OMNI_HDR_OFF_READY + 4 <= OMNI_HDR_RESERVED_TAIL_START,
-	"ready fits in the reserved tail");
+OMNI_STATIC_ASSERT(OMNI_HDR_OFF_READY + 4 <= OMNI_HDR_OFF_ARENA_FREE_HEAD,
+	"ready precedes the free-list head");
+OMNI_STATIC_ASSERT(OMNI_HDR_OFF_ARENA_FREE_HEAD % 4 == 0, "free head aligned");
+OMNI_STATIC_ASSERT(OMNI_HDR_OFF_ARENA_FREE_HEAD + 4 ==
+                   OMNI_HDR_RESERVED_TAIL_START,
+	"free head is the last defined field");
 OMNI_STATIC_ASSERT(OMNI_HDR_OFF_COMMIT_ID % 8 == 0, "commit_id aligned");
 OMNI_STATIC_ASSERT(OMNI_HDR_OFF_EPOCH % 8 == 0, "epoch aligned");
 OMNI_STATIC_ASSERT(OMNI_HDR_OFF_POOL_BASE % 8 == 0, "pool_base aligned");
@@ -412,13 +509,14 @@ OMNI_STATIC_ASSERT(OMNI_HDR_OFF_REGION_HEAD % 8 == 0, "region_head aligned");
 #define OMNI_TAG_DATETIME UINT16_C(0x31) /* i64 ns since Unix epoch, UTC */
 #define OMNI_TAG_CONSTRAINT UINT16_C(0x32) /* a constraint program, see 2.10 */
 #define OMNI_TAG_CLIENT_RULE UINT16_C(0x33) /* matches a client, not a key */
+#define OMNI_TAG_MAP UINT16_C(0x34)        /* a keyed block of typed values */
 
 /* Tag ranges. See the three-way tag decision in configstorage.md 12.1. */
 #define OMNI_TAG_MIN_KNOWN UINT16_C(0x01)
-#define OMNI_TAG_MAX_KNOWN UINT16_C(0x33)
+#define OMNI_TAG_MAX_KNOWN UINT16_C(0x34)
 #define OMNI_TAG_EXTENSION_BASE UINT16_C(0x8000)
 #define OMNI_TAG_UNASSIGNED_0 UINT16_C(0x00)      /* never a live tag */
-#define OMNI_TAG_UNASSIGNED_LO UINT16_C(0x0034)   /* hole in the core table */
+#define OMNI_TAG_UNASSIGNED_LO UINT16_C(0x0035)   /* hole in the core table */
 #define OMNI_TAG_UNASSIGNED_HI UINT16_C(0x7FFF)
 
 OMNI_STATIC_ASSERT(OMNI_TAG_MAX_KNOWN < OMNI_TAG_EXTENSION_BASE, "tag ranges");
@@ -428,129 +526,129 @@ OMNI_STATIC_ASSERT(OMNI_TAG_UNASSIGNED_LO == OMNI_TAG_MAX_KNOWN + 1, "tag gap");
  * value_inline carries the descriptor generation. */
 #define OMNI_REGION_REF_LENGTH UINT32_C(8)
 
-/* --- constraint (0x32), a generic layout program --------------------- *
+/* --- constraint (0x32), a layout program ----------------------------- *
  *
- * A program is a packed array of fixed records with no header, so the record
- * count is derived from length and order is the evaluation order. It is the
- * named layout itself, stored once in SHM and shared by every client it
- * arranges, so it names no client: a record constrains the window the solver is
- * currently at, and that is decided by walk order rather than by the program.
+ * A program is a tree, not a record. devnotes/layoutlanguage.md section 3
+ * makes a program a list of spaces where a space may name a nested layout, and
+ * nesting is the only way to use more than one arrangement, so the payload is:
  *
- * Consequently there is no epoch field and no entry identity anywhere in a
- * record. Walk order is over the scope the solve was given, which the engine
- * establishes from the tag list, and it is stable for the duration of a solve
- * because the set cannot change underneath the walk. */
-
-#define OMNI_CONSTRAINT_RECORD_SIZE UINT32_C(16)
-#define OMNI_CONSTRAINT_OFF_KIND UINT32_C(0)     /* u16 */
-#define OMNI_CONSTRAINT_OFF_FLAGS UINT32_C(2)    /* u16 */
-#define OMNI_CONSTRAINT_OFF_PRIORITY UINT32_C(4) /* u16, linear weight */
-#define OMNI_CONSTRAINT_OFF_EDGES UINT32_C(6)    /* u8, edge mask */
-#define OMNI_CONSTRAINT_OFF_AXIS UINT32_C(7)     /* u8 */
-#define OMNI_CONSTRAINT_OFF_ROLE UINT32_C(8)     /* u32, walk index or ROLE_* */
-#define OMNI_CONSTRAINT_OFF_LITERAL UINT32_C(12) /* i32 */
-
-#define OMNI_CONSTRAINT_FILL_PARENT UINT16_C(0)
-#define OMNI_CONSTRAINT_LEFT_OF UINT16_C(1)
-#define OMNI_CONSTRAINT_HALF_WIDTH UINT16_C(2)
-#define OMNI_CONSTRAINT_GAP_AROUND UINT16_C(3)
-#define OMNI_CONSTRAINT_ADJACENT UINT16_C(4)
-#define OMNI_CONSTRAINT_PLACE UINT16_C(5)
-#define OMNI_CONSTRAINT_CONSTRAIN UINT16_C(6)
-#define OMNI_CONSTRAINT_KIND_COUNT UINT16_C(7)
-
-/* ROLE is the operand, expressed as a position in the walked set rather than as
- * a window. A role below ROLE_PARENT is an absolute walk index, so a program can
- * say "left-of the master" without knowing which window is the master, which is
- * the whole reason a generic layout can express master and stack. ROLE_PARENT is
- * the containing rect, which is not a walk member, and ROLE_NONE means the kind
- * takes no operand. The implied subject is always the current walk position, so
- * no flag is needed to say so. */
-#define OMNI_CONSTRAINT_ROLE_PARENT UINT32_C(0xFFFFFFFE)
-#define OMNI_CONSTRAINT_ROLE_NONE UINT32_C(0xFFFFFFFF)
-
-#define OMNI_CONSTRAINT_FLAG_RATIO_0 (UINT16_C(1) << 0)
-#define OMNI_CONSTRAINT_FLAG_RESERVED_MASK UINT16_C(0xFFFE)
-
-/* Priority is the solver's weight, so the bands have to be separated by an
- * order of magnitude each for a band to dominate the compromise. Zero means no
- * opinion, which is what an absent record means, so the lowest useful value is
- * 1. DuckWM reaches the same conclusion with 1e8/1e4/1e2/1; see
- * research/duckwm.md.
+ *   constraint := array of space
+ *   space      := option, framed: the space's name, then its value
+ *   value      := the space's own arguments, which are OMNI_TAG_ENUM,
+ *                  OMNI_TAG_STRING and integer values, or
+ *                | constraint, wherever a space names a nested layout
  *
- * No band is a hard constraint. The solver minimises weighted violation, so two
- * constraints in the same band that cannot both hold still produce a compromise,
- * and DOMINANT is named for how much weight it carries rather than for a
- * guarantee it does not make. DuckWM's REQUIRED is the same shape: a large
- * weight the fit honours, not a separate code path. Nothing in the design needs
- * a genuine hard constraint, because generaldesign.md §7 makes every constraint
- * soft and prioritised, and a program that cannot be satisfied degrades rather
- * than fails. */
-#define OMNI_CONSTRAINT_PRIORITY_DOMINANT UINT16_C(60000)
-#define OMNI_CONSTRAINT_PRIORITY_STRONG UINT16_C(6000)
-#define OMNI_CONSTRAINT_PRIORITY_MEDIUM UINT16_C(600)
-#define OMNI_CONSTRAINT_PRIORITY_WEAK UINT16_C(60)
-#define OMNI_CONSTRAINT_PRIORITY_BAND_COUNT UINT32_C(4)
+ * Every leaf is a tag that already existed, so this block holds no offsets and
+ * no sizes: there is nothing here to drift. The one number the program form
+ * has is the nesting bound, OMNI_LAYOUT_MAX_NEST_DEPTH below.
+ *
+ * This replaced a packed array of 16-byte records, and the reason is worth
+ * keeping because the tag was never the problem. That record had a kind, an
+ * edge mask, an axis, a literal, a role and a priority in fixed fields, which
+ * is one rule per record with every argument present whether or not that rule
+ * uses it, and a flat array has nowhere to put a child program. The language
+ * instead states each rule with only the arguments its own kind takes, and a
+ * program that names a nested layout is a program within a program. The tag
+ * stayed at 0x32 so a core reader can recognise a layout program without a
+ * schema, which is the one thing the record was buying.
+ *
+ * The record also had a priority, and its absence below is not an oversight.
+ * There is no priority in the language: rules are tried in order and the first
+ * that fits wins, so order in the array is the whole of it and a weight field
+ * would have been a second, conflicting statement of the same thing. The bands
+ * below are the solver's internal weights and are not part of the format. */
 
-#define OMNI_CONSTRAINT_AXIS_NONE UINT8_C(0)
-#define OMNI_CONSTRAINT_AXIS_X UINT8_C(1)
-#define OMNI_CONSTRAINT_AXIS_Y UINT8_C(2)
-#define OMNI_CONSTRAINT_AXIS_XY UINT8_C(3)
-
-/* Edge mask. The bit positions are the ones river's river_window_v1.set_tiled
- * and Hyprland's Layout::eRectCorner already use, so an adjacency computed here
- * is the same value those protocols carry. */
-#define OMNI_EDGE_NONE UINT8_C(0)
-#define OMNI_EDGE_TOP (UINT8_C(1) << 0)
-#define OMNI_EDGE_BOTTOM (UINT8_C(1) << 1)
-#define OMNI_EDGE_LEFT (UINT8_C(1) << 2)
-#define OMNI_EDGE_RIGHT (UINT8_C(1) << 3)
-#define OMNI_EDGE_ALL UINT8_C(0x0F)
-#define OMNI_EDGE_MASK UINT8_C(0x0F)
-
-OMNI_STATIC_ASSERT(OMNI_CONSTRAINT_OFF_LITERAL + 4 == OMNI_CONSTRAINT_RECORD_SIZE,
-	"constraint record");
-OMNI_STATIC_ASSERT(OMNI_CONSTRAINT_OFF_ROLE % 4 == 0, "role aligned");
-OMNI_STATIC_ASSERT(OMNI_CONSTRAINT_OFF_LITERAL % 4 == 0, "literal aligned");
-OMNI_STATIC_ASSERT(OMNI_CONSTRAINT_RECORD_SIZE % 4 == 0, "record 4-aligned");
-OMNI_STATIC_ASSERT(OMNI_CONSTRAINT_ROLE_PARENT != OMNI_CONSTRAINT_ROLE_NONE,
-	"role sentinels distinct");
+/* DuckWM reaches the same conclusion with 1e8/1e4/1e2/1; see
+ * research/duckwm.md. No band is a hard constraint. The solver minimises
+ * weighted violation, so two equations in the same band that cannot both hold
+ * still produce a compromise, and DOMINANT is named for how much weight it
+ * carries rather than for a guarantee it does not make. DuckWM's REQUIRED is
+ * the same shape: a large weight the fit honours, not a separate code path.
+ * generaldesign.md section 7 makes every constraint soft, and a program that
+ * cannot be satisfied degrades rather than fails. The bands are separated by an
+ * order of magnitude each so that a band dominates the compromise. */
+#define OMNI_SOLVER_WEIGHT_DOMINANT UINT16_C(60000)
+#define OMNI_SOLVER_WEIGHT_STRONG UINT16_C(6000)
+#define OMNI_SOLVER_WEIGHT_MEDIUM UINT16_C(600)
+#define OMNI_SOLVER_WEIGHT_WEAK UINT16_C(60)
+#define OMNI_SOLVER_WEIGHT_BAND_COUNT UINT32_C(4)
 
 /* --- client_rule (0x33) ---------------------------------------------- *
  *
- * OMNI_TAG_RULE matches a key and replaces a value. Every rule the layout set
- * needs matches a client and changes which scopes contain it, which is a
- * different record, so it gets its own tag rather than a version field. */
+ * OMNI_TAG_RULE matches a key and replaces a value. These match nothing and
+ * solve a set of soft equations against a reference, so they are a different
+ * record rather than a version field on one.
+ *
+ * One record is one rule of one set, and the fields are the keys of
+ * layoutlanguage.md section 11.11. There is no payload: every argument is an
+ * enum or an integer, so a fixed 24 bytes holds all of them and a rule that
+ * omits `region` leaves it zero rather than carrying an inline value.
+ *
+ * A set is reached by name, never by matching, which is what removed most of
+ * this record. There is no appid, no title and no title-regex flag, because
+ * nothing in the language matches a window by property: a `clients` set is
+ * reached by the action that creates the surface and the set is the surface's
+ * identity, and a `snaps` set is reached by a drag region or a keybind naming
+ * it. There is no target, for the same reason. There is no scope either, since
+ * a set is resolved when it is reached and the language states no second
+ * timing; a reload is the store replaying the config, not a rule re-resolving.
+ *
+ * There is no effect field because the namespace carries it: a set under
+ * omniwm.clients arranges a surface and a set under omniwm.snaps names a
+ * destination. An enum repeating that would let the two disagree. */
 
-#define OMNI_CLIENT_RULE_OFF_MATCH_APPID UINT32_C(0)  /* u32 frame offset or NONE */
-#define OMNI_CLIENT_RULE_OFF_MATCH_TITLE UINT32_C(4)  /* u32 frame offset or NONE */
-#define OMNI_CLIENT_RULE_OFF_EFFECT UINT32_C(8)      /* u16 */
-#define OMNI_CLIENT_RULE_OFF_FLAGS UINT32_C(10)      /* u16 */
-#define OMNI_CLIENT_RULE_OFF_TARGET_ID UINT32_C(12)  /* u32 entry id */
-#define OMNI_CLIENT_RULE_OFF_TARGET_GEN UINT32_C(16) /* u32 entry generation */
-#define OMNI_CLIENT_RULE_OFF_SCOPE UINT32_C(20)      /* u16 */
-#define OMNI_CLIENT_RULE_OFF_RESERVED UINT32_C(22)   /* u16, zero */
-#define OMNI_CLIENT_RULE_HEADER_SIZE UINT32_C(24)
-#define OMNI_CLIENT_RULE_OFF_PAYLOAD UINT32_C(24) /* the value the effect applies */
+#define OMNI_CLIENT_RULE_OFF_RULE UINT32_C(0)    /* u16 */
+#define OMNI_CLIENT_RULE_OFF_AGAINST UINT32_C(2) /* u16 */
+#define OMNI_CLIENT_RULE_OFF_AXIS UINT32_C(4)    /* u16 */
+#define OMNI_CLIENT_RULE_OFF_EDGE UINT32_C(6)    /* u16 */
+#define OMNI_CLIENT_RULE_OFF_REGION UINT32_C(8)  /* u16 */
+#define OMNI_CLIENT_RULE_OFF_RESERVED UINT32_C(10) /* u16, zero */
+#define OMNI_CLIENT_RULE_OFF_WIDTH UINT32_C(12)  /* u32, pixels */
+#define OMNI_CLIENT_RULE_OFF_HEIGHT UINT32_C(16) /* u32, pixels */
+#define OMNI_CLIENT_RULE_OFF_BY UINT32_C(20)     /* i32, pixels, may be negative */
+#define OMNI_CLIENT_RULE_SIZE UINT32_C(24)
 
-#define OMNI_CLIENT_RULE_EFFECT_NONE UINT16_C(0)
-#define OMNI_CLIENT_RULE_EFFECT_JOIN_GROUP UINT16_C(1)
-#define OMNI_CLIENT_RULE_EFFECT_LEAVE_GROUP UINT16_C(2)
-#define OMNI_CLIENT_RULE_EFFECT_CLUSTER_ON_ATTACH UINT16_C(3)
-#define OMNI_CLIENT_RULE_EFFECT_RELOCATE UINT16_C(4)
-#define OMNI_CLIENT_RULE_EFFECT_SET_PROPERTY UINT16_C(5)
-#define OMNI_CLIENT_RULE_EFFECT_SET_CONSTRAINTS UINT16_C(6)
-#define OMNI_CLIENT_RULE_EFFECT_COUNT UINT16_C(7)
+#define OMNI_CLIENT_RULE_ALIGN UINT16_C(0)
+#define OMNI_CLIENT_RULE_MATCH UINT16_C(1)
+#define OMNI_CLIENT_RULE_SIZE_RULE UINT16_C(2)
+#define OMNI_CLIENT_RULE_OFFSET UINT16_C(3)
+#define OMNI_CLIENT_RULE_SNAP UINT16_C(4)
+#define OMNI_CLIENT_RULE_KIND_COUNT UINT16_C(5)
 
-#define OMNI_CLIENT_RULE_SCOPE_MAP_ONLY UINT16_C(0) /* initial map only */
-#define OMNI_CLIENT_RULE_SCOPE_ALWAYS UINT16_C(1)   /* re-resolved on reload */
+#define OMNI_CLIENT_RULE_AGAINST_CLIENT UINT16_C(0)
+#define OMNI_CLIENT_RULE_AGAINST_VIEWPORT UINT16_C(1)
+#define OMNI_CLIENT_RULE_AGAINST_OUTPUT UINT16_C(2)
+#define OMNI_CLIENT_RULE_AGAINST_COUNT UINT16_C(3)
 
-#define OMNI_CLIENT_RULE_FLAG_TITLE_REGEX_0 (UINT16_C(1) << 0)
-#define OMNI_CLIENT_RULE_FLAG_RESERVED_MASK UINT16_C(0xFFFE)
+#define OMNI_CLIENT_RULE_AXIS_X UINT16_C(0)
+#define OMNI_CLIENT_RULE_AXIS_Y UINT16_C(1)
+#define OMNI_CLIENT_RULE_AXIS_COUNT UINT16_C(2)
 
-OMNI_STATIC_ASSERT(OMNI_CLIENT_RULE_OFF_RESERVED + 2 == OMNI_CLIENT_RULE_HEADER_SIZE,
-	"client rule header");
-OMNI_STATIC_ASSERT(OMNI_CLIENT_RULE_OFF_TARGET_ID % 4 == 0, "target aligned");
+#define OMNI_CLIENT_RULE_EDGE_LEFT UINT16_C(0)
+#define OMNI_CLIENT_RULE_EDGE_RIGHT UINT16_C(1)
+#define OMNI_CLIENT_RULE_EDGE_TOP UINT16_C(2)
+#define OMNI_CLIENT_RULE_EDGE_BOTTOM UINT16_C(3)
+#define OMNI_CLIENT_RULE_EDGE_CENTER_X UINT16_C(4)
+#define OMNI_CLIENT_RULE_EDGE_CENTER_Y UINT16_C(5)
+#define OMNI_CLIENT_RULE_EDGE_COUNT UINT16_C(6)
+
+#define OMNI_CLIENT_RULE_REGION_LEFT UINT16_C(0)
+#define OMNI_CLIENT_RULE_REGION_RIGHT UINT16_C(1)
+#define OMNI_CLIENT_RULE_REGION_TOP UINT16_C(2)
+#define OMNI_CLIENT_RULE_REGION_BOTTOM UINT16_C(3)
+#define OMNI_CLIENT_RULE_REGION_TOP_LEFT UINT16_C(4)
+#define OMNI_CLIENT_RULE_REGION_TOP_RIGHT UINT16_C(5)
+#define OMNI_CLIENT_RULE_REGION_BOTTOM_LEFT UINT16_C(6)
+#define OMNI_CLIENT_RULE_REGION_BOTTOM_RIGHT UINT16_C(7)
+#define OMNI_CLIENT_RULE_REGION_CENTER UINT16_C(8)
+#define OMNI_CLIENT_RULE_REGION_FULL UINT16_C(9)
+#define OMNI_CLIENT_RULE_REGION_COUNT UINT16_C(10)
+
+OMNI_STATIC_ASSERT(OMNI_CLIENT_RULE_OFF_BY + 4 == OMNI_CLIENT_RULE_SIZE,
+	"client rule record");
+OMNI_STATIC_ASSERT(OMNI_CLIENT_RULE_OFF_RESERVED + 2 <= OMNI_CLIENT_RULE_OFF_WIDTH,
+	"reserved precedes the 4-aligned fields");
+OMNI_STATIC_ASSERT(OMNI_CLIENT_RULE_SIZE % 4 == 0, "client rule 4-aligned");
 
 /* --- binding (0x2B), now framed -------------------------------------- *
  *
@@ -563,7 +661,7 @@ OMNI_STATIC_ASSERT(OMNI_CLIENT_RULE_OFF_TARGET_ID % 4 == 0, "target aligned");
 #define OMNI_BINDING_OFF_MODMASK UINT32_C(0)     /* u32 */
 #define OMNI_BINDING_OFF_KEYSYM UINT32_C(4)      /* u32 */
 #define OMNI_BINDING_OFF_KEYCODE UINT32_C(8)     /* u32 */
-#define OMNI_BINDING_OFF_ACTION_REF UINT32_C(12) /* u32 frame offset */
+#define OMNI_BINDING_OFF_ACTION_REF UINT32_C(12) /* u32 frame offset of the action's name */
 #define OMNI_BINDING_OFF_ARGS_REF UINT32_C(16)   /* u32 frame offset or OMNI_REF_NONE */
 #define OMNI_BINDING_OFF_FLAGS UINT32_C(20)      /* u32 */
 #define OMNI_BINDING_HEADER_SIZE UINT32_C(24)
@@ -600,36 +698,44 @@ OMNI_STATIC_ASSERT(OMNI_SOLVED_NODE_OFF_H + 4 == OMNI_SOLVED_NODE_SIZE,
 	"solved node record");
 OMNI_STATIC_ASSERT(OMNI_SOLVED_OFF_NODES % 4 == 0, "solved nodes aligned");
 
-/* --- layout slots ------------------------------------------------------ *
+/* --- layout names ------------------------------------------------------ *
  *
- * The count and the list are edited together; a closed set is only checkable
- * if it is enumerable, so the names are literals and are never generated from
- * a rule. Twenty-four is the whole Greek alphabet, which is the reason the set
- * is closed: extending past it would mean inventing names, and a slot is only
- * useful while it is an address with no meaning of its own. */
+ * This replaces a 24-slot table of Greek letters, which was closed for a reason
+ * that no longer applies: it was closed because a slot is an address with no
+ * meaning of its own, and a user-writable name is the opposite of that. Nothing
+ * here is closed, and nothing scales with the length of a list.
+ */
 
-/* One namespace, two provenances. The letters name user layouts and the
- * descriptive names name built-ins, and nothing else separates them: both are
- * named programs of spaces and constraints resolved by the same lookup. A Greek
- * letter cannot collide with a descriptive name, so a user layout can never
- * shadow a built-in without any precedence rule or reserved list. Every letter
- * is seeded as a blank program at startup, which is valid, not absent. */
-#define OMNI_LAYOUT_SLOT_COUNT UINT32_C(24)
-#define OMNI_LAYOUT_SLOT_NAMES                                    \
-	"alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", \
-	    "theta", "iota", "kappa", "lambda", "mu", "nu", "xi",    \
-	    "omicron", "pi", "rho", "sigma", "tau", "upsilon", "phi", \
-	    "chi", "psi", "omega"
+/* The built-in layouts shipped at v1, and the seed the compositor registers at
+ * startup. A user names a layout freely and a user name may not equal a
+ * registered built-in, so there is no precedence rule and no reserved list to
+ * keep complete: the guard reads the names the compositor actually registered,
+ * not this string, so a built-in that is implemented without appearing here is
+ * still reserved and still cannot be shadowed.
+ *
+ * The seed is here because a constant needs one home and this file is it, and
+ * that is the only reason. Adding a built-in is a registration, not an ABI edit,
+ * so the number of built-ins is not a design quantity: ten cost ten registrations
+ * and no change to any table, any guard, or any format version. The list is a
+ * convenience for the reader and a starting point for the implementation, not
+ * the reserved set.
+ *
+ * Names are compared exactly, as written in devnotes/layoutlanguage.md, which is
+ * why every name here is lowercase with underscores and none contains a hyphen.
+ */
+#define OMNI_LAYOUT_BUILTIN_NAMES \
+	"monocle", "dwindle", "vertical_stack", "master_stack"
 
-/* Bounds on a group naming a nested layout. Both are checked when a program is
- * loaded, never while solving, so a rejected program leaves the running layout
- * untouched. Acyclicity is the one that matters: alpha with two spaces that are
- * both groups using alpha cascades forever and hangs the compositor rather than
- * producing a visible mistake. It also caps depth at the number of layouts (26,
- * being the 24 letters chained with a built-in at the end) for free. The cap of
- * 5 sits well inside that, at the point past which nesting is not readable on
- * screen, and it is what makes the arrange pass's cost bounded by a constant
- * factor rather than merely safe. */
+/* The depth a group naming a nested layout may reach, checked when a program is
+ * loaded and never while solving, so a rejected program leaves the running
+ * layout untouched. Acyclicity is implied by a depth cap rather than checked
+ * separately: `master_stack` naming `master_stack` nests to the cap and is
+ * refused there, where the old slot table could have cascaded forever and hung
+ * the compositor instead of producing a visible mistake. Five sits at the point past which
+ * nesting is not readable on screen, and it is what makes the arrange pass's
+ * cost bounded by a constant factor rather than merely safe. Free naming does
+ * not weaken it, since the bound is on depth and not on how many layouts
+ * exist. */
 #define OMNI_LAYOUT_MAX_NEST_DEPTH UINT32_C(5)
 
 /* ------------------------------------------------------------------ */
@@ -660,6 +766,11 @@ OMNI_STATIC_ASSERT(OMNI_SOLVED_OFF_NODES % 4 == 0, "solved nodes aligned");
 #define OMNI_JOURNAL_KIND_KEY_DELETE UINT8_C(2)
 #define OMNI_JOURNAL_KIND_EVENT UINT8_C(3)
 #define OMNI_JOURNAL_KIND_COMMIT_END UINT8_C(4) /* event_ref counts the group */
+/* The set of bindings changed. Distinct from KEY_SET because a binding change
+ * invalidates a *derived* structure, not one cached value: a process-private
+ * binding index must be rebuilt, and a client that only cares that "the binds
+ * are not what I read" needs one event rather than one per binding. */
+#define OMNI_JOURNAL_KIND_BINDS_UPDATED UINT8_C(5)
 
 /* Journal entry flags. */
 #define OMNI_JOURNAL_FLAG_VALUE_FRAMED_0 (UINT8_C(1) << 0)
@@ -702,14 +813,14 @@ OMNI_STATIC_ASSERT(OMNI_JOURNAL_SLOT_OFF_COMMIT_ID % 8 == 0, "slot commit aligne
 #define OMNI_REQ_OFF_VALUE_LEN UINT32_C(40)      /* u32 */
 #define OMNI_REQ_OFF_NAME_LEN UINT32_C(44)       /* u32 */
 #define OMNI_REQ_OFF_TARGET_GENERATION UINT32_C(48) /* u64 */
-#define OMNI_REQ_OFF_NAME UINT32_C(56)           /* 4096 B */
-#define OMNI_REQ_NAME_FIELD_SIZE UINT32_C(4096)
-#define OMNI_REQ_OFF_VALUE UINT32_C(4152) /* 128 B */
+#define OMNI_REQ_OFF_NAME_REF UINT32_C(56)      /* u32 arena frame offset */
+#define OMNI_REQ_OFF_RESERVED_NAME_PAD UINT32_C(60) /* u32, zero */
+#define OMNI_REQ_OFF_VALUE UINT32_C(64) /* 128 B */
 #define OMNI_REQ_VALUE_FIELD_SIZE UINT32_C(128)
-#define OMNI_REQ_OFF_REQUESTER_START_ID UINT32_C(4280) /* u32 */
-#define OMNI_REQ_OFF_RESERVED_PAD UINT32_C(4284) /* u32, zero; 8-aligns the next field */
-#define OMNI_REQ_OFF_TERMINAL_AT_MS UINT32_C(4288)     /* u64 */
-#define OMNI_REQ_RESERVED_TAIL_START UINT32_C(4296)
+#define OMNI_REQ_OFF_REQUESTER_START_ID UINT32_C(192) /* u32 */
+#define OMNI_REQ_OFF_RESERVED_PAD UINT32_C(196) /* u32, zero; 8-aligns the next field */
+#define OMNI_REQ_OFF_TERMINAL_AT_MS UINT32_C(200)     /* u64 */
+#define OMNI_REQ_RESERVED_TAIL_START UINT32_C(208)
 
 /* Request status. A request is FREE only via acknowledgement or reclaim. */
 #define OMNI_REQ_STATUS_FREE UINT8_C(0)
@@ -737,8 +848,10 @@ OMNI_STATIC_ASSERT(OMNI_JOURNAL_SLOT_OFF_COMMIT_ID % 8 == 0, "slot commit aligne
 #define OMNI_REQ_ERR_NOT_READY UINT8_C(10)
 #define OMNI_REQ_ERR_REQUEST_EXPIRED UINT8_C(11)
 
-OMNI_STATIC_ASSERT(OMNI_REQ_OFF_NAME + OMNI_REQ_NAME_FIELD_SIZE == OMNI_REQ_OFF_VALUE,
-	"name field");
+OMNI_STATIC_ASSERT(OMNI_REQ_OFF_NAME_REF + 4 == OMNI_REQ_OFF_RESERVED_NAME_PAD,
+	"name ref field");
+OMNI_STATIC_ASSERT(OMNI_REQ_OFF_RESERVED_NAME_PAD + 4 == OMNI_REQ_OFF_VALUE,
+	"name pad field");
 OMNI_STATIC_ASSERT(OMNI_REQ_OFF_VALUE + OMNI_REQ_VALUE_FIELD_SIZE ==
                    OMNI_REQ_OFF_REQUESTER_START_ID,
 	"value field");
@@ -801,5 +914,43 @@ OMNI_STATIC_ASSERT(OMNI_REQ_OFF_TERMINAL_AT_MS % 8 == 0, "req deadline aligned")
 OMNI_STATIC_ASSERT(OMNI_RDESC_OFF_REGION_GENERATION + 8 == OMNI_REGION_DESC_SIZE,
 	"descriptor tail");
 OMNI_STATIC_ASSERT(OMNI_RDESC_OFF_REGION_GENERATION % 8 == 0, "generation aligned");
+
+/* ------------------------------------------------------------------ */
+/* 11. Socket facade (ipc.md sections 1 and 3.3)                        */
+/* ------------------------------------------------------------------ */
+
+/* ipc.md section 1. NDJSON framing, one request per line. */
+#define OMNI_SOCK_BACKLOG UINT32_C(16)
+#define OMNI_SOCK_MAX_LINE (UINT32_C(1) * 1024 * 1024)
+#define OMNI_SOCK_SEND_BUF (UINT32_C(64) * 1024) /* batching threshold      */
+#define OMNI_SOCK_STALL_MS UINT32_C(2000)         /* no forward progress     */
+#define OMNI_SOCK_DISCONNECT_MS UINT32_C(60000)   /* still stalled after the
+                                                       partial teardown */
+/* Bytes in sockaddr_un.sun_path, NUL included. 107 on Linux, 103 on the BSDs
+ * and on macOS, so a path is truncated rather than refused on those. */
+#define OMNI_SOCK_SUN_PATH_MAX UINT32_C(107)
+
+/* ipc.md section 3.3. Every decoded quantity is bounded before any arena
+ * allocation, so the store is never asked to hold a frame larger than the
+ * arena. The bases are in section 2 above; these are the numbers derived from
+ * them, and a reader changing one of those has to recheck this table. */
+#define OMNI_VALUE_MAX_NAME UINT32_C(4095) /* == OMNI_REQUEST_NAME_MAX      */
+#define OMNI_VALUE_MAX_STRING (UINT32_C(1) * 1024 * 1024)
+#define OMNI_VALUE_MAX_BLOB (UINT32_C(768) * 1024)
+#define OMNI_VALUE_MAX_FRAMED (UINT32_C(1) * 1024 * 1024)
+#define OMNI_VALUE_MAX_ARRAY_ELEMS UINT32_C(65536)
+#define OMNI_VALUE_MAX_TUPLE_FIELDS UINT32_C(64)
+#define OMNI_VALUE_MAX_GROUPED_KEYS UINT32_C(4096) /* == journal capacity    */
+#define OMNI_VALUE_MAX_NESTING UINT32_C(16)
+
+/* ipc.md section 3, and tomlparser.md section 8. A config file's operations
+ * are staged and then published as one grouped commit, so this bounds the
+ * staging and not the journal. */
+#define OMNI_CONFIG_MAX_OPS UINT32_C(4096)
+
+OMNI_STATIC_ASSERT(OMNI_VALUE_MAX_NAME == OMNI_REQUEST_NAME_MAX, "name bound");
+OMNI_STATIC_ASSERT(OMNI_VALUE_MAX_GROUPED_KEYS == OMNI_JOURNAL_CAPACITY,
+	"one journal ring of entries per grouped commit");
+OMNI_STATIC_ASSERT(OMNI_SOCK_SUN_PATH_MAX <= OMNI_SOCK_MAX_LINE, "path fits a line");
 
 #endif /* OMNIWM_SHARED_OMNI_LAYOUT_H */

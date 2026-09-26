@@ -43,17 +43,20 @@ each, after the update pipeline in §6 and the layout set in §8 were settled.
 level, the guards and the frozen limits. It is normative, and where this document
 disagrees with it the disagreement is a bug in this document.
 
-The documents that also touch layout are not written yet. `windows.md` owns the
-client, the floating layer, focus and stacking, groups and clusters.
-`tags.md` owns the tag entity, the per-tag layout, and tag membership. `animate.md` owns
+Two of the documents that also touch layout are written. `tags.md` owns the tag
+entity, the per-tag layout, and tag membership. `windows.md` is a prototype rather
+than a specification, and it owns the client, the floating layer, focus and
+stacking, groups and clusters, and window rules; §10 records the one narrow
+question it still leaves open, which is the order of resolutions rather than
+anything this document needs to read. `animate.md` owns
 animation and the interaction with solver geometry. This document owns the
 solver and the geometry it produces, and §6 states each seam.
 
-`devnotes/layoutsystem.md` and `devnotes/looks.md` are empty by decision and
-stay empty (`missing-devnotes-topics.md`, preamble). The layout promise is split
-across this document, `layoutlanguage.md`, `tags.md`, and `windows.md`; this
-document is the solver part of that split and `layoutlanguage.md` is the syntax
-part.
+`devnotes/layoutsystem.md` was deleted and `devnotes/looks.md` is an empty
+placeholder, both by decision, and both stay that way
+(`missing-devnotes-topics.md`, preamble). The layout promise is split across
+this document, `layoutlanguage.md`, `tags.md`, and `windows.md`; this document
+is the solver part of that split and `layoutlanguage.md` is the syntax part.
 
 ## 2. What is already decided
 
@@ -111,6 +114,11 @@ the walk reaches. That is the same convergence property `generaldesign.md` §11
 states for per-window decoration overrides, and it is already the project's answer
 to how any per-window value is reached without a privileged path.
 
+The order those three compose in is settled, and it is not a conflict rule but an
+array order: every matching rule is applied rather than the first one, the later
+entry wins per field, and a tag contribution is unioned across matches and written
+once. §11 records where that came from and the two details that travel with it.
+
 This is MangoWM's division, kept deliberately. A Mango layout is a compiled
 algorithm over the client list and each client carries its own size and master
 status; the layout never names a client. What differs here is only the mechanism
@@ -131,8 +139,8 @@ The mechanism was inherited here as a requirement rather than a specification,
 because the original wording was "drops the lowest-priority constraint it cannot
 honour" and both halves of that were undefined. §3.2 settles it as weighting,
 and `omni_layout.h` had already encoded weighting before this document did:
-`OMNI_CONSTRAINT_OFF_PRIORITY` is documented there as the solver's linear
-weight, and the four bands are separated by an order of magnitude each
+`OMNI_SOLVER_WEIGHT_*` are documented there as the solver's linear weights, and
+the four bands are separated by an order of magnitude each
 specifically so that a band dominates the compromise rather than trades evenly
 against it. The prose was the stale half, and it has now been amended to match
 the header rather than the other way round.
@@ -167,10 +175,11 @@ tag", and it is the shape `tags.md` §4 defines.
 the layout engine inside it, and that a cluster is a movement relationship with no
 chrome of its own. A cluster **occupies one space of its parent** rather than one
 space per member, which is what makes a group bar expressible at all, and
-`layoutlanguage.md` §3.8 is where that is worked out. It has one consequence this
-paragraph used to assert the opposite of: a cluster whose members straddle a primary
-and a secondary tag is no longer obviously coherent, because the cluster is placed as
-one occupant and a space belongs to one layout. `tags.md` §4 records that as open.
+`layoutlanguage.md` §3.8 is where that is worked out. It has one consequence worth stating
+because this paragraph used to assert the opposite of: nothing inside a cluster or a
+group is on a tag, so nothing inside one can straddle a tag boundary. The tag's member
+set holds the container and the contents are in it, which is what makes the solve
+input in the next paragraph flat. `tags.md` §4 and §5 have the rule.
 
 `generaldesign.md` §5 also says every user-facing capability is a component,
 which is in tension with the two paragraphs above, and the tension is not
@@ -209,7 +218,7 @@ expression. `rule` is not one; it is a key match-and-replace record
 (`helpers.md` §6.2). The three-way tag decision in `configstorage.md` §12.1 then
 fixes what follows from that gap:
 
-- `0x34..0x7FFF` is unassigned, and an unassigned low tag is malformed and
+- `0x35..0x7FFF` is unassigned, and an unassigned low tag is malformed and
   refused by the core, so a new core type cannot be quietly introduced. §2.9
   reopens the freeze that made this expensive rather than forbidden, and §2.10
   is the resulting list;
@@ -234,9 +243,11 @@ it, and answering it late is expensive in a way answering it early is not.
 - The catalog is 16384 slots (`omni_layout.h` §2), entries are created live
   through a freelist, and live entries never move, so a holder can keep a
   reference stable (`configstorage.md` §3).
-- Arena space is never reclaimed except by in-place overwrite of an existing
-  value (`configstorelayout.md` §7, Reclaim). A framed value that is created
-  and then destroyed keeps its arena for the life of the block.
+- Arena frames are freed to a free list rather than leaked, so a framed value
+  that is created and then destroyed returns its arena to the pool
+  (`configstorelayout.md` §5, Reclaim). This is recent: the design previously
+  kept a destroyed value's arena for the life of the block, which meant a client
+  looping create and destroy exhausted the pool.
 - Per-client geometry is one of the named examples of `WINDOW_DEPENDENT`
   (`configstorelayout.md` §8), and `WINDOW_DEPENDENT` is excluded from `save`
   and from a soft reset by one shared test (`configstorage.md` §13,
@@ -265,7 +276,7 @@ be a component. So the engine needs:
   tag from the core set, and a native default.
 - **actions**, what a binding, a rule, or a client invokes. The one existing
   example of a layout action in the whole repository is
-  `ipc.md` §exec, `{ "action": "wm.cycle_layout", "args": ["master-stack"] }`,
+  `ipc.md` §exec, `{ "action": "wm.cycle_layout", "args": ["master_stack"] }`,
   which passes a layout **name** as a string argument rather than a program.
   That is a datum about the socket contract, and §3.4 has to live with
   it.
@@ -331,7 +342,8 @@ to any of them is still a one-line edit there plus the matching table in
 `configstorelayout.md`.
 
 §2.10 is the list of what the layout engine needs from that surface, with the
-cost of each. Nothing in it has been applied.
+cost of each. The list has since been applied in full: the answers are recorded
+below it, one per item, and the state of each is tracked in §13.
 
 ### 2.10 What the layout engine needs from the block
 
@@ -363,12 +375,15 @@ estimate:
 
 1. **There was no type tag for a constraint or a layout program.** The tag table
    ran `0x01` to `0x31` and `0x32` to `0x7FFF` was the unassigned hole that
-   `configstorage.md` §12.1 classifies as malformed. Taken: `OMNI_TAG_CONSTRAINT`
-   at `0x32` and `OMNI_TAG_CLIENT_RULE` at `0x33`, so the table now runs `0x01`
-   to `0x33` with `0x34..0x7FFF` as the hole. The gap was real rather than
+   `configstorage.md` §12.1 classifies as malformed. Taken from that list:
+   `OMNI_TAG_CONSTRAINT` at `0x32` and `OMNI_TAG_CLIENT_RULE` at `0x33`. Added
+   since, and not from this list because `windows.md` §9.3 needed it rather than the
+   solver: `OMNI_TAG_MAP` at `0x34`, a keyed block of typed values, since the store
+   had no composite value with named fields. So the table now runs `0x01` to `0x34`
+   with `0x35..0x7FFF` as the hole. The gap was real rather than
    hypothetical, and what it cost was:
 
-   *Cost of minting a core tag:* one constant in `omni_layout.h` §8, a row in
+   *Cost of minting a core tag:* one constant in `omni_layout.h` section 7, a row in
    `configstorage.md` §4, a row in `ipc.md` §3, and a static assert that
    `OMNI_TAG_MAX_KNOWN` moved. That is the whole cost. `OMNI_FORMAT_VERSION`
    stays 1, because the compositor does not exist yet and the first runnable
@@ -381,7 +396,7 @@ estimate:
    themselves take positional arguments per `helpers.md` §6.1. The required set
    hits this immediately: §7.6 needs snap in each direction from a keybind, §3.4
    needs `cycle_layout` to take a layout name, and the existing `ipc.md` §exec
-   example already shows `wm.cycle_layout` taking `"master-stack"`. A
+   example already shows `wm.cycle_layout` taking `"master_stack"`. A
    parameterized binding could only be expressed by minting one action per
    parameter value, which is a combinatorial mess that grows with every
    direction and every layout.
@@ -429,7 +444,7 @@ in the compositor. A new fixed section written without journalling costs a
 constant and a row: `OMNI_SECTION_SLOT_COUNT` is 16 and only ids 0 to 6 were
 assigned, so the table had room.
 
-*Taken:* the fixed section. `OMNI_SECTION_SOLVED_LAYOUT` is id 7 at `0x1D2800`,
+*Taken:* the fixed section. `OMNI_SECTION_SOLVED_LAYOUT` is id 7 at `0x113800`,
 `0x8000` bytes, a 16-byte header and up to 1024 24-byte nodes, and its section
 row leaves `JOURNALLED` clear, so a solve is a bounded memcpy and a `generation`
 bump rather than a commit. This is what makes the answer to §3.7's "how does an
@@ -544,12 +559,17 @@ component rather than as one global system, warms each component from the
 previous frame's solution, and treats the highest-weighted equation whose
 variables are all already-solved as a fixed point, which is what keeps the warm
 start cheap. The weight mapping is already in the header: positional constraints
-are `OMNI_CONSTRAINT_PRIORITY_STRONG` and structural ones are
-`OMNI_CONSTRAINT_PRIORITY_DOMINANT`.
+are `OMNI_SOLVER_WEIGHT_STRONG` and structural ones are
+`OMNI_SOLVER_WEIGHT_DOMINANT`. These are the solver's internal weights and are
+not part of the format: the program has no priority key, because
+`layoutlanguage.md` §3 makes order in the list the whole of the ordering.
 
 **There is no hard constraint, and the constant is named for that.** The top
-band was `OMNI_CONSTRAINT_PRIORITY_REQUIRED` and has been renamed to
-`OMNI_CONSTRAINT_PRIORITY_DOMINANT`, because at 60000 against `STRONG`'s 6000 it
+band was `OMNI_CONSTRAINT_PRIORITY_REQUIRED`, then
+`OMNI_CONSTRAINT_PRIORITY_DOMINANT`, and is now `OMNI_SOLVER_WEIGHT_DOMINANT`
+because the constraint record it was a field of is gone and the band is a weight
+the solver applies rather than anything a program can write. At 60000 against
+`STRONG`'s 6000 it
 is one decade of weight and not a different kind of constraint. DuckWM does the
 same thing with `REQUIRED` special-cased to an effective weight of `1e8`, and its
 own note is that this is a weight large enough for the fit to honour it rather
@@ -652,12 +672,14 @@ to it.
   geometry is not in the block there is no way for an external program to
   discover it at all, and if it is then there is a cost. That is §3.7.
 
-Blocked by `windows.md` for the override representation only; §3.1 and §3.5 are
-resolved. Blocks §3.4, `windows.md`, and `animate.md`.
+Blocked by nothing here. The override representation it needed is settled in §2
+and in `windows.md` §9, including the resolution order for a client bound to two
+sets. Blocks §3.4 and `animate.md`.
 
 ### 3.4 Built-in layouts are compiled in, and adding one is not a solver change
 
-Open: what a built-in's registration looks like. The boundary itself is decided.
+Resolved: what a built-in's registration is. The boundary was decided first and
+the registration followed from it.
 
 `generaldesign.md` §7 has been amended. It used to say that built-in layouts
 ship as preset constraint programs rather than as separate code paths, and that
@@ -681,30 +703,59 @@ leftover-space policy, which is the opposite of what it was cited for.
 
 Still open, and all of it downstream of the decision:
 
-- What a built-in's registration actually is. Whether it is a value in the block,
-  a named entry the engine expands, or a compiled-in default that seeds an
-  ordinary key is still unstated, and the block-honest answer is a seeded value,
-  which is exactly what `helpers.md` §3.1's option array already does for every
-  other component option, so the mechanism exists and does not need inventing.
-  This question survives the decision because being compiled in and being seeded
-  are not exclusive: a compiled-in default that seeds a key is both.
+**A built-in is registered by calling the same functions the TOML path calls.**
+There is one write path into the store and a built-in uses it, so registration is
+not a second mechanism that has to be kept in step with the first. A built-in holds
+its program in the same shape the TOML config uses, and at startup it hands that
+shape to the same underlying functions the parser hands its result to, in the same
+order, inside the program's own startup sequence. The difference is only where the
+value came from: a literal compiled into the binary rather than text read from a
+file. Everything downstream is identical, and the last step of both is a write to
+the SHM block, so "registered" and "configured" are not two different states.
+
+This is the answer to the question this section used to leave open, and it is worth
+being explicit about why it beats the alternatives. A seeded value, a named entry
+the engine expands, and a compiled-in default that seeds an ordinary key were the
+three candidates, and the second is gone because it puts a lookup in the engine's
+write path that only built-ins take. The first and third were really the same
+mechanism wearing different names, and `helpers.md` §3.1's option array already does
+it for every other component option, which is why nothing needed inventing. Saying
+it as one write path is the version that cannot drift: there is no second path to
+keep in step, and a built-in that used the seed mechanism but not the function
+would be a divergence nobody would notice until it behaved differently.
+
 - Which of the §8 set ship at stage 6 is unstated. `README.md` stage 6 says a
   single demo layout, and `generaldesign.md` §18 maps stage 6 to this document.
   On the required set, the cheapest genuine first deliverable is a one-axis stack
   in a nested group, because it needs only §7.1 and §7.3's attach mode and no
-  viewport and no snapping.
+  viewport and no snapping. The programs to build it from are already written:
+  `layout-test-examples.md` holds a mock design for most of the required set, so the
+  first built-ins are a transcription exercise rather than a design one, and §9
+  already names which primitives each one needs.
 - The existing `wm.cycle_layout` example passes a layout name
   (`ipc.md` §exec), so names are already part of the surface vocabulary. Whether
   a name selects a seeded key, an entry reference, or an `enum` constant is
   unstated, and it interacts with §3.5 because a per-tag layout needs a name
   that means something per tag.
-- If a built-in seeds a value, then a user who edits one is editing a seeded
-  value, and `ipc.md` §reset means a reset clears and rebuilds and the applier
-  re-applies, so the hand edit is lost. That interaction needs stating rather
-  than discovering. §7.1 sharpens it, because a stack is a group plus a rule plus
-  a layout, and a user who edits any one of those three is editing a seed. This
-  is the sharpest remaining consequence of the decision, because it is the one
-  place where "compiled in" and "user editable" are in genuine tension.
+- **A built-in is modifiable once loaded, and that is the intended behaviour.** One
+  write path means a built-in is not read-only: it is a value the startup sequence
+  wrote, and a later write to the same key is an ordinary store write that the
+  guards treat like any other. So a user can edit `monocle` in place, and the edit
+  holds until something rewrites it. This is a bonus rather than a leak, and it is
+  the reason the unified path was worth wanting: the layouts a new user wants are
+  reachable by *starting from* one that already exists rather than by writing one
+  from nothing, and a base layout only works as a base if it can be edited.
+
+  The honest edge is `ipc.md` §reset, and it is the right edge rather than a problem.
+  A reset clears and rebuilds and the applier re-applies, so it restores the shipped
+  value, which means an in-place edit to a built-in does not survive a reset while an
+  edit under a user's own name does. That is a coherent rule and worth stating
+  plainly: a built-in is a starting point, and a user's own layout is theirs. §7.1
+  sharpens the distinction, because a stack is a group plus a rule plus a layout, so
+  "edit the built-in" means editing any of those three and a user who means to keep
+  the result should write it under their own name once rather than editing in place
+  and wondering later. Nothing needs preventing here, which is the change from the
+  tension this bullet used to record.
 - A built-in expressed only in the constraint language cannot do anything the
   language cannot do, so the shipped set is the real test of §3.3. It should be
   written after the language, not alongside it. On the required set, that test
@@ -772,21 +823,22 @@ rect and nothing about how its children are arranged inside it.
 Two bounds, and both are needed. The first is the one that prevents a crash and
 the second is the one that prevents absurdity.
 
-**No layout may transitively contain itself.** Layout alpha cannot nest anything
-that contains alpha, not even with other layouts in between, so the layout
+**No layout may transitively contain itself.** `master_stack` cannot nest anything
+that contains `master_stack`, not even with other layouts in between, so the layout
 reference graph is acyclic. This is the rule that stops the unbounded case: if
-alpha is configured with two spaces that are both groups using alpha, then
-arranging alpha requires arranging alpha, which requires arranging alpha, and the
-cascade never terminates. Without the rule that configuration is not a bad layout,
-it is a compositor that stops responding, and the failure is a hang rather than a
-mistake the user can see and correct. Acyclicity also gives nesting a hard
-ceiling for free, because the chain can visit each layout at most once: 26 in
-principle, being the 24 user layouts chained into each other with a built-in at the
-end.
+`master_stack` is configured with two spaces that are both groups using
+`master_stack`, then arranging it requires arranging it, which requires arranging
+it, and the cascade never terminates. Without the rule that configuration is not a
+bad layout, it is a compositor that stops responding, and the failure is a hang
+rather than a mistake the user can see and correct.
 
 **Maximum depth 5**, as `OMNI_LAYOUT_MAX_NEST_DEPTH` in
-`include/shared/omni_layout.h` beside the other limits. Five is well inside the 26
-that acyclicity allows, and it is the point past which nesting stops being
+`include/shared/omni_layout.h` beside the other limits. Under the letter table
+acyclicity also gave nesting a hard ceiling for free, at 26 in principle, and the
+cap of 5 sat well inside it. Free naming removes that ceiling, because the number of
+layouts is now whatever the catalog holds, so the cap is the only bound and it has
+to be the real one rather than a number chosen to sit inside another. Five is the
+point past which nesting stops being
 usable: a layout five groups deep is already at the limit of what can be
 shown on screen, so the configurations the extra depth would permit are ones
 nobody could read. Taking a separate, lower cap rather than relying on the 26 is
@@ -818,11 +870,32 @@ Still open in this section:
   neither: it is a fake client in the group's own program, clustered with the
   group's members, positioned by the child solver's client rules like anything else,
   and the parent sees only the group as one space and never the bar separately.
-- Unstated: whether the parent's constraints see a group as one client or as its
-  members. `generaldesign.md` §8 says a group is moved as if it were a single
-  window, which implies the former at the parent level, but a group with a
-  clickable titlebar and focusable members is two things at once, and the two
-  readings disagree about what a parent's left-of applies to.
+- **Resolved: a group is one client to a client outside it, and is not visible to
+  a client inside it.** The two halves are the same decision seen from two sides,
+  and the second half is the stronger one, so it is worth stating why. A member of
+  a group is placed by the group's own layout, in the group's own rect, by the
+  group's own rules. It is not one more occupant competing for a slot in an
+  enclosing arrangement, and exposing the group to it would mean the inner layout
+  had to treat its container as a peer, which is the thing nesting exists to
+  prevent. So "not visible" is not a simplification of the parent's view, it is
+  what makes the child solver a child solver rather than a flattened constraint set.
+
+  A parent's constraints therefore see a group as a single client, and a rule like
+  `left_of` names the group and not anything inside it. This is the answer to the
+  disagreement this bullet used to record between `generaldesign.md` §8's "moved as
+  if a single window" and the fact that a group has focusable members: both are
+  true and they are true at different levels. The group is one client to its parent,
+  and it is a container to its members, and those are not the same claim.
+
+  **A cluster is one client on the same terms**, so the two compose rather than
+  competing. A cluster is a movement relationship occupying one space of its parent,
+  which was already §3.1's rule for a space, and it inherits the group's answer
+  without needing its own. The case worth naming is the one that has both: a group
+  with a group bar is a cluster containing a group, and the bar is a fake client
+  inside that group, so the group carries a chrome of its own. For the layout the
+  group participates in, that whole arrangement is a single client. There is no
+  level at which the bar is separately placed by the parent, and no rule that could
+  name it there, which is the composition working rather than a special case.
 - The depth limit and the cost bound are both settled above, and what remains is
   the consequence for §2.7. Nested solvers cost at least linear in constraints
   per level, the arrange pass runs on the event loop, and a depth cap of 5 turns
@@ -921,121 +994,149 @@ by the same lookup, and both are referred to by a name under a single prefix. Wh
 differs is only where the program comes from and what it is called.
 
 - **Built-in layouts** ship compiled into the compositor and carry ordinary
-  descriptive names: `monocle`, `dwindle`, `vertical_stack`, `master_stack`, and
-  the rest of §8's set. A built-in is referenced by its own name.
-- **User layouts** live in the block and carry the Greek letters, `alpha` through
-  `omega`. A user layout is referenced by its letter.
+  descriptive names, and the compositor registers each one at startup.
+  `OMNI_LAYOUT_BUILTIN_NAMES` in `include/shared/omni_layout.h` is the v1 seed and
+  nothing more than a starting point: `monocle`, `dwindle`, `vertical_stack` and
+  `master_stack`. A built-in is referenced by its own name, and how many there are
+  is not a design quantity, because one more is one more registration and no change
+  to any table, guard or format version.
+- **User layouts** live in the block and carry names the user writes, subject to
+  one rule: a user name may not equal a *registered* built-in name. The guard reads
+  the names the compositor registered, so a built-in implemented later is reserved
+  the moment it exists and nothing has to be added anywhere for it to be.
 
-Two properties fall out of the name choice rather than being enforced, and that
-is the reason for it. A Greek letter cannot collide with a descriptive name, so
-**a user layout can never shadow a built-in** without any precedence rule, any
-reserved list, or any guard that exists only to prevent it. And the letters stay
-abstract, so a user can define `delta` as whatever their config needs delta to be
-and change that definition later without touching anything that refers to the
-name; nothing in the system may come to depend on what a given letter means.
+The second bullet is a reversal of an earlier decision, and the reason is that the
+cost of the closed set was being paid for a benefit that turned out to be
+unnecessary. What the letters bought was that a user layout can never shadow a
+built-in without a precedence rule or a reserved list; reserving the built-in names
+directly buys the same thing and costs a lookup in a four-entry list instead of a
+rule about which letters exist. What the letters also cost was listed in §4.2 and is
+now gone with them: a fixed capacity, a sharing hazard where two configs that both
+say `delta` mean different things, and a `list_layouts` reply that can only show
+`delta` rather than what delta is. A user who names a layout `master_stack` is
+making their own config legible, and nothing in the system has to parse the name to
+benefit from that.
 
-Every user layout **starts as a blank slate**: an empty program, which §7.8 fixes
-as the blank canvas and which is a valid program rather than an absence. Nothing
-is pre-populated, so a letter means nothing until its owner gives it a definition,
-and there is no default layout for a slot to fall back to. This is a startup
-requirement, not a lazy default: `configstorage.md` §13's seeding step creates all
-`OMNI_LAYOUT_SLOT_COUNT` of them at boot.
+A user layout is a catalog entry and comes into existence when the entry is written.
+There is no blank slate and nothing to pre-create: an unwritten name is not a layout
+with no definition, it is not a layout, and `configstorage.md` §13 creates nothing
+on the user's behalf at boot. A *built-in* is the one thing registered at startup,
+and that is registration rather than seeding, since a built-in has a program to
+register while a user name has none until it is written. §7.8's blank canvas still
+has a use, but it is now what a user writes when they mean an empty program rather
+than what the compositor pre-creates.
 
-### 4.2 Why a closed set, and what it costs
+### 4.2 Why user-chosen names, and what it costs
 
-A closed set means the core owns a compile-time table of every valid layout
-name, and a name outside that table is refused. This is the whole reason the
-owner chose letters over user-chosen names, and it is worth being explicit about
-what it buys and what it spends.
+A user name is a name the user writes, and the only rule on it is that it may not
+equal a built-in. The reserved set is `OMNI_LAYOUT_BUILTIN_NAMES` in the header, and
+that is the whole of it.
 
-It buys the absence of a name-registration system. A user-defined name would
-need registering, lifetime, collision detection against built-ins and against
-other users' names, and a removal path, and `helpers.md` §8 is explicit that
-unregistering by name is deliberately not offered because a name does not
-identify a registration. A closed set needs none of that: a name is either in
-the table or it is not, and the table is fixed at compile time, so there is no
-registration, no handle, and no lifetime question.
+The case for it is that a layout name is the one string in the system a human reads
+most often. A bar showing `master_stack` tells the user what they are looking at; a
+bar showing `delta` tells them nothing and makes them open the config to find out,
+and the fix for that is the same as the fix for the name being abstract in the first
+place. Since legibility was the only thing the abstraction bought, and legibility is
+what the abstraction spent, the letters were a cost with no remaining benefit.
 
-It spends generality, in three specific ways that should be recorded rather than
-discovered later:
+It spends three things, and they are worth recording rather than discovering later:
 
-- **A fixed capacity.** The user gets N slots and no more. §4.4 sets N.
-- **A sharing hazard.** Two configs that both use "delta" mean different things
-  by it, so a config that travels between machines, or a set of fragments that
-  are composed, has to agree on what each letter means. This is the price of the
-  abstraction and it is not removable, only documentable.
-- **No self-describing output.** Anything a human reads, a bar's layout
-  indicator or a `list_layouts` reply, shows "delta" and not what delta is. The
-  only way to make that legible is a user-supplied label, and §4.5 says whether
-  one is allowed.
+- **Collision detection now exists.** A user name must be checked against the
+  built-in list, which is a lookup rather than a rule, and against other user names
+  only in the sense that a catalog entry name is already unique, so that half is free.
+  `helpers.md` §8 is explicit that unregistering by name is deliberately not offered
+  because a name does not identify a registration, and that stays true: a layout is
+  an entry, not a registration, so there is no handle to release and nothing to
+  unregister. Deleting the entry deletes the layout.
+- **A sharing hazard remains, and it is not the letters' fault.** Two configs that
+  both use `master_stack` mean different things by it. This was true of `delta` too
+  and is not removable, only documentable, and it is the price of a name that means
+  something.
+- **Nothing, where the count used to cost something.** This is the one cost that
+  turned out not to exist, and it is worth recording because it was the reason the
+  letter table was defensible. Before the reversal, "is this a valid layout name"
+  was a membership test in a compile-time list the core owned, and a built-in
+  nobody wrote down could be shadowed. Registering built-ins at startup removes
+  that: the reserved set is whatever is registered, so there is no list to keep
+  complete and no shadowing window. A hundred built-ins cost a hundred
+  registrations, which is why the number of built-ins does not need deciding now.
 
-### 4.3 The name is a value, so the existing enum tag carries it
+### 4.3 The name is a string, and the reserved check is a guard
 
 `configstorage.md` §4 defines `enum` at `0x24` as the string name of an enum
-constant, and §12 places enum-name recognition in the semantic guard tier, where
-the consumer decides what a name means and refuses what it does not recognise.
-A layout name is exactly that: a string constant from a closed set, checked by
-the consumer that cares. So the whole namespace mechanism needs no new tag at
-all, which removes the one item in §2.10 that would have needed a new tag.
+constant, which is a constant from a closed set. A user layout name is not that,
+so the tag does not fit any more and the value is a `string` at `0x0C`. The
+consequence worth stating is that the reserved-name check leaves the type and
+lands in the guard: `configstorage.md` §12 already places recognition in the
+semantic tier, where the consumer decides what a name means and refuses what it
+does not recognise, and "equal to a built-in" is now one of the things it refuses.
+So the mechanism still needs no new tag, which is the §2.10 claim that survives
+the reversal intact.
 
-A layout name is not an `option` and not a bare string. `option` at `0x25` is a
-nullable typed value and carries no name of its own, and a plain `string` at
-`0x0C` would be structurally valid for any bytes and would push the closed-set
-check onto every consumer that happens to read the key. `enum` makes the check
-part of reading the value, which is where §12 already wants it.
+A layout name is not an `option` either: `option` at `0x25` is a nullable typed
+value and carries no name of its own.
+
+Names are compared **exactly**, byte for byte, and this is the sharp edge of free
+naming. `vertical-stack` and `vertical_stack` are two different layouts, and the
+guard will not catch the first as a near miss of the second, so a config with a
+hyphen where an underscore was meant loads cleanly and then fails to resolve at
+dispatch. There is no normalisation, because normalising would make `Foo` and
+`foo` one name and a layout lookup would stop being a comparison. The mitigation
+is the convention rather than the mechanism, which is why every name in
+`OMNI_LAYOUT_BUILTIN_NAMES` is lowercase with underscores and why the language
+document writes its examples that way.
 
 The guard consequence belongs to `helpers.md` and not to the store: §6's registry
 is a runtime registry of action handlers with handles and a release path, and
 layout names must not be registered there. `configstorage.md` §12 already
-separates "enum name recognition" from "action-name registration", so the store
-needs no edit; §6 needs a sentence saying the layout table is a compile-time
-constant and is deliberately not a registry, so nobody wires it up as one later.
+separates name recognition from "action-name registration", so the store needs no
+edit; §6 needs a sentence saying the reserved set is a compile-time constant and
+is deliberately not a registry, so nobody wires it up as one later.
 
-### 4.4 Slots are keys, so the table is a count and not a grammar
+### 4.4 Layouts are keys, so the reserved set is a list and not a grammar
 
-Each slot is an ordinary catalog key whose name component is the letter, holding
-a constraint program:
+Each layout is an ordinary catalog key whose name component is the layout name,
+holding a constraint program. A program is three keys under one prefix, which
+`layoutlanguage.md` §1 settles and `layout-test-examples.md` demonstrates:
 
 ```
-omniwm.layouts.delta    = <program>   # a user layout, a Greek letter
-omniwm.layouts.eta      = <program>
-omniwm.layouts.monocle                  # a built-in, compiled in, no stored definition
+omniwm.layouts.master_stack.rules     = [...]   # a user layout, the user's own name
+omniwm.layouts.master_stack.spaces    = [...]
+omniwm.layouts.master_stack.viewport? = {...}
+omniwm.layouts.sidebar.rules          = [...]
+omniwm.layouts.sidebar.spaces         = [...]
+omniwm.layouts.monocle                           # a built-in, compiled in, no stored definition
 ```
+
+A prefix with `rules` but no `spaces` is a valid blank program rather than a
+partial one, since §1 makes both lists allowed to be empty.
 
 One prefix for all of them, which is what makes this a single namespace rather
 than two that happen to be dispatched together.
 
 A catalog entry's name is an arbitrary immutable UTF-8 string
-(`configstorage.md` §3), so `omniwm.layouts.delta` is simply a name and nothing has to
-parse it: the dotted form is a convention the layout code reads, not a path
-grammar the store implements. That is the cheaper of the two possible designs
-and it is what this document assumes. The consequence is that recognising a
-slot is prefix matching on a flat name, so the guard that checks a name against
-the closed set is a convention the layout owner has to keep, and a name like
-`omniwm.layouts.delta.bak` would be a different entry that no guard rejects.
-Adding `omniwm.layouts.theta` needs no ABI change and no registration.
+(`configstorage.md` §3), so `omniwm.layouts.master_stack` is simply a name and
+nothing has to parse it: the dotted form is a convention the layout code reads,
+not a path grammar the store implements. That is the cheaper of the two possible
+designs and it is what this document assumes. The consequence is that recognising
+a layout is prefix matching on a flat name, so the reserved-name check is a
+convention the layout owner has to keep, and a name like
+`omniwm.layouts.master_stack.bak` would be a different entry that no guard
+rejects. Adding `omniwm.layouts.sidebar` needs no ABI change, no registration and
+no seeding.
 
-The number of letters the system recognises must be a constant in
-`include/shared/omni_layout.h` next to the other limits, and the names must be
-listed there rather than generated from a rule. A closed set is only checkable if
-it is enumerable, and the owner should also decide the trade explicitly: a fixed
-table of 32 letters is trivial to check and cannot be extended at runtime, while
-a larger cap wastes nothing but names. The cap is only worth revisiting when a
-real user runs out of slots, and until then the smaller table is the one that
-makes "is this a valid layout name" a single lookup.
+The reserved names are the ones the compositor registered, which is a set the
+implementation fills rather than a table the ABI carries. `OMNI_LAYOUT_BUILTIN_NAMES`
+in the header holds the v1 seed because a constant needs one home and that file is
+it, but the guard does not read the string: it reads the registered set, so a
+built-in added during implementation is reserved without appearing there, and the
+list can be wrong in the safe direction rather than the dangerous one.
 
-Taken as `OMNI_LAYOUT_SLOT_COUNT = 24` with the whole Greek alphabet as
-`OMNI_LAYOUT_SLOT_NAMES`, seeding one blank program per letter at startup. The count is the number of *user* slots, and the built-
-ins are not among them: the count is the number of *user* layouts, and a built-in
-like `omniwm.layouts.monocle` is named in the same namespace without occupying a
-letter. 24
-is the whole alphabet, which is the only defensible reason to stop there: it is a
-closed set because the alphabet is, not because the number was convenient.
-
-The cost of the fixed table is that extending it is an ABI edit, and the benefit
-is that "is this a valid layout name" is one lookup in a compile-time list. Given
-24 user layouts and however many built-ins ship, running out is not a credible
-failure mode, so the cap stays until someone demonstrates otherwise.
+There is no count and no cap, and that is the substantive change from the letter
+table rather than a detail of it. "Is this a valid layout name" is now "is this name
+one of the registered built-ins", which is a set lookup rather than a membership
+test in a 24-entry table, and both the number of built-ins and the number of user
+layouts are unbounded by anything in the format.
 
 ### 4.5 A slot has a definition, a dispatch, and a lifetime
 
@@ -1631,17 +1732,17 @@ Blocked, meaning the other document cannot be finished first:
 | `animate.md` | §6 fixes the split, with the solver owning the endpoint and the animator owning the transition, and §6 fixes what the animator needs to diff against |
 | `draw.md` | a fake client is a layout participant (`generaldesign.md` §13), so the scene's own surfaces are arranged by this solver |
 | `decorate.md` | a border or overlay is a scene node around a placed client, so placement precedes decoration; and §7.1 makes a group's titlebar a decoration toggle, which is `decorate.md`'s to own |
-| `input.md` | §7.6's snap needs a pointer position and a keybind with a direction argument converted into a chosen area, and `helpers.md` §11 records the key-to-action path as undesigned |
-| `tomlparser.md` | whatever the constraint syntax turns out to be has to be writable in TOML as a `tuple`, or the parser needs amending (§3.3) |
+| ~~`input.md`~~ | **no longer blocked.** §7.6's snap needs a pointer position and a keybind with a direction argument converted into a chosen area, which was the whole dependency. `generaldesign.md` §14 now decides that input is MangoWM's implementation ported wholesale, and Mango's keybind path already carries an `Arg`, so the direction argument arrives with the port rather than waiting on this document. Nothing in §7.6 needs a solver concept to be written first |
+| ~~`tomlparser.md`~~ | **no longer blocked.** §3.3's syntax question is settled by `layoutlanguage.md`, and `tomlparser.md` is conformed to it |
 
 Blocking, meaning this document cannot be finished first:
 
 | blocker | what is missing |
 |---|---|
-| `windows.md` | client identity, and the representation of the per-client override, which is the only per-client state the solver reads |
-| `helpers.md` §11 | the key-to-action binding path, which is how a layout is chosen from a keypress, recorded there as not yet designed |
-| `build.md` | the solver's arithmetic width, and whether a solve runs on the CPU or the GPU |
-| `licence.md` | the provenance of anything ported from DuckWM or Mango, which §10 makes relevant and which is unwritten |
+| `windows.md` | client identity, and the representation of the per-client override, which is the only per-client state the solver reads. **Closed.** `missing-devnotes-topics.md` gives the document the client lifecycle, focus and stacking policy, floating, and window rules besides, and none of those were waiting on anything here. What the solver could not finish without was the override's representation, because §3.1 makes it an input to every solve. The document exists as a prototype and now closes the blocker entirely: client identity is settled by `configstorage.md` §0.1 and needs nothing from here, the override's storage is settled in §2, the rule that *reaches* a client is settled in `windows.md` §9, which gives the matcher a home in a block-structured if/then and keeps `0x33` a pure solve-time constraint, and the order in which several bound sets resolve is `windows.md` §9.7, which is the rule list's name order rather than a field |
+| ~~`helpers.md` §11~~ | **no longer blocking.** The key-to-action binding path was recorded here as not yet designed, and it was the item making stage 3 wait on stage 4. `generaldesign.md` §14 now decides input is MangoWM's ported wholesale, so the path arrives with the port and `helpers.md` §11 closes the item. What remains on the helpers side is not a blocker on this document |
+| ~~`build.md`~~ | **resolved, and it was never a design blocker.** Nothing in the nine-step pipeline, the language or the ABI depends on the solver's arithmetic width or on CPU versus GPU; the answer changes the numeric type of a solve rather than its shape. The decision is to replicate MangoWM's build system, which `architecture-audit.md` §5 already located at `mango-dev/meson.build`, on the grounds that the project structure is similar. A `flake.nix` is wanted as well, with `cache.nixos.org` set explicitly as the substituter rather than left to inherit whatever the ambient config has, so a build is reproducible from a clean machine |
+| ~~`licence.md`~~ | **resolved.** The project is GPL-3.0 (`architecture-audit.md` §5, from `mango-dev/LICENSE`), so DuckWM's and MangoWM's licences are not an obstacle, nor are most other window managers'. The provenance record is what remains, and it is a small chore at the moment something is copied rather than a design question: the trigger is the first copied line, not a decision about the engine |
 
 ## 11. Open items
 
@@ -1649,18 +1750,44 @@ Carried forward, in the order they have to be answered rather than in the order
 they are interesting. Three of these were closed by the §2.10 ABI pass and are
 kept as a record of what the pass had to decide, marked *closed*.
 
-- *Closed.* The representation of a constraint program (§2.5, §3.1) is
-  `OMNI_TAG_CONSTRAINT` at `0x32`: a packed array of 16-byte records, no header,
-  no per-record identity, operand as a walk index (`configstorage.md` §4).
+- *Closed, then reopened and closed again.* The representation of a constraint
+  program (§2.5, §3.1) is `OMNI_TAG_CONSTRAINT` at `0x32`, and it was a packed
+  array of 16-byte records with no header, no per-record identity, and `operand` as
+  a walk index. That could not express `layoutlanguage.md` §3, because a program
+  there is a tree and a flat record array has nowhere to put a child program, so
+  the payload became the tree: an array of spaces, each a framed name and value,
+  with a nested `constraint` wherever a space names a nested layout. The tag stayed
+  so a core reader can recognise a layout program without a schema (`configstorage.md`
+  §4).
 - *Closed.* A `binding` carries an action argument (§2.10 item 2): a 24-byte
   header plus a positional string array, `args_ref == OMNI_REF_NONE` when there
   are none (`configstorage.md` §4, `helpers.md` §6.2).
-- *Closed.* The number of slots (§4.4) is `OMNI_LAYOUT_SLOT_COUNT = 24`, the
-  whole Greek alphabet, user layouts only, named in the same namespace but not
-  including them.
-- *Closed.* The client-rule record: `OMNI_TAG_CLIENT_RULE` at `0x33`, a 24-byte
-  header plus the value its effect applies, with `scope` separating
-  map-once from re-resolve-on-reload.
+- *Closed, then reopened and closed again.* Layout naming (§4.1 to §4.4) was 24
+  Greek-letter slots for users and descriptive names for built-ins, which bought
+  shadowing-proof names at the cost of a fixed capacity, a sharing hazard, and a
+  `list_layouts` reply that could only show `delta`. It is now free-form user names
+  validated against the set the compositor registers at startup, seeded from
+  `OMNI_LAYOUT_BUILTIN_NAMES`. A layout name is a `string` rather than an
+  `enum`, the reserved check is a guard rather than a type, no user layout is
+  seeded at boot, and the number of built-ins is a registration count rather than a
+  constant.
+- *Closed, then reopened and closed again.* The client-rule record:
+  `OMNI_TAG_CLIENT_RULE` at `0x33`, once a 24-byte header plus a payload, matching
+  a client by appid and title and carrying an `effect`, a `target` and a `scope` for
+  map-once versus re-resolve-on-reload. `layoutlanguage.md` §3.6 settled that a rule
+  set is reached by name and never matches a window, so the matchers, the target and
+  the scope are gone, the namespace carries the effect, and the record is the
+  language's own keys in 24 bytes with no payload (`configstorage.md` §4). That
+  closure is still correct about the record and is now narrower than it was: a
+  *set* is still reached by name, and what a match selects is which sets a client
+  is bound to, not the contents of a `0x33` value. `windows.md` §9.2 and §9.5 settle
+  the selection, so `0x33` stays a pure solve-time constraint and the matcher lives
+  in the window-rule block rather than returning to this record. The binding is
+  order-free because the constraints compose as a weighted set; the resolutions
+  attached to it are not order-free, because a resolution is a mutation (§3.2), and
+  their order is the rule list's name order (`windows.md` §9.7), which is the
+  filename-order convention other Linux tools already use and needs nothing added
+  to it, rather than a field that would have to be validated.
 - *Closed.* Whether `save` gains a scope (§4.6). It takes an optional key-path
   pattern and defaults to the whole block, so the authoring workflow's extraction
   step is `save omniwm.layouts.delta.*` for a slot named delta. The exclusion test
@@ -1685,7 +1812,7 @@ mapping phase later made it eight rather than seven.
   determinism requirement now constrains whatever that answer is.
 - The priority bands are ordinal and the values inside a band are not (§3.2).
   `omni_layout.h` separates them by a decade so a band dominates the compromise,
-  which makes `OMNI_CONSTRAINT_PRIORITY_DOMINANT` a weight and not a guarantee.
+  which makes `OMNI_SOLVER_WEIGHT_DOMINANT` a weight and not a guarantee.
   Nothing is hard, `generaldesign.md` §7's "soft and prioritised" is right, and
   the constant is now named `DOMINANT` rather than `REQUIRED` so that it cannot
   be read as a promise.
@@ -1708,6 +1835,46 @@ mapping phase later made it eight rather than seven.
   contributes only its clients. `generaldesign.md` §8's window rules seed those
   overrides, which the document should say rather than leave
   a config author to discover.
+- *Closed, by Mango's implementation, and it turned out to be a composition
+  order rather than a conflict rule.* The three routes §2.5 names reach one
+  overridden value, and the order they compose in was the unstated half of what
+  `windows.md` is asked for. `client_apply_rules` at `mango-dev` `d5a0e1e` scans
+  `config.window_rules[]` by index and applies **every** match rather than stopping
+  at the first, so the rule is array order with the later entry winning per field
+  and there is no first-match-wins case to write down. The determinism requirement
+  this has to satisfy is met for free, because the order is an array index and not a
+  hash.
+  Tag contributions are the one thing that is not an override, and they do not
+  contradict `configstorage.md` §1's last-writer-wins: each match ORs its tags into
+  a local and the union is written once, so the key is still assigned exactly once
+  by one commit. That distinction is the whole reason the rule can be adopted
+  without amending the store, and a paraphrase that dropped the local would turn it
+  into a contradiction.
+  Two details travel with the order. A rule that supplies a value sets a sticky
+  "custom value" flag beside it, and it is that flag rather than the value that
+  arrange consults later, so a rule is not re-read on every pass. And a rule marked
+  once-only records that it fired **on the rule**, in a field shared by every
+  client that matches it, so a second window matching the same rule is skipped as
+  already applied. That last one is a defect, and `windows.md` §9.4 does not copy
+  it: under this design a rule is applied once per client by construction, so
+  "once" is the only behaviour and needs no flag, and the per-client versus
+  per-rule distinction Mango cannot express is moot rather than settled.
+- *Closed, by Mango's implementation, and the mechanism is settled even though the
+  representation is not.* Teardown during a pass is an exclusion and never a
+  cancellation. `handle_client_unmap` sets a per-client kill flag, every scope
+  predicate in `include/mango/manage/client.h` tests that flag and drops the client
+  (`ISTILED`, `ISNORMAL`, `ISFAKETILED`, `ISSCROLLTILED`, `VISIBLEON`, `TAGMATCH`),
+  and nothing in `arrange` aborts, so a dying client simply stops being an input
+  and there is never work in flight to cancel. `pending_kill_client` does not set
+  the flag; it only sends the close and is guarded by it, which is worth knowing
+  because it means the flag means "gone", not "going". What makes this safe for
+  animation is that the previous values are kept per client as explicit `old_*`
+  fields (`old_stack_proportion`, `old_ismaster`, `old_grid_col_per`,
+  `overview_backup_geom`) rather than recomputed.
+  This settles the mechanism and leaves the representation alone: §7.7 keeps visible
+  scope as a set, so an exclusion here is a fact evaluated when the input set is
+  formed, and it is the same set the pass would have seen had the client never
+  arrived. Nothing in the mechanism requires the flag to be stored as a flag.
 - *Closed.* Tag identity (§3.5). A tag is a catalog entry and is named by
   `entry_ref`, which is the shape a client already has, and per-tag layout
   selection is a value under the tag. `tags.md` §2 and §4 own both. The
@@ -1744,16 +1911,23 @@ mapping phase later made it eight rather than seven.
   `helpers.md` registration table with a band and an `enable_key`, or is wired
   into `core/server.c` like the store. §3.7 needs it because a wrong band is an
   init failure rather than a detected violation.
-- The built-in programs need somewhere to live. `devnotes/layoutsystem.md` was
-  scaffolding for exactly this and was removed once this document took its
-  place; recreating it to hold the compiled-in programs is the right call, and it
-  is a new document rather than a correction to this one. The boundary is now
-  decided and the document has to be written to it. A built-in is compiled into
-  the compositor, and the requirement on it is that it is written over mechanisms
-  the engine already has: a layout, its registration, and a recompile, with no
-  new solver mechanism and no new tag. Most of them are a value of the same
-  `0x32` tag a user slot holds, differing only in that they are compiled in
-  rather than read from a key. The ones that are not are the two that forced the
+- *Closed, and the conflict was between two halves of this bullet rather than
+  between documents.* The built-in programs need somewhere to live, and this bullet
+  used to say `devnotes/layoutsystem.md` should be recreated to hold them, which
+  contradicted the deletion of that file. Neither half was right: a new document is
+  not needed because **the designs already exist**, in `layout-test-examples.md`,
+  which holds a mock program for most of the required set. The first built-ins are
+  therefore a transcription from that suite into the same shape a user config has,
+  which is also what makes §3.4's unified write path the obvious implementation
+  rather than a convenient one: the suite's programs are already in the config's
+  shape, so promoting one to a built-in is a change of where the value comes from
+  and not a change of form.
+
+  What the requirement on a built-in is, unchanged: it is written over mechanisms
+  the engine already has, a layout and a registration and a recompile, with no new
+  solver mechanism and no new tag. Most of them are a value of the same `0x32` tag
+  a user layout holds, differing only in that they are compiled in rather than read
+  from a key. The ones that are not are the two that forced the
   decision: a stack is a group plus rules plus a one-axis stack (§7.1), and a
   scroller is a viewport (§7.2), and both of those are a nest and a transform
   that already exist rather than per-layout code. So the test the document should
@@ -1771,7 +1945,7 @@ built-ins document.
 
 | document | section | edit | state |
 |---|---|---|---|
-| `include/shared/omni_layout.h` | §7 tag constants | the new tag constants, and `OMNI_TAG_MAX_KNOWN` moves | done, 0x32 and 0x33 |
+| `include/shared/omni_layout.h` | §7 tag constants | the new tag constants, and `OMNI_TAG_MAX_KNOWN` moves | done, 0x32, 0x33 and 0x34 |
 | `configstorage.md` | §4 type tags | rows for the new tags, framed, with their payload shapes | done |
 | `configstorage.md` | §12 guards | a semantic guard per record, and a key-path rule that an `omniwm.layouts.<name>` component is checked against the closed set | partial, the tag-range guard is done, the record guards are not |
 | `ipc.md` | §3 type encodings | a wire encoding, which has to be the same shape the file encoding uses | done |
@@ -1780,5 +1954,5 @@ built-ins document.
 | `helpers.md` | §6 | a sentence saying the layout-name table is a compile-time constant and deliberately not a registry | done, §6.2 |
 | `generaldesign.md` | §7 | the degradation wording, which said the solver drops the lowest-priority constraint | done, now weighted minimisation |
 | `generaldesign.md` | §7 | the built-in wording, which said a built-in is a preset constraint program and adding one is a config change | done, now compiled in with no new solver mechanism |
-| `devnotes/layoutsystem.md` | new | the compiled-in built-in programs; removed as scaffolding, to be recreated | open |
-| `include/shared/omni_layout.h` | §7 constraint constants | rename `OMNI_CONSTRAINT_PRIORITY_REQUIRED`, which is a weight and not a guarantee | done, now `OMNI_CONSTRAINT_PRIORITY_DOMINANT`, with the header comment stating that no band is hard |
+| built-in programs | new | the compiled-in built-ins needed a document to live in; `layoutsystem.md` was deleted as scaffolding, and the programs are specified by `layout-test-examples.md` and transcribed from it instead | done, see §3.4 |
+| `include/shared/omni_layout.h` | the solver weight bands, `OMNI_SOLVER_WEIGHT_*` | rename `OMNI_CONSTRAINT_PRIORITY_REQUIRED`, which is a weight and not a guarantee | done, now `OMNI_SOLVER_WEIGHT_DOMINANT`, with the header comment stating that no band is hard |
