@@ -1,5 +1,8 @@
 # Phase 03: `input.md` finalization
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started. The document exists; this phase is what it still owes.
 
 `input.md` was written as a porting map. The design work left in it is four

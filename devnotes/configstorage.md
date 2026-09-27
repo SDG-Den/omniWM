@@ -696,11 +696,22 @@ these bytes be read as what they claim to be? None of them asks whether the valu
 is *sensible*, because that is not a question about bytes and the answer belongs
 to whoever uses the value.
 
-- **L1 header.** `magic`, `format_version`, `header_size`, section constants,
-  `state` in {CREATING, READY}, and `commit_state` readable. A CREATING block
-  is `OMNI_ERR_NOT_READY`; a BROKEN block is `OMNI_ERR_STORE_BROKEN`. Both are
-  refusals, not corruption, and neither is logged per entry because there is no
-  consumer state to log into yet.
+- **L1 header.** Before any field of the header is read, it has to parse as this
+  build's header: `magic == OMNI_MAGIC`, `format_version == OMNI_FORMAT_VERSION`,
+  and `header_size` and the section constants as `configstorelayout.md` §2 defines
+  them. Those four are a precondition on mapping rather than a tier invariant, and
+  `configstorelayout.md` §2 is where that distinction is already drawn: a wrong
+  value in any of them means the bytes are not this format at all, so there is no
+  header left to check a field of. L1 then checks the header as bytes.
+  `block_size` is a multiple of 4096 and between `header_size` and the maximum. The
+  two value words are value sets, and each refuses a value outside its own:
+  `state` in {CREATING, READY, BROKEN} and `commit_state` in {IDLE, ACTIVE,
+  GROWING, BROKEN}. The futex protocol and the writer identity it carries are the
+  next two. The last three are the relationships between the value words that make
+  a commit's stage changes coherent, and the terminality of a BROKEN block. A
+  CREATING block is `OMNI_ERR_NOT_READY`; a BROKEN block is
+  `OMNI_ERR_STORE_BROKEN`. Both are refusals, not corruption, and neither is
+  logged per entry because there is no consumer state to log into yet.
 - **L2 section.** Each section row has `id == row`, a 16-aligned `offset`, a
   `size` that does not wrap, and a range contained in `[0, block_size)`. A
   section outside the mapping is dropped, never clamped to it. What dropping a

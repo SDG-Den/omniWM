@@ -1,5 +1,8 @@
 # Phase 12: `languages.md`
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started. P2, stages 15, 16, 17 and 18.
 
 The lowest-risk phase in the plan, and it is last because of that rather than

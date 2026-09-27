@@ -1,5 +1,8 @@
 # Phase 10: `animate.md`
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started. P1, stage 9.
 
 ## What it should contain

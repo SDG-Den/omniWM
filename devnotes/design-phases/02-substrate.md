@@ -1,5 +1,8 @@
 # Phase 02: stage 3, the substrate
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started.
 
 Stage 3 is "create shared helpers and scaffolding (core libraries, logging and

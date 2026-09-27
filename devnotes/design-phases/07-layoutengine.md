@@ -1,12 +1,17 @@
 # Phase 07: `layoutengine.md` finalization
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md). This stub is the one exception on the record: it was
+corrected against `layoutengine.md` in the same pass that deferred `01-testing.md`,
+because the owner asked for it. See that rule.*
+
 Stub. Not started. The document exists and is the most complete of the set: §11's
 twenty-one items are all closed or deferred, so nothing is carried forward there,
 and the questions that remain are in its body, in §3 and §4 and §7.
 
 The stage is 6 and the priority is P0, and this is the phase where the design has
 the most committed claims, so it is worth being explicit that the work is not
-writing a solver. It is closing the eight items below and the eleven in the second
+writing a solver. It is closing the eight items below and the twelve in the second
 section, and it records four that phase 00 closed rather than reopening them.
 
 ## What it should contain
@@ -55,29 +60,43 @@ to exist before decorations, and the answer changes what this phase owes
 `decorate.md`. If the node model is written first, this phase has to state what a
 node is, because that is the solver's output shape.
 
-## The eleven questions in the body
+## The twelve questions in the body
 
 `layoutengine.md` keeps its open questions in two places and the two do not
-correspond. §11 is clear; the body is not. These eleven are the body's, they are
-all part of the layoutengine design, and they are finalized here, in items 9 to 19.
+correspond. §11 is clear; the body is not. These twelve are the body's, they are
+all part of the layoutengine design, and they are finalized here, in items 9 to 20.
+
+Every one of them is an `**Open:**` marker in the body as of 2026-09-27, and the
+count is derived rather than asserted, by the command `layoutengine.md` §1 gives.
+A row here that no marker backs is a row this phase would work on for nothing,
+and a marker with no row here is an unowned question.
 
 | item | where | the question | what it is entangled with |
 |---|---|---|---|
 | 9 | §3.2 | whether total residual violation is reported as a diagnostic | nothing; §3.2 calls it a logging question and not a protocol one, so it cannot change the socket's error set |
-| 10 | §3.3 | whether constraints may reference each other, and whether arithmetic on operands is expressible at all | the two halves are one question: if operands can be numbers rather than names, cross-references are a different problem |
-| 11 | §3.3 | whether the viewport sits above the solver rather than inside it, and whether that survives contact with the solver | items 18 and 19; the separation is what they assume |
+| 10 | §3.3 | whether constraints may reference each other, and whether arithmetic on operands is expressible at all | one marker covers both halves, and that is the reconciliation rather than a coincidence: if operands can be numbers rather than names, cross-references are a different problem, so the two are decided together or not at all |
+| 11 | §3.3 | whether the viewport sits above the solver rather than inside it, and whether that survives contact with the solver | items 19 and 20; the separation is what they assume |
 | 12 | §3.4 | which of the §8 built-in set ship at stage 6 | `README.md` stage 6 says a single demo layout, and the section argues a one-axis stack in a nested group is the cheapest genuine one |
 | 13 | §3.4 | whether a layout name denotes a seeded key, an entry reference, or an `enum` constant | §3.5, which needs a name that means something per tag, and item 1's vocabulary, since `wm.cycle_layout` already passes one |
 | 14 | §3.6 | of a client in two scopes, which of the two constraint sets the solver is responsible for | `tags.md` §8.2 answers the membership half, since the scratchpad withholds participation rather than membership; what is left is the solver's input set |
 | 15 | §3.7 | what triggers a pass | `windows.md` §4 defers to it explicitly, and it is the trigger half of item 1 |
 | 16 | §3.7 | when the first pass can run, before any client exists | the residue of §3.7's old activation-order bullet, whose band half was closed by §2.4 and §11 when the engine became a core service; distinct from item 5, which is the order layouts activate in when one solve touches several |
-| 17 | §4.5 | whether a slot may carry a user-facing label beside its letter | nothing |
-| 18 | §7.2 | the coordinate space behind the viewport | §7.2 says outright that this is the hard part; items 11 and 19 |
-| 19 | §7.5 | whether a window's size is a fraction of the canvas or an absolute size, and whether the two can be mixed | item 18, since both are statements about the space the fraction is a fraction of |
+| 17 | §3.7 | whether the pass is idempotent for an unchanged input set | item 3. §3.7 carries it as an `**Open:**` bullet, so by the table's own scope it is the body's and belongs in this table; the phase item above is the work, this row is the obligation |
+| 18 | §4.5 | whether a slot may carry a user-facing label beside its letter | nothing |
+| 19 | §7.2 | the coordinate space behind the viewport | §7.2 says outright that this is the hard part; items 11 and 20 |
+| 20 | §7.5 | whether a window's size is a fraction of the canvas or an absolute size, and whether the two can be mixed | item 19, since both are statements about the space the fraction is a fraction of |
 
-Seven of the eleven are independent of each other. Two chains run through them:
-item 13 blocks §3.5, and items 11, 18 and 19 are three statements about one
-coordinate space and are cheapest decided together.
+Seven of the twelve are independent of each other. Three chains run through them:
+item 13 blocks §3.5; items 11, 19 and 20 are three statements about one
+coordinate space and are cheapest decided together; and item 17 is decided with
+item 3, because deciding whether a second solve changes anything is the same work
+as deciding that the pass may be called defensively.
+
+**Two questions in the body are deliberately not in this table**, and they are not
+in the count either. Re-entrancy and the overlapping-update question are
+`**Deferred:**` markers in §3.7, both belonging to phase 10, and `layoutengine.md`
+§1's row 3.7 names them as deferred rather than open. They are recorded here so
+that this phase does not mistake their absence for a decision.
 
 ## What it resolves
 
@@ -99,9 +118,9 @@ produces.
 - Whether the block carries an arranged layout has an answer, and if it does,
   `configstorelayout.md` §11 says which of the two a reader is looking at.
 - The determinism claim is stated, and `tags.md` §9 and §7.7 agree on it.
-- All eleven questions in the body's table are decided in the document rather than
+- All twelve questions in the body's table are decided in the document rather than
   flagged in it, which is the only way to tell a finished document from one whose
-  §11 is finished.
+  §11 is finished, and which the marker count in `layoutengine.md` §1 confirms.
 
 ## Reconciliation note, 2026-09-27
 
@@ -112,12 +131,12 @@ open-items and six still open" while item 6 said §11 carried no open item at al
 
 The substantive part of the same pass is that `layoutengine.md` carries open
 questions in its body that no single section collects, so a reader checking §11
-alone would conclude the document is finished. As of this note they are the eleven
+alone would conclude the document is finished. As of this note they are the twelve
 in the table above, and this note is where the count was first derived: the pass
 counted them section by section and the section list is §3.2, §3.3 twice, §3.4
-twice, §3.6, §3.7 twice, §4.5, §7.2 and §7.5, which is eight sections and eleven
-questions. The first draft of that count named §4.6 and §4.7, which are not where
-the questions are.
+twice, §3.6, §3.7 three times, §4.5, §7.2 and §7.5, which is eight sections and
+twelve questions. The first draft of that count named §4.6 and §4.7, which are not
+where the questions are.
 
 The same pass closed two questions that were not on the list, because §4.7 pointed
 at questions §3.5 and §3.6 had already answered: a tag names a layout and a monitor
@@ -127,15 +146,21 @@ open" over two bullets of which the first was struck through and the second said
 the answer was a requirement, and it corrected the §1 status table, which still
 described §3.4's mechanism as unstated after the section had stated it.
 
-Re-entrancy is the one question deliberately outside both lists, and idempotence
-is the one that is in this stub rather than in the document's body: it is item 3
-above, and `layoutengine.md` §1 defers re-entrancy to phase 10.
+Re-entrancy is the one question deliberately outside the table, and idempotence is
+the twelfth row of it. The stub used to say the reverse of both: that re-entrancy
+was outside the lists and that idempotence was *in this stub rather than in the
+document's body*, which was false. `layoutengine.md` §3.7 has carried
+idempotence as an open bullet since it was written, so by this table's own scope
+statement, "the body's questions", it was always a missing row rather than an
+item that lived here instead. Correcting the note alone would have left the table
+short by its own rule, so the row was added; the phase item above is the work and
+row 17 is the obligation, and the two are not a duplication.
 
-**Ownership of the eleven was decided on 2026-09-27**, and it is the reason the
-table sits in this stub rather than in the document. All eleven are part of the
+**Ownership of the twelve was decided on 2026-09-27**, and it is the reason the
+table sits in this stub rather than in the document. All twelve are part of the
 layoutengine design and are finalized here. That is not a formality: the previous
 state had this phase's preamble answering the ownership question by assertion,
 with a count of six that was wrong, while the questions themselves were distributed
 across eight sections of a document a reader is told to check at §11. An item with
 no owner is not a smaller version of an unfinished phase, it is a phase that
-reports itself finished, and the eleven were eleven instances of it.
+reports itself finished, and the twelve were twelve instances of it.

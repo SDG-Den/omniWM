@@ -6,6 +6,36 @@ not detailed plans yet. The point of writing them down now is that the decision
 state is tracked, so a later session picks up a phase rather than re-deriving
 which decisions are open.
 
+## This directory is a plan, not a specification
+
+The design lives in the `devnotes` documents. This directory says what is left to
+do to them, in what order, and why. **Nothing here overrides a document.** Where a
+stub and a document disagree, the document is right and the stub is out of date,
+and the repair goes in the document.
+
+Two consequences, both stated here because a plan that gets read as a
+specification gets audited instead of used.
+
+**A stub is a working note, and its claims about other documents are not findings.**
+They are one reading of those documents on the date the stub was written. A section
+citation, a count, a "Done when" clause: all provisional, all re-derived when the
+phase starts.
+
+**The dated sections at the end of these files are work logs, and they are not
+maintained.** "Reconciliation note", "Re-verification after this pass", the
+audit sections: each one records what a pass found at the moment it ran, and a
+number in one of them describes that moment and nothing else. They contradict the
+live sections above them, and they are supposed to. A log edited to agree with a
+later state would stop being a record of what happened, so the contradiction is the
+property and not a defect in it. Three things follow, and all three are settled:
+
+- Do not reconcile a work log against a live section.
+- Do not treat a work log disagreeing with a live section as a finding.
+- Do not spend a pass on one.
+
+The only thing worth carrying out of a work log is the decision it ended in, and
+that is written into a document or a stub rather than left in the log.
+
 ## What this is derived from
 
 `missing-devnotes-topics.md` is the inventory: thirteen rows, each a document
@@ -24,7 +54,7 @@ being tracked separately, so there is one place to look:
 | `helpers.md` §11 | 5 bullets, **none open**: 2 are struck and closed, and the other 3 restate decisions `§6.1` or `§14` already fixed. The `omni_event` payload question that was the one genuine item is closed — the field set is final and is not extended |
 | `configstorelayout.md` §14 | 8 bullets, **none open**: the `get` result vocabulary is struck and closed, and the remaining 7 are v1 capacity choices with stated rationales rather than questions |
 | `configstorage.md` §14 | 11 bullets in two groups, 8 in §14 and 3 in §14.1. §14 records 3 things fixed and 5 deliberate deferrals, none of them a question. **§14.1 is a second group and is not a deferral**: 3 store operations (`tags.md` §5 and §7 oblige) recorded as *required* rather than deferred, with the subtree exchange called out as not being a special case of the subtree delete |
-| `layoutengine.md` §11 | 21 bullets: 20 closed or struck, 1 deferred to phase 10 (mid-animation retarget, which phase 10 now owns), and **none open**. The stored-or-derived membership bullet that used to be the open one is closed as **stored**, by the same decision `tags.md` §9 records |
+| `layoutengine.md` §11 | 21 bullets: 19 closed or struck, 1 deferred to phase 10 (mid-animation retarget, which phase 10 now owns), 1 deferred to phase 07 (the pan and zoom space's position relative to the solver, which §3.3 and §7.2 hold open and which phase 00 declined to decide), and **none open**. The stored-or-derived membership bullet that used to be the open one is closed as **stored**, by the same decision `tags.md` §9 records. The body is a different matter and is not counted here: twelve `**Open:**` markers, derived by the command `layoutengine.md` §1 gives, and tabulated in `07-layoutengine.md` |
 | `tomlparser.md` §11 | 5 bullets, none open: 1 delegated to the upstream TOML specification, 1 out of scope (datetime arithmetic), 1 decided in favour of `duration`, 1 that states the per-key fallback rule as closed, and 1 that separates a malformed key from a blank one |
 | `windows.md` §13 | 2 groups, **none open**: 5 numbered items all closed or deferred-with-shape-fixed, and a closing paragraph that settled the override-representation blockers. The one thing recorded as inferred rather than decided is where a deferred tag-seed write is kept, and `§9.3` names it |
 | `tags.md` §9 | 3 "not covered" bullets, one placement decision recorded separately, then 4 struck and closed, **none open** |
@@ -39,6 +69,39 @@ way: client-set membership is stored, not derived, because `layoutengine.md` §3
 makes the solve a pure function of committed state and a derived membership is a
 `HashSet`-shaped iteration order that no golden-file test could pin. Neither blocks
 another phase, and the choice costs one write per membership change.
+
+**A row in that table is not a summary of a document, it is a checkpoint.** Where
+a document carries open questions outside its own open-items section, the table
+says so and points at the phase that owns them rather than counting them into the
+section it is describing: `layoutengine.md` §11 is finished and its body is not,
+and no single number covers both.
+
+**A stub is a checkpoint, not a claim of accuracy.** Every phase stub is
+re-evaluated as a whole before its phase starts, and **by default the
+inconsistencies that pass finds are left until then.** The reason is that the two
+halves of a stub have different standing. Its *scope* — what the phase should
+contain and what it resolves — is an owner's decision and does not go stale. Its
+*accuracy about other documents* is derived, and the documents move underneath it:
+a citation can start naming the wrong section, a count can start disagreeing with
+the body, and a "Done when" clause can name a decision that a later phase has
+already taken. Only the second kind waits, and it waits because nothing depends on
+a stub until its phase runs, and repairing it in the meantime costs a pass over
+the same file twice and produces a record of edits the re-evaluation would have
+made anyway.
+
+The default is a default, not a prohibition, and the record has already exercised
+it once. On 2026-09-27 the third audit raised findings against two stubs at the
+same time. `01-testing.md` attributes the fuzz target to `configstorage.md` §14
+when §12.6 names it, and that was **deferred to phase 01**, on the reasoning that
+phase 01 begins by reading its stub against the documents as they are then.
+`07-layoutengine.md` was **corrected in the same pass** — its table, its counts and
+its idempotence note were all wrong about `layoutengine.md`, and the first two were
+accuracy repairs rather than scope, so the tidy distinction in the paragraph above
+is not what actually happened. The rule to follow is therefore the narrower one:
+**do not repair drift in a stub you were not asked about, and when you are asked,
+repair what was asked and record which kind of edit it was.** Both stubs carry a
+line under their title saying they are not expected to be accurate about other
+documents until their phase starts.
 
 ## What the design work is actually for
 

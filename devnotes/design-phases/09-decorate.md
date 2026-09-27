@@ -1,5 +1,8 @@
 # Phase 09: `decorate.md`
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started. P1, stages 8 and 11.
 
 ## What it should contain

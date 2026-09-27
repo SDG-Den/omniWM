@@ -1,5 +1,9 @@
 # Phase 01: `testing.md`
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md). This stub has a known wrong citation, recorded in
+`00-reconciliation.md`'s resolution log rather than repaired here.*
+
 Stub. Not started.
 
 **Stage 1's one missing document.** `missing-devnotes-topics.md` names it as the

@@ -730,18 +730,38 @@ actions as strings, resolved via the registry at dispatch time.
 
 ### save
 
-Serialise the current configuration. A read-only operation, but still a
-snapshot: `save` must observe one commit-id-stable state, not a mixture of
+Serialise the current configuration to a TOML file. A read-only operation, but
+still a snapshot: `save` must observe one commit-id-stable state, not a mixture of
 several.
 
 ```
-{ "cmd": "save", "path": "/tmp/omni.toml", "id": 5 }
--> { "ok": true, "result": { "path": "/tmp/omni.toml", "entries": 214,
-                             "skipped": 2 }, "epoch": 7, "commit_id": 99, "id": 5 }
+{ "cmd": "save", "pattern": "omniwm.layouts.delta.*", "path": "/tmp/delta.toml",
+  "id": 5 }
+-> { "ok": true, "result": { "path": "/tmp/delta.toml", "entries": 4,
+                             "skipped": 0 }, "epoch": 7, "commit_id": 99, "id": 5 }
 ```
 
 - `path` optional; defaults to the config file the WM booted from, or the
-  standard path if none.
+  standard path if none. `pattern` optional; absent means the whole block.
+- **`save` is a facade operation and the reason is §7.1.** The two arguments are a
+  key pattern and an output path, and together they express "this part of the
+  shared memory, as a file". A client working at the block level does not call
+  `save`; it reads the keys and writes them, and to produce the same file it has to
+  re-derive the classification, take a coherent view itself, and serialise the type
+  tags. What the block makes expressible is the *query* — every entry that is
+  neither window-dependent nor ephemeral, under this prefix — because the scope of
+  a value is carried by its own flags rather than by a schema, and the facade turns
+  that into one call. This is the clearest case in the design of a layer of
+  indirection creating a capability rather than only repackaging one.
+- The pattern is the one `configstorage.md` §13 defines: a dotted prefix with a
+  single trailing `*` meaning the subtree below it, and no general glob. The
+  exclusion test applies inside a narrowed scope exactly as it does at full width,
+  so narrowing cannot leak window-dependent or ephemeral state.
+- What comes out is a TOML file the built-in parser can read back, which is what
+  makes the pair of arguments a round trip rather than an export. Loading it again
+  is `reload`, so `save` narrowed to a layout followed by `reload` of that file is
+  how a single layout is captured and restored, and neither half needs a
+  snapshot facility of its own.
 - The snapshot is taken under the read futex, validated by the L1-L4 guard
   tiers, and the file is then written from that snapshot outside the lock. A
   `commit_id` changing mid-save does not restart or corrupt the save; the
@@ -753,9 +773,13 @@ several.
   exists; the earlier `constructions` and `failed` names described line counts,
   which is not what save does.
 - The file is written to a temporary path and renamed into place, so a failed or
-  interrupted save cannot leave a truncated config where a working one was.
+  interrupted save cannot leave a truncated config where a working one was. The
+  temporary file's name and lifetime are an implementation choice of the save
+  path, not a design question; nothing outside it observes the name.
 - Window-dependent and `EPHEMERAL` entries are excluded, per §13 and the
-  `save` classification.
+  `save` classification. This is a file, not block state, and deliberately so: a
+  snapshot section would be a block-layout change, and a file reuses the `save`
+  path unchanged.
 
 ### reload
 
@@ -891,16 +915,25 @@ never cleared, which is what makes "set generally and for one window" work
 across a reset. `EPHEMERAL` entries, such as process bookkeeping, are also left
 alone.
 
-Soft reset is reversible:
+Soft reset is two steps and takes no snapshot of its own:
 
-1. Write the current affected entries to a new temporary file, per `save`
-   semantics. The response and the journal event both name the path.
-2. Clear the affected entries.
-3. Re-run the config that was booted from.
+1. Clear the affected entries.
+2. Re-run the config that was booted from.
 
-To revert, `reload` that path. The snapshot is a file, not block state, because
-a snapshot section would be a block-layout change and the file reuses the
-`save` path unchanged.
+**There is no snapshotting here, and the absence is the design.** A soft reset is
+not reversible by itself, and nothing in the block or on the socket makes it so. A
+caller that wants a way back asks for one explicitly, by `save`-ing first: `save
+omniwm.* /tmp/before.toml` then `reset soft` is reversible, because `save` is
+already a narrowed export of the block to a file and `reload` already reads one
+back. Both of those exist for other reasons, and a reset that reused them needs no
+mechanism of its own. Building a snapshot into the reset instead would have meant
+a block-layout section, a temp-file lifetime policy, and a path in the event, for
+a capability the facade already had.
+
+That is §7.1 in miniature. The block's generality is what makes "write the current
+configuration to a file" a single existing call rather than a feature, and a
+feature added to the reset path would have been the same operation built twice,
+in the one place where the second copy is hardest to remove.
 
 Hard reset drops and rebuilds the entire shared-memory block from config. The
 block is destroyed and recreated, so the `epoch` changes, which is exactly the
@@ -919,7 +952,7 @@ applier that only watches the epoch will not notice a soft reset.
 | catalog | affected entries cleared | empty, then re-seeded |
 | journal | continues, `wm.reset` appended | **new ring, new `epoch`** |
 | every outstanding reference | stays valid | **invalid** |
-| reversible | yes, via the snapshot | no |
+| reversible | no, not by itself; `save` first and `reload` after | no |
 
 The `epoch` column is the important one. A soft reset preserves the block, so
 every `(entry_id, entry_generation)` a client holds, and every `region_ref`, and
@@ -935,11 +968,10 @@ That is correct, and it is a real obligation on extension authors rather than
 something the store can infer, so it is stated rather than hidden.
 
 To make both modes observable to any applier, and not only to the caller, both
-append a journal `EVENT` with category `wm.reset`, carrying `mode`, the new
-`commit_id`, and for `soft` the snapshot path. An applier watching `wm.reset`
-re-runs its init. Without this, soft reset would work only for the built-in
-TOML path, because that path happens to be the caller, which is the coupling
-this design exists to remove.
+append a journal `EVENT` with category `wm.reset`, carrying `mode` and the new
+`commit_id`, and nothing else. An applier watching `wm.reset` re-runs its init.
+Without this, soft reset would work only for the built-in TOML path, because that
+path happens to be the caller, which is the coupling this design exists to remove.
 
 - `mode` absent defaults to `soft`, so the destructive form is never reached by
   accident. An unrecognised value is `PARAM_INVALID`.
@@ -1045,6 +1077,58 @@ necessarily already seen the new field value.
 
 ## 7. Relationship to other facades
 
+### 7.1 The indirection is a capability, not just a convenience
+
+The socket and the TOML parser are both **layers of indirection over the shared
+memory**, and the usual reading of that arrangement is a cost: two facades to
+maintain, both of which could have been direct block access. The design takes the
+opposite position, and the reason is worth stating in one place because it is the
+justification for more than one decision in this document.
+
+Direct block access is a *capability floor*. Anything a facade can do, a program
+linking the block can do too, and usually more cheaply, because it skips the
+serialisation. So a facade earns its existence only by offering something the
+direct route does not: a language, a transport, a file format, or an operation
+that would be tedious or unsafe to express as individual reads and writes. The
+value of the layer is not that it hides the block. It is that the shape of the
+block makes the operation *expressible* at all, and the layer then exposes it in
+one call.
+
+`save` is the worked example, and it is the reason this section exists. Extracting
+part of the shared memory and writing it to a file is a **function of the facade,
+implementable only because the block works the way it does.** The block is a
+catalog of typed values under dotted keys, with a scope expressed by exclusion
+rather than by a fixed schema, and the exclusion test is one flag pair
+(`configstorage.md` §8). That is what makes "every entry that is not
+window-dependent and not ephemeral, under this key prefix" a thing that can be
+*stated* rather than enumerated: the operation is a query over the block's own
+shape, not a list of keys somebody maintained. A client working at the block level
+does not get a `save` verb. It reads the keys and writes the keys, and to produce
+the same file it has to re-derive the classification rule, honour the
+commit-id-stable read protocol to get a coherent view, and serialise the type tags
+itself. All of that is real work, and all of it is work the facade does once.
+
+So the same is true of an external parser, interpreter, library or application
+that talks to the block directly: it is a *user* of the shared memory, not a
+substitute for it, and the operations such a user can build are richer than the
+verb list suggests precisely because the block is general. The TOML parser is
+itself an example, at one remove: it cannot express anything the socket cannot,
+because both are facades over the same catalog, but it makes the whole surface
+reachable from a file a person edits, which is a different audience rather than a
+different capability. The project's API-driven premise depends on this ordering.
+The block is the interface; the facades are consumers of it that happen to make
+particular consumers' jobs easier; and a facade that grew a capability the block
+does not have would be the actual design error, because it would mean the block
+cannot support the thing its own consumers want.
+
+Two consequences follow, and both are checkable rather than aspirational. A verb
+in §4 that cannot be expressed as reads and writes against the block is a verb
+belonging somewhere else. And an operation that *is* expressible directly but is
+tedious or unsafe that way belongs here, which is why `save` takes a key pattern
+and a path and produces a file rather than leaving each caller to assemble one.
+
+### 7.2 The facades that exist
+
 - The built-in TOML parser is a facade in the same sense (in-process, over the
   block, per configstorage.md §11), upstream of `set`/`exec` only. Both reuse the
   same typed-value encoder/decoder defined in §3; `tomlparser.md` binds TOML
@@ -1080,9 +1164,16 @@ necessarily already seen the new field value.
   §watch. Richer matching, if reload ever needs it, would be a new grammar
   rather than an extension of this one, because a client already relying on `\*`
   being a literal asterisk constrains what any extension may mean.
-- The `wm.reset` journal event's category name and its field set are fixed here,
-  but the temp-file naming and lifetime for a soft-reset snapshot are not; they
-  belong with the transaction and readiness pass.
+- The `wm.reset` journal event's category name and its field set are fixed here.
+  **The temp-file naming and lifetime that used to appear on this list are gone,
+  and the bullet is deleted rather than rewritten, because the thing it was about
+  no longer exists.** There is no soft-reset snapshot: §reset clears the affected
+  entries and re-runs the config, and a caller that wants a way back uses `save`
+  and `reload`, which are specified in full. What remains unnamed is the
+  temporary path `save` itself writes to before renaming into place, and that is an
+  implementation choice of the save path in the same sense as the socket-path
+  bullet above: nothing outside `save` observes the name, and the atomic-rename
+  guarantee is the part that is a design decision rather than an artifact.
 - The `binding` and `client_rule` wire encodings are settled, in `helpers.md`
   §6.2, and this list used to record them as unfinished by design along with the
   `exec` argument schema, action result typing, and the runtime failure code for

@@ -37,14 +37,37 @@ each, after the update pipeline in §6 and the layout set in §8 were settled.
 | 3.4 | built-in layouts as constraint presets | mechanism stated, as one write path shared with the TOML parser; two questions in §3.4 are still open, about which of the §8 set ships at stage 6 and what a layout name denotes |
 | 3.5 | how a layout is selected per tag | **resolved.** A tag is a catalog entry holding a layout name, a monitor displays an ordered list whose head is primary, and a per-monitor tag's monitor is part of its identity |
 | 3.6 | nested layouts for groups, clusters and scratchpads | intent fixed, and the required set confirms all three cases; one question in §3.6 is still open, about which of a client's two constraint sets the solver is responsible for |
-| 3.7 | the arrange pass | **resolved except re-entrancy.** The pipeline is fixed by §6, solved storage by §2.10, the trigger is per layout as `rearrange_on_focus`, arranged storage is the stage byte in `configstorelayout.md` §11, and re-entrancy is deferred to phase 10 |
+| 3.7 | the arrange pass | pipeline fixed by §6, solved storage by §2.10, arranged storage as the stage byte in `configstorelayout.md` §11. **Four questions are still open in §3.7:** what triggers a pass, whether the pass is idempotent, when the first pass can run, and, deferred to phase 10, re-entrancy |
+
+**How the open questions in this table are counted.** Every open or deferred
+question in the body carries a marker at the point it is stated: `**Open:**` for
+one this document has not decided, `**Deferred:**` for one that is deliberately
+someone else's. A count is then a derivation from this document's own structure
+rather than a number someone wrote down:
+
+```
+sed -n '/^## 3\. What is not decided/,/^## 9\. References/p' \
+    devnotes/layoutengine.md | grep -c '\*\*Open:\*\*'
+```
+
+That is **12** as of 2026-09-27, and `design-phases/07-layoutengine.md` holds a
+table of the same twelve, one row per marker, with the section it sits in. The
+range is the body, §3 to §8, because this paragraph names the two markers and
+would otherwise be the thirteenth. The same command with `Deferred` instead
+returns **2**: re-entrancy and the overlapping-update question, both of which are
+deliberately outside that table because they belong to phase 10.
+
+A question carrying neither marker is not a question this document is carrying.
+The convention exists because the alternative was two documents asserting a count
+and disagreeing about it, which is what happened twice before it was adopted: a
+count of open questions is a conclusion, and a marker is a fact.
 
 The four rows that were open when this table was written are closed by §11's own
 record and, for 3.5, by `tags.md` §3 to §5. A table of statuses that is not
 updated when the sections below it are is worse than no table, because it is
 precisely the thing a reader checks instead of reading. The residuals named in the
 three rows above are the ones §11 does not carry, and they are phase 07's work as
-items 9 to 19, listed with their locations in `design-phases/07-layoutengine.md`
+items 9 to 20, listed with their locations in `design-phases/07-layoutengine.md`
 so that a second reader does not have to find them a second time.
 
 `layoutlanguage.md` owns the syntax: the model, the rule kinds, the keys at each
@@ -589,9 +612,9 @@ thinking in terms of dropping:
   that was too small last pass is still subject to the same constraint this
   pass, and the layout cannot permanently lose it.
 - The user is never told what was dropped, because nothing was. The only
-  remaining question in that area is whether to report total residual violation
-  as a diagnostic, which is a logging question rather than a protocol one and
-  does not need the socket's closed error set.
+  remaining question in that area is **Open:** whether to report total residual
+  violation as a diagnostic, which is a logging question rather than a protocol
+  one and does not need the socket's closed error set.
 - Unsatisfiability is not a detectable event, and that is the correct answer
   rather than a gap. There is no such thing as an unsatisfiable state, only a
   geometry with a cost. Two windows each demanding the full width produce two
@@ -684,7 +707,7 @@ the language, and it is a shorter list than this section used to carry.
   gap-around, fills-parent, which is a predicate plus an operand plus an implied
   subject. §3.1 fixes the subject as the current walk position and the operand as
   a walk index, a parent, or a literal, so "a tag or a monitor" is off the table
-  and the language is smaller than it looked. Still unstated: whether constraints
+  and the language is smaller than it looked. **Open:** whether constraints
   may reference each other, and whether any arithmetic on operands is expressible
   at all.
   `tomlparser.md` §11 already records that the config language exposes no
@@ -706,8 +729,8 @@ the language, and it is a shorter list than this section used to carry.
   into a larger space, and a viewport is a transform, not a rectangle the solver
   hands out. So the language is a language over rects and the pan and zoom
   space sits above it, which is a smaller problem than making the language
-  express a viewport. Whether that separation survives contact with the solver
-  is still open.
+  express a viewport. **Open:** whether that separation survives contact with the
+  solver.
 - The representation decision from §2.5 belonged to this question and could not
   be deferred out of it, because it is a format question. Resolved in §2.10: a
   new core tag above `0x33`, which is nearly free and was taken; an extension
@@ -791,7 +814,7 @@ it as one write path is the version that cannot drift: there is no second path t
 keep in step, and a built-in that used the seed mechanism but not the function
 would be a divergence nobody would notice until it behaved differently.
 
-- **Open: which of the §8 set ship at stage 6 is unstated.** `README.md` stage 6 says a
+- **Open:** which of the §8 set ship at stage 6 is unstated. `README.md` stage 6 says a
   single demo layout, and `generaldesign.md` §18 maps stage 6 to this document.
   On the required set, the cheapest genuine first deliverable is a one-axis stack
   in a nested group, because it needs only §7.1 and §7.3's attach mode and no
@@ -799,7 +822,7 @@ would be a divergence nobody would notice until it behaved differently.
   `layout-test-examples.md` holds a mock design for most of the required set, so the
   first built-ins are a transcription exercise rather than a design one, and §9
   already names which primitives each one needs.
-- **Open: the existing `wm.cycle_layout` example** passes a layout name
+- **Open:** the existing `wm.cycle_layout` example passes a layout name
   (`ipc.md` §exec), so names are already part of the surface vocabulary. Whether
   a name selects a seeded key, an entry reference, or an `enum` constant is
   unstated, and it interacts with §3.5 because a per-tag layout needs a name
@@ -978,8 +1001,8 @@ question, and the fourth carries the one residual this list does not close.
   `generaldesign.md` §8 says a scratchpad's windows are hidden until summoned,
   that both special tags can hold clients that are also on ordinary tags, and
   §7.7 requires a minimized client to stay on its tag's client list while being
-  in no visible scope. **Open, and the only entry here that is:** a client in two
-  scopes is in two constraint sets, only one of which is visible, and which of
+  in no visible scope. **Open:** a client in two scopes is in two constraint
+  sets, only one of which is visible, and which of
   the two the solver is responsible for is unstated. The minimized case is the
   harder one because the client is in *no* scope rather than two, so there is
   nothing for the solver to satisfy and something for a switcher to display, and
@@ -1032,25 +1055,26 @@ part the pipeline does not answer.
   it, so a reader wanting the solver's own answer must read before the animate
   step. Nothing in the design needs to, because the animator is handed the endpoint
   and a script asking where a window is wants the activated value.
-- **What triggers a pass.** `generaldesign.md` §7 says the solver produces
+- **Open:** what triggers a pass. `generaldesign.md` §7 says the solver produces
   geometry on each arrange pass, and §6 says a pass begins with a call to update
   the layout, but nothing says who makes that call. The candidates are a change
   to a constraint key, a change to the client set, a monitor or scale change, a
   tag change, a viewport change, and a user action. Per §2.7 the first is a
   journal subscription and the rest would need to be triggers as well, so this
   is also the decision about what the engine's trigger patterns are.
-- **Whether the pass is idempotent for an unchanged input set**, which decides
+- **Open:** whether the pass is idempotent for an unchanged input set, which decides
   whether it can be called defensively on every relevant commit without causing
   churn. §7's determinism requirement is about the solve; idempotence is the
   stronger and separate claim that solving twice changes nothing observable.
-- **Whether the pass is re-entrant.** `helpers.md` §7 allows a callback to
+- **Deferred:** whether the pass is re-entrant, to phase 10.
+  `helpers.md` §7 allows a callback to
   commit and re-enter dispatch one nesting level deep, and §7.3 and §7.7 both
   produce commits from inside an interaction, so a commit arriving during a
   solve is reachable in normal use rather than theoretical. The nesting guard
   catches self re-entry; it says nothing about what a solve does when its own
   input set changes underneath it.
-- **What happens when a second update arrives while an animation from the first
-  is still running: deferred to `animate.md`, deliberately.** §6 fixes the
+- **Deferred:** what happens when a second update arrives while an animation from the
+  first is still running, to `animate.md`, deliberately. §6 fixes the
   pipeline for one update and says nothing about two overlapping. Interruption,
   queueing and reversal are three different answers with three different visual
   results, and picking one here would be picking it in the wrong document, because
@@ -1061,7 +1085,7 @@ part the pipeline does not answer.
   chose to do with the previous pass's transition. That is what keeps the
   deferral safe: `animate.md` can choose any of the three answers without any of
   them being able to leave the block without an endpoint.
-- **When the first pass can run.** §11 settles that the engine is a core service
+- **Open:** when the first pass can run. §11 settles that the engine is a core service
   with no band and no `enable_key`, so the registration order and its advisory
   priority are not the mechanism here, and the band question this bullet used to
   ask is closed. What is left is narrower and still open: a pass that runs before
@@ -1260,8 +1284,8 @@ set in §4.4 rather than by the emptiness of the slot. This also means the empty
 program has to be given defined semantics in the language itself, which is
 §7.8's requirement and not a special case in the engine.
 
-Whether a slot may carry a user-facing label in addition to its letter is open
-and is deliberately not decided here. It is the one thing that would make
+**Open:** whether a slot may carry a user-facing label in addition to its letter.
+It is deliberately not decided here. It is the one thing that would make
 §4.2's third cost go away, and it is also the thing that reintroduces exactly the
 user-chosen names the closed set exists to avoid, so it is a real trade rather
 than a missing feature. With 24 user slots confirmed as generous beside the
@@ -1550,8 +1574,8 @@ This resolves part of the §3.3 open item about infinite canvas. It is still tru
 that a scroller is not a partition of one rectangle, because a viewport into a
 larger space is not a rectangle the solver can hand out. What the bounds toggle
 settles is that the viewport is a separate, small, ordinary object with four
-states, rather than a new solver. The coordinate space behind the viewport is
-still unsolved and is still the hard part.
+states, rather than a new solver. **Open:** the coordinate space behind the
+viewport is still unsolved and is still the hard part.
 
 ### 7.3 Spawn modes are not layout
 
@@ -1643,8 +1667,8 @@ is real even though the project cited for it does not have it.
 
 Newm's "a fraction of the monitor" is the second confirmation that `ratio` and
 `percent` are load-bearing, and it is the first concrete use of them in a layout
-rather than as an option. Whether a window's size is a fraction of the canvas or
-an absolute size, and whether the two can be mixed, is open.
+rather than as an option. **Open:** whether a window's size is a fraction of the
+canvas or an absolute size, and whether the two can be mixed.
 
 Magnetisation is a post-solve relaxation rather than a soft constraint, and this
 is now settled rather than open. Magnetizing to the nearest client edge is a
@@ -2025,9 +2049,19 @@ mapping phase later made it eight rather than seven.
   own; both documents now cite the same decision rather than asking it twice, which
   is the part that mattered, since two documents asking one question is how they
   come to answer it two ways.
-- The pan and zoom space is confirmed twice, by driftwm and newm (§7.5), and it
-  is a transform above the solver rather than a constraint inside it. A third
-  confirmation was claimed from halley and is retracted; §7.5 says why.
+- **Deferred:** the pan and zoom space is confirmed twice, by driftwm and newm
+  (§7.5). A third confirmation was claimed from halley and is retracted; §7.5
+  says why. **Not decided here.** The bullet used to assert as settled that the
+  space "is a transform above the solver rather than a constraint inside it", and
+  two sections of this same document hold that classification open: §3.3 asks
+  whether the separation survives contact with the solver, and §7.2 says the
+  coordinate space behind the viewport is still unsolved. Asserting it in §11
+  while §3.3 asks it is the failure this document's own §1 warns about, so the
+  claim is withdrawn rather than marked closed. It is **phase 07's** decision, as
+  items 11, 19 and 20 of `design-phases/07-layoutengine.md`, and phase 00
+  deliberately did not settle it: the three questions are statements about one
+  coordinate space, and a space nobody has fixed yet is not something a
+  reconciliation pass can fix.
 - Whether a built-in layout is permitted to be something other than a constraint
   program (§3.4). Decided: a built-in is compiled in, and the test is that adding
   one means writing the layout, registering it, and recompiling, with no new

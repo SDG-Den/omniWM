@@ -1067,6 +1067,8 @@ L1    while futex == 1, writer_pid and writer_token identify the current holder
 L1    commit_state is IDLE whenever no writer holds the futex
 L1    readers never accept a snapshot taken while commit_state is not IDLE
 L1    a BROKEN block is never mutated, and no recovery path reuses its epoch
+L1    state is one of CREATING, READY or BROKEN, and a value outside that set is refused
+L1    commit_state is one of IDLE, ACTIVE, GROWING or BROKEN, and a value outside that set is refused
 L1    ready is one of NOT_READY, READY, DEGRADED or FAILED, and a value outside that set is refused
 L1    ready reaches READY only in a commit that sets state to READY, and DEGRADED only in a commit that sets it to DEGRADED
 L2    OMNI_POOL_OFF <= arena_end <= region_head <= pool_base + pool_size

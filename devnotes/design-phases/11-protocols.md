@@ -1,5 +1,8 @@
 # Phase 11: `protocols.md`
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started. P2, stages 16 and 18.
 
 The lowest-urgency document that is not blocked, because its two largest inputs,

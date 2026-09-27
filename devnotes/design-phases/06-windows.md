@@ -1,5 +1,8 @@
 # Phase 06: `windows.md` finalization
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started. The document exists as a prototype and calls itself one.
 
 `windows.md` §1 says it is a scaffold built to `d5a0e1e` so the parts that must

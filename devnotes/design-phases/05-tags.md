@@ -1,5 +1,8 @@
 # Phase 05: `tags.md` finalization
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started. The document exists as a prototype; this phase is what it does
 not cover.
 

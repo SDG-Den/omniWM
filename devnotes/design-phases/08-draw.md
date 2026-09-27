@@ -1,5 +1,8 @@
 # Phase 08: `draw.md`
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started. P1, stages 12, 13 and 14.
 
 This phase carries a question that is not about drawing at all, and it is the

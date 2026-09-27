@@ -1,7 +1,11 @@
 # Phase 00: reconciliation of documents that exist
 
 **Complete.** All ten items are decided and applied; see "What this phase decided"
-below and the work log at the end. Nothing here is outstanding.
+below and the work log at the end. Nothing here is outstanding. Most of this file
+is work log, and a work log is not maintained and is not to be reconciled against
+anything: see [README.md](README.md)'s note on that. What matters is the two
+sections above the log, and the log's own conclusion, which is that phase 00 is
+done.
 
 This phase began as a reconciliation of twelve documents carrying an open,
 deferred or not-covered section, eleven of which carried something genuinely open.
@@ -96,11 +100,13 @@ own value. That last one is the row the index most needed, because an index that
 is internally sorted but describes a deleted entry is the failure the read path
 cannot detect on its own.
 
-The row count is 49, not the 45 an earlier draft of this paragraph claimed, and the
+The row count is 51, not the 45 an earlier draft of this paragraph claimed, and the
 tier count is five labels rather than four: `configstorage.md` §12 describes four
 ordered structural tiers and then calls the replay tier a fifth, and
 `configstorelayout.md` §12's table carries one `R` row per check. The distribution
-is L1 8, L2 10, L3 17, L4 10, R 4.
+is L1 10, L2 10, L3 17, L4 10, R 4. The two rows the third pass added are the
+`state` and `commit_state` value sets, which is the finding recorded at the end of
+this file; the earlier figure of 49 was correct when it was written.
 
 **3. The three-key layout program. Closed, and the three keys are now named in both
 documents.** `.viewport` is parsed and is not optional in the sense of being
@@ -288,8 +294,11 @@ three were run after the final edit.
   binding back over its IPC. A binding here is a catalog entry that the general
   `get` already returns, so there is no field to place and no `get binds` to want.
 - **The guard table has one tier per row and no guard without a row.** Met: four
-  structural tiers and one replay tier, 49 rows, one tier per row, and no `Semantic`
-  tier at all.
+  structural tiers and one replay tier, 51 rows, one tier per row, and no `Semantic`
+  tier at all. `configstorage.md` §12's L1 bullet states `magic`,
+  `format_version` and the section constants as preconditions on mapping rather
+  than as tier invariants, which is the framing `configstorelayout.md` §2 already
+  used, and the two value words it did enumerate now have a row each.
 - **A grep for "wholesale" returns no place that *asserts* a port was taken
   unchanged.** Met. The word occurs in three documents, and every occurrence is
   about the wording rather than about the port: this file, `generaldesign.md` §14,
@@ -301,10 +310,21 @@ three were run after the final edit.
   invalidate by mentioning the thing it counts. Naming the three documents cannot
   change.
 - **A grep for `xref.py` and `lcheck.py` finds no document that names either script
-  as a thing to run.** Met. Both names occur only in this file — item 10, this
-  criterion, and two work-log paragraphs — and nowhere else in the repository.
-- **The header compiles and every `OMNI_STATIC_ASSERT` passes.** Met, under
-  `-std=c11 -Wall -Wextra -Iinclude`.
+  as a thing to run.** Met. **Neither name occurs in any core design file.** The
+  core design files are the `devnotes` documents and the `design-phases` stubs,
+  which is where a reader would go to find a tool worth running; this file is the
+  reconciliation record rather than a design document, and the audits under
+  `devnotes/audits` are historical records of documents that no longer exist.
+  Naming the files that mention the scripts is the check, not counting the lines
+  that do: a count is a number this file invalidates by mentioning the thing it
+  counts, which is what the first audit's removed criterion did and what this
+  criterion's own parenthetical did in the third pass.
+- **The header compiles and every `OMNI_STATIC_ASSERT` passes.** Met. Verified
+  under `-std=c11 -Wall -Wextra` with no output, which covers all 81
+  `OMNI_STATIC_ASSERT`s and `OMNI_CAP_DEFAULT == 0x1FF`. The property is stated
+  here and the invocation lives once, in `build.md` §1, because the three copies
+  of the command this file carried had each drifted into a form that could not be
+  run in this environment at all.
 - **`git diff --check` is clean.** Met, after fixing one line of trailing
   whitespace that a previous pass in this session had introduced in
   `filestructure.md`.
@@ -428,8 +448,8 @@ and none of retarget, queue, or replace has anything to say about it.
 `01-testing.md` and `02-substrate.md` gain the three container operations, with the
 subtree exchange treated as its own operation rather than a reuse of the delete.
 
-**Verification.** The header compiles under `-std=c11 -Wall -Wextra` and every
-`OMNI_STATIC_ASSERT` passes. `git diff --check` is clean. A grep for `wholesale`
+**Verification.** The header compiles under `-std=c11 -Wall -Wextra`, per the
+invocation in `build.md` §1, and every `OMNI_STATIC_ASSERT` passes. `git diff --check` is clean. A grep for `wholesale`
 finds the word in this file, in `generaldesign.md` §14, and in
 `design-phases/11-protocols.md` item 1, and all three are about the wording rather
 than about the port. A grep for `xref.py` and `lcheck.py` finds both names only in
@@ -565,8 +585,8 @@ across the design documents are unchanged, which is a question about the convent
 and not a defect. `countlines.sh` had an unrelated uncommitted edit.
 
 **Re-verification after the corrections.** The header compiles under `-std=c11
--Wall -Wextra -Iinclude` and all 81 `OMNI_STATIC_ASSERT`s pass, up from 79 because
-the capability coverage check is one of the two added. `git diff --check` is clean.
+-Wall -Wextra`, per `build.md` §1, and all 81 `OMNI_STATIC_ASSERT`s pass, up from
+79 because the capability coverage check is one of the two added. `git diff --check` is clean.
 The guard table counts 49 rows, L1 8, L2 10, L3 17, L4 10, R 4. A grep for
 `xref.py` and `lcheck.py` finds both names only in this file. A grep for the twelve
 wrong claims listed above returns nothing in the design documents. It returns two
@@ -728,7 +748,8 @@ wrong, and the questions were distributed across eight sections of a document wh
 questions are open in its body.
 
 **Re-verification after this pass.** The header compiles under `-std=c11 -Wall
--Wextra -Iinclude` with no warnings, all 81 `OMNI_STATIC_ASSERT`s pass, and
+-Wextra`, per `build.md` §1, with no warnings, all 81 `OMNI_STATIC_ASSERT`s pass,
+and
 `OMNI_CAP_DEFAULT` is still `0x1FF`, now checked by a `_Static_assert` of its own
 rather than by reading the macro. `git diff --check` is clean. The guard table
 counts 49 rows, L1 8, L2 10, L3 17, L4 10, R 4, and `configstorelayout.md` §12
@@ -738,3 +759,447 @@ the design documents: "the three keys it is stored under", "focus is an ejection
 this file and nowhere else, and every hit is a paragraph quoting the phrase in
 order to record that it was wrong, which is the same self-reference the `wholesale`
 paragraph above had to be corrected for.
+
+## Third post-completion audit, 2026-09-27
+
+This pass was asked whether phase 00 is complete and whether phase 01 can start,
+and the answer to the first is no. Three of the six acceptance criteria fail, one
+of them on the check the second audit said nobody had ever performed, which is the
+finding worth writing down: **the criterion that reads two documents and compares
+them is the one that is false, and both earlier passes reported the design as sound
+because every criterion they could run was a check on this file, a compile, or a
+grep.** The first audit said the lesson for the next phase is that "Done when" has
+to name the comparison rather than the conclusion. Phase 00 then wrote six criteria
+and one of them is a comparison, and it is the one that does not hold.
+
+**Two of the six criteria are re-run here and pass**, so that the next reader does
+not spend the pass on them: the guard table is 49 rows distributed L1 8, L2 10,
+L3 17, L4 10, R 4 with no `Semantic` tier, and the capability-bit pairing is stated
+identically in `omni_layout.h` §4, `configstorelayout.md` §3 and its §4, which is
+the defect the second audit opened with. The header compiles and all 81
+`OMNI_STATIC_ASSERT`s pass. `git diff --check` is clean. The `wholesale` grep still
+returns three documents, all about the wording. The `design-phases/README.md`
+inventory's eleven bullet counts were re-derived from the documents and all eleven
+are right, which is the second audit's fix holding. And the eleven
+`layoutengine.md` body questions the second audit found are all present at the
+locations its stub names, and the count of eleven is right.
+
+### Three criteria that fail
+
+**The guard table has guards without rows.** This is the criterion stated as "The
+guard table has one tier per row and no guard without a row", and the second half
+of it is false. `configstorage.md` §12 enumerates the L1 tier as six named checks:
+`magic`, `format_version`, `header_size`, section constants, `state` in
+{CREATING, READY}, and `commit_state` readable. The table's eight L1 rows state a
+check for exactly one of the six. `header_size` is inside the first row. `magic`
+and `format_version` appear nowhere in the table; a grep of `configstorelayout.md`
+§12's forty-nine rows for either name returns nothing, although both are fields of
+the header the table's own preamble claims to cover and both are L1 refusals by
+`configstorage.md`'s own definition of the tier. The header's section constants
+are named at L1 in `configstorage.md` and appear at L2 instead, as the row about
+fixed ranges fitting before `OMNI_POOL_OFF`, which is a different check at a
+different scale. And neither value-set field has a row: `configstorelayout.md`
+§12 has a row for `ready` that is a value set and a second row that pairs it with
+`state`, and it has nothing at all for the value set of `state` or of
+`commit_state`.
+
+The `commit_state` half is the one that bites. The table's L1 rows say
+`commit_state` is `IDLE` whenever no writer holds the futex, and that readers never
+accept a snapshot taken while it is not `IDLE`. Both of those are conditional
+statements about a value. Neither of them says what happens to a `commit_state`
+byte holding a value outside the four the header defines, so a corrupted
+`commit_state` is refused by no row at all: it is neither `IDLE` nor not-`IDLE` in
+any sense the table can test, and a reader implementing the table has no case for
+it. This is the same defect class as the known-tag hole the second audit found in
+`configstorage.md` §12.1, where `0x34` fell in no branch of the three-way test: a
+defined value with no branch that handles it.
+
+**`state`'s value set is stated two ways, and the enumeration is the stale half.**
+`configstorelayout.md` §3's header table says `state` is `0` = CREATING, `1` =
+READY, `2` = BROKEN, and `omni_layout.h` defines `OMNI_STATE_CREATING` 0,
+`OMNI_STATE_READY` 1, `OMNI_STATE_BROKEN` 2 "terminal for this epoch".
+`configstorage.md` §12 says the L1 check is "`state` in {CREATING, READY}". Two
+documents, one of them the byte-layout authority and one of them backed by the
+header, against a two-value set in a third.
+
+The direction of authority is not in doubt here, which is what makes this cheap:
+this is the reverse of the usual pattern in this repository, where the prose is
+stale and the table is the authority. `configstorelayout.md` §3 says so of itself,
+recording that an earlier draft claimed the defined fields ended at `0x087` when
+the table had always been right. Here the table and the header agree and the
+enumeration is the copy that is behind, so the repair is one word in one line.
+The reason it still matters is the sentence immediately after it, which requires a
+BROKEN block to be `OMNI_ERR_STORE_BROKEN`. An L1 guard written from the
+enumeration has no case for value 2 and reaches a BROKEN block with no arm to
+take, so it falls through to the general "these bytes are not what they claim to
+be" path and reports a malformed header, which is a different code for a client
+that is supposed to be told the block is intact and the instance is dead.
+
+**The compile criterion names an invocation that does not exist.** The criterion
+reads "Met, under `-std=c11 -Wall -Wextra -Iinclude`", and there is no `gcc`, no
+`cc` and no `clang` on `PATH` in this environment; the compiler is reached through
+`nix run`. The runnable form is:
+
+```
+nix run nixpkgs#gcc -- -std=c11 -Wall -Wextra -Iinclude -fsyntax-only -x c \
+    include/shared/omni_layout.h
+```
+
+The two flags after `nix run` are needed because the target is a header rather
+than a translation unit, and without them the command does not do what the
+criterion says it does. This is the identical defect to the `xref.py` and
+`lcheck.py` criterion this phase removed for naming a tool a future contributor
+would go looking for and not find: a criterion that cannot be run as written is
+worse than no criterion, because it reports a pass that was never demonstrated.
+The two verification paragraphs at the end of the first and second audit sections
+carry the same unrunnable form. The finding is not that the compile does not
+succeed; it does, and the count of 81 is right. The finding is that the sentence
+describing how to reproduce it is wrong, and no document in the repository records
+that this project's C is compiled through `nix run` rather than through a compiler
+on `PATH`, which is the fact the next reader needs and the one thing here a
+reader cannot infer.
+
+### Four defects in the design documents
+
+**`layoutengine.md` §1's status row 3.7 is the row the second audit did not
+correct.** Rows 3.3, 3.4 and 3.6 were rewritten to name their residuals rather
+than call themselves settled, and row 3.7 reads "**resolved except re-entrancy**"
+while §3.7's body carries four open bullets: what triggers a pass, whether the
+pass is idempotent for an unchanged input set, when the first pass can run, and
+re-entrancy. The row mentions none of the first two, and on the third it
+over-claims in a way that is nearly right rather than simply wrong: it says "the
+trigger is per layout as `rearrange_on_focus`", which settles whether a focus
+change causes a pass, while the open question in the body is what the whole
+trigger set is. A row that says "resolved except X" when there are three more is
+worse than the rows that were wrong before, because it was written by a pass that
+had already learned the lesson and applied it three times out of four.
+
+**`07-layoutengine.md` says idempotence is not in the document's body. It is.**
+The stub's reconciliation note ends with "Re-entrancy is the one question
+deliberately outside both lists, and idempotence is the one that is in this stub
+rather than in the document's body". `layoutengine.md` §3.7 carries it as a
+bolded open bullet: "**Whether the pass is idempotent for an unchanged input
+set**, which decides whether it can be called defensively on every relevant commit
+without causing churn." The claim is load-bearing rather than decorative, because
+it is the sentence that explains why idempotence is item 3 of the stub instead of
+a row in the stub's table of eleven. Being wrong about it means the table is
+missing a row that should be in it, and the two places that now hold "the same
+list" hold different lists.
+
+**Two documents count the same list differently.** `layoutengine.md` §1's row 3.3
+says "three questions in §3.3 itself are still open, about cross-references,
+arithmetic on operands, and the viewport's position relative to the solver", and
+`07-layoutengine.md`'s table has two rows for §3.3, items 10 and 11, having
+recorded in the same table that "the two halves are one question" and folded
+cross-references with arithmetic into a single item. Both positions are
+defensible and they cannot both be the count. This is the third instance of the
+three-of-four-keys finding the second audit recorded, and it survives because the
+two documents were each fixed in the same pass without either being compared
+against the other, which is the comparison the first audit said was missing.
+
+**One §11 bullet is neither closed, struck nor deferred.** `layoutengine.md` §11's
+twenty-one items are twenty that carry a `*Closed*`, a strike, or a
+`**Deferred, not open**`, and one, at the pan and zoom space, that carries
+nothing. Its content asserts that the space "is a transform above the solver
+rather than a constraint inside it", which is a decision, but it is asserted in
+the same list whose other twenty entries each say what happened to them, and its
+subject is held open in two other sections of the same document: §3.3 says
+"whether that separation survives contact with the solver is still open" and §7.2
+says "the coordinate space behind the viewport is still unsolved and is still the
+hard part". The `README.md` inventory's row for this document says "20 closed or
+struck, 1 deferred to phase 10, and none open", and the twenty is only twenty if
+this unmarked statement is counted as closed, which is the same inference the
+`wholesale` and `xref.py` criteria were both corrected for making.
+
+### Three in the plan and the bookkeeping
+
+**`01-testing.md` attributes the fuzz target to the wrong section.**
+`configstorage.md` §14 does not name a fuzz target; §14 is the deferral list and
+holds multi-painter arbitration, CAS, mixed-endianness, extension semantic
+validation and compile-time ABI tests. The fuzz target is named at
+`configstorage.md` §12.6 and in `configstorelayout.md` §12's own heading, and
+`missing-devnotes-topics.md` attributes it to the document without a section, which
+is the correct level of precision for it. The wrong citation is also worse than a
+missing one, because §14 is the list of things deliberately *not* done, so a reader
+who follows it concludes the fuzz target is deferred, which nothing says and
+which the stub's own item 3 contradicts by asking for its entry point, its
+mutation strategy and six named corpus cases.
+
+**`ipc.md` §8 has an open item whose owner names nothing that exists.** The
+`wm.reset` bullet records that the category name and field set are fixed and that
+"the temp-file naming and lifetime for a soft-reset snapshot are not; they belong
+with the transaction and readiness pass". There is no transaction pass and no
+readiness pass: the transaction boundary is `ipc.md` §reload and
+`configstorelayout.md` §13, and the readiness axis is `configstorage.md` §13, and
+all three are written and complete, so what the bullet defers to is not a document
+and not a phase. A grep of `design-phases/` for `reset` and `snapshot` returns one
+hit, in `10-animate.md`, about animation progress. The bullet directly above it
+treats the same class of thing correctly: the socket-path fallback's `/tmp` name
+derivation is "implementation choices left to the store pass", which is a
+statement about who writes the code rather than a question about the design, and
+that is the right shape for naming a path. One of the two adjacent bullets is
+wrong about what kind of thing it is describing.
+
+**The `xref.py` criterion's own parenthetical is a stale count.** The criterion
+states that both names "occur only in this file — item 10, this criterion, and two
+work-log paragraphs — and nowhere else in the repository", which is four places,
+and this file now holds eight lines naming either script. The first audit removed
+a criterion whose count could not be derived, and the second audit restated the
+`wholesale` criterion by document rather than by count for exactly this reason,
+and this parenthetical was missed. It is the same defect a third time, in the one
+place the file was supposed to have been made immune to it.
+
+### What this pass did not decide
+
+Four questions are the owner's rather than the auditor's, and all four are the
+kind where picking the answer that looks more consistent would be the wrong move.
+They are recorded here undecided rather than guessed.
+
+*What the L1 rows should say.* That `magic`, `format_version` and the section
+constants need rows is not in doubt; what is in doubt is whether they are
+invariants in the sense the other forty-eight rows are, or preconditions on the
+table rather than rows in it. A reader that has already mapped the file and
+checked the magic does not need the second check, and putting it in the table
+means the fuzz target asserts it fifty-one times rather than once. The header's
+`OMNI_MAGIC` and `OMNI_FORMAT_VERSION` are compile-time constants, so a wrong
+value is a build failure rather than a block, which is an argument that these two
+are preconditions. The value sets of `state` and `commit_state` are a different
+question and the table already answers it for `ready`, so those two look like rows
+whatever the answer is for the other two.
+
+*Whether the compile criterion should name `nix run` or a build file.* The
+criterion is runnable today with the `nix run` prefix and no build system exists,
+and the runnable form is recorded above. Whether a design document should be
+quoting a package-manager invocation at all, rather than saying "compiles clean
+under C11 with warnings enabled and the static asserts pass", is a question about
+what these documents are for.
+
+*Whether idempotence joins the eleven.* It is in the body and it is not in the
+table, and the stub's note claims it is in neither. Either the table grows a twelfth
+row or the note is corrected, and the two answers are not equivalent: a table row
+says the question is phase 07's, while a corrected note says the question is
+already item 3 of the stub and needs no row.
+
+*What the soft-reset snapshot's naming is.* Whether it is an implementation
+choice the way the socket path is, or a design decision with an owner, is a
+judgement about how much of a path name belongs in a protocol document, and
+`ipc.md` §4 already puts a snapshot path on the wire, which is the half that does
+have to be designed.
+
+### Re-verification after this pass
+
+The header compiles under `nix run nixpkgs#gcc -- -std=c11 -Wall -Wextra
+-Iinclude -fsyntax-only -x c include/shared/omni_layout.h` with no warnings, so
+all 81 `OMNI_STATIC_ASSERT`s pass and `OMNI_CAP_DEFAULT` is `0x1FF`. `git diff
+--check` is clean. The guard table counts 49 rows, L1 8, L2 10, L3 17, L4 10, R 4,
+and `configstorelayout.md` §12 still has no `Semantic` tier; what this pass adds is
+that L1 is short of rows for guards `configstorage.md` §12 names, which is a
+different statement and does not change either number. A grep of that table for
+`magic` and `format_version` returns nothing. A grep of `xref.py` and `lcheck.py`
+returns only this file, which is now eight lines rather than the four the
+criterion's parenthetical claims. A grep of `wholesale` returns three documents,
+unchanged, and is unaffected by this section because that criterion is stated by
+document rather than by line. The eleven bullet counts in the
+`design-phases/README.md` inventory were each re-derived from the document they
+describe and all eleven hold.
+
+## Resolution of the third audit, 2026-09-27
+
+The ten findings above were put to the owner as ten questions, each with its
+options. All ten are now decided, the four questions the section above recorded as
+undecided are among them, and the resolutions are applied. This section is the log
+of what was decided and what changed; the audit above is left as written, because
+a record of what a pass found is only useful if it is not edited to match what
+happened next.
+
+Two of the ten produced a decision that is larger than the defect they were raised
+against, and those are marked, because a reader checking whether the finding was
+addressed will otherwise find a smaller edit than the one that was made.
+
+### The owner's decisions, and what was applied
+
+**1. The L1 rows.** Preconditions for the constants, rows for the value sets.
+`configstorage.md` §12's L1 bullet now states `magic == OMNI_MAGIC`,
+`format_version == OMNI_FORMAT_VERSION` and `header_size` and the section
+constants as a precondition on mapping, and gives the reason in the same place: a
+wrong value in any of them means the bytes are not this format, so there is no
+header left to check a field of. That is the framing `configstorelayout.md` §2
+already used and §12 did not agree with, so the fix is one document moving to the
+other rather than a new distinction. `configstorelayout.md` §12 gains two rows,
+`state` and `commit_state`, each refusing a value outside its own set, and the
+table is **51 rows, L1 10, L2 10, L3 17, L4 10, R 4**. The two value sets are
+rows rather than preconditions because the table already knows how to state one,
+for `ready`, and because a corrupted `state` or `commit_state` byte is a real
+corruption that nothing refused before.
+
+**2. `state`'s value set.** `configstorage.md` §12 reads {CREATING, READY,
+BROKEN}. The header and `configstorelayout.md` §3 were already right and are
+unchanged. The L1 row added above is what makes the enumeration load-bearing: a
+guard written from the old two-value set had no case for 2 and fell through to the
+malformed-header path, reporting `OMNI_ERR_BLOCK_MALFORMED` where
+`ipc.md` §5.2 and `server.md` §4 branch on `OMNI_ERR_STORE_BROKEN`.
+
+**3. The compile criterion.** The invocation lives in `build.md` §1 and nowhere
+else. `build.md` is new, and it is a stub: §1 is the one fact that had to be
+citable today, and §2 states what phase 02's build half adds to it. The four
+places in this file that carried a bare flag list now state the property and cite
+the section, which is the single-recipe form, and the criterion no longer claims a
+command a reader cannot run. `missing-devnotes-topics.md` records that the document
+now exists as a stub and that phase 02 owns the rest of it.
+
+**4. `layoutengine.md` §1 row 3.7.** Rewritten. The row said "resolved except
+re-entrancy" and named three settled things, while §3.7 carried four open
+questions. It now names all four and says which is deferred. The trigger half was
+the over-claim worth noting: the row claimed the trigger was settled as
+`rearrange_on_focus`, which settles whether a focus change causes a pass, while the
+body asks what the whole trigger set is.
+
+**5. Idempotence.** It is a twelfth row, at item 17, in section order rather than
+appended, and the three items after it were renumbered. The stub's note claiming
+idempotence was "in this stub rather than in the document's body" was false:
+`layoutengine.md` §3.7 has carried it since it was written, so by the table's own
+scope statement it was always a missing row. The note is corrected rather than
+deleted, and says why the row and the phase item are not a duplication: the item
+is the work, the row is the obligation.
+
+**6. The two counts.** The count is now derived and the disagreement is structurally
+impossible. Every open question in `layoutengine.md`'s body carries an `**Open:**`
+marker at the point it is stated, and every deliberately-deferred one carries
+`**Deferred:**`. Twelve and two respectively, counted by a `sed` range over the
+document's own section headings rather than by a number anyone wrote down.
+`§1` gives the command and says why the range is the body. §3.3's disagreement
+resolves to two markers against the stub's two rows, because the cross-reference
+and arithmetic halves are one sentence and are marked once; that is now the
+stated reason rather than a judgement about whether "one question" is true.
+
+**7. The pan and zoom bullet.** Not decided in phase 00, and now says so. It is
+marked `**Deferred:**` and the claim it used to assert as settled is withdrawn
+rather than marked closed, because §3.3 and §7.2 of the same document hold the
+classification open and asserting it in §11 while §3.3 asks it is the failure
+`§1` warns about three sections later. The owner is phase 07, items 11, 19 and 20.
+`design-phases/README.md`'s inventory row for `§11` moves from "20 closed or
+struck" to 19, and records the body separately, because a single number cannot
+cover a finished §11 and an unfinished body.
+
+**8. The fuzz-target citation.** Left as it is, deliberately. `01-testing.md` is
+wrong about which section names the fuzz target, and phase 01's first act is now
+to read its stub against the documents as they are then. `design-phases/README.md`
+states that rule for **every** phase in the directory, with the reason: a stub is
+written against the documents as they stand, a reconciled document moves underneath
+it, and nothing depends on the stub until the phase runs, so a piecemeal fix costs
+a second pass over the same file and produces a record of edits the
+re-evaluation would have made anyway.
+
+**9. Snapshotting.** The feature is not being built, and this is the second of the
+two decisions that turned out larger than the defect. There is no soft-reset
+snapshot. `ipc.md` §reset is now two steps, clear and re-apply, and says plainly
+that a soft reset is not reversible by itself: a caller that wants a way back
+calls `save` and then `reload`, both of which are already specified, so the
+capability the snapshot existed to provide was already in the design. The
+`wm.reset` event no longer carries a path, the mode table's reversibility row
+changed, and the §8 bullet that had no owner is deleted rather than rewritten,
+because the thing it deferred to — a transaction pass and a readiness pass, neither
+of which exists — was deferring a question about a feature that no longer exists.
+
+What replaced it is `save` itself, and `ipc.md` §7 is new for it. The section
+states the principle the owner's reasoning turned on: the socket and the TOML
+parser are layers of indirection over the shared memory, direct block access is a
+capability floor rather than a competitor, and a facade earns its existence by
+offering something the direct route does not. Extracting part of the block to a
+file is the worked example, because the block's scope-by-exclusion is what makes
+"everything not window-dependent and not ephemeral under this prefix" a query
+rather than a list somebody maintained, and a client at the block level has to
+re-derive the classification, take a coherent view itself, and serialise the type
+tags. An external parser, interpreter, library or application is a *user* of the
+block in the same position, which is what the project's API-driven premise needs.
+
+That decision had a consequence the finding did not predict. `configstorage.md`
+§13 already said `save` takes an optional key-path pattern, and `ipc.md` §4's wire
+form did not have one, so the two documents disagreed about a field the owner
+described as central. `ipc.md` §save now takes `pattern` and `path`, which is the
+"a keymatch and an output path" the decision describes, and the file it produces is
+a TOML file the built-in parser reads back, so `save` narrowed to a namespace
+followed by `reload` is a round trip with no snapshot facility anywhere in it. The
+temp-file naming question moved to `save` and is now stated as an implementation
+choice of that path, in the same sense as the socket-path bullet beside it.
+
+**10. The stale count.** The criterion is now "neither name occurs in any core
+design file", with the term defined in the criterion rather than left to the
+reader: the `devnotes` documents and the `design-phases` stubs, excluding this
+reconciliation record and the audits, which are records of documents that no
+longer exist. The reasoning is generalised one clause further than the finding made
+it, because the owner was right that the real problem is a class rather than this
+instance: **a count is a number the document discussing the count can invalidate by
+mentioning the thing it counts.** A file that is partly about a grep cannot assert a
+grep's line count, however carefully it is qualified, and this one has now produced
+three of them. Where a property is what matters, the criterion states the property.
+
+### Where phase 00 and phase 01 now stand
+
+The three failing criteria are repaired: the guard table has a row for every guard
+that is an invariant and a precondition framing for the ones that are not, `state`'s
+value set is stated one way in all three documents, and the compile criterion names
+a command that runs. Of the seven further defects, six are closed and the seventh
+is deferred to the phase that owns it by the standing rule in item 8.
+
+**Phase 01 can start**, with the caveat the audit named and this pass confirms:
+item 1's assertion set is `configstorelayout.md` §12, which is now complete at L1
+and is a table a test can be written against. Item 5 remains the one that should
+wait, because `generaldesign.md` §14.1 puts `mode_id` in the binding index key and
+its meaning is undecided until `03-input.md` item 1, the device-rule record shape
+until item 2, and the stylus trigger kind until item 3. `01-testing.md:90` claims
+the phase does not depend on the missing documents, which is false for item 5, and
+no "Done when" clause covers item 5. **Neither is fixed here**, for the reason in
+item 8: both are the stub's to resolve when phase 01 begins.
+
+### Re-verification after these edits
+
+`git diff --check` is clean. The header compiles under the `build.md` §1
+invocation with no output, so all 81 `OMNI_STATIC_ASSERT`s pass and
+`OMNI_CAP_DEFAULT` is `0x1FF`. The guard table is 51 rows distributed L1 10, L2 10,
+L3 17, L4 10, R 4, with no `Semantic` tier, and a grep of it for `magic` and
+`format_version` still returns nothing, which is now the intended result rather
+than a gap. The body marker count is 12 `**Open:**` and 2 `**Deferred:**` in §3 to
+§8, matching the twelve rows of `07-layoutengine.md`'s table. A grep for `xref.py`
+and `lcheck.py` returns this file and no other, which is what the criterion now
+asserts and no longer counts. The `wholesale` grep is unchanged, and the eleven
+bullet counts in `design-phases/README.md`'s inventory still hold, with the
+`layoutengine.md` row amended for the deferred bullet and the body recorded
+separately.
+
+### Addendum: the stub-accuracy rule, and the exception to it
+
+Item 8 above settled that `01-testing.md`'s wrong citation is phase 01's to fix, and
+put the general rule in `design-phases/README.md`: a stub is re-evaluated whole
+before its phase, and drift is left until then. That rule was then found to be
+stated in the wrong place and to be quietly contradicted by this very pass, so
+both were fixed.
+
+**The place.** The rule lived only in the README, and a stub's own preamble said
+`Stub. Not started.`, which is a different claim: it says the phase's *work* has
+not been done, not that the stub's claims about other documents are not expected to
+hold yet. A reader picks a phase up by opening that phase's file, so that is where
+the disclaimer has to be. **All twelve stubs now carry it** as a line under the
+title, pointing at the README rule. `01-testing.md` additionally names its own
+known-wrong citation rather than leaving a reader to find it, and `07` names
+itself as the exception.
+
+**The contradiction.** The rule was written as a tidy distinction: a stub's *scope*
+is an owner's decision and does not go stale, its *accuracy about other documents*
+is derived and does, and only the second kind waits. The record does not support
+the tidiness. Answers 5 and 6 in this pass corrected `07-layoutengine.md`'s table,
+its counts and its idempotence note, and the first two were accuracy repairs about
+`layoutengine.md` rather than scope — while answer 8 deferred a comparable accuracy
+repair in `01-testing.md` in the same sitting. Both were findings from one audit and
+the difference was the owner's call, not a category.
+
+So the rule as written now says the narrow true thing instead: **do not repair
+drift in a stub you were not asked about, and when you are asked, repair what was
+asked and record which kind of edit it was.** The scope/accuracy distinction is
+kept as the reason the default exists rather than as the rule itself, because the
+reason holds even though the rule it was drafted to justify did not.
+
+`00-reconciliation.md` and `scaffolding.md` do not carry the note, and correctly
+so: this phase is closed rather than pending, `README.md` is where the rule lives,
+and the inventory is a second output that fills in as the phases run rather than a
+stub with a turn.

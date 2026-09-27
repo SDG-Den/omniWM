@@ -1,5 +1,8 @@
 # Phase 04: `monitor.md`
 
+*Not expected to be accurate about other documents until this phase starts; see
+[README.md](README.md).*
+
 Stub. Not started.
 
 Stage 5, P1. This stub used to open by saying `tags.md` §9 deliberately left the
