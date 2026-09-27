@@ -267,16 +267,21 @@ three were run after the final edit.
 - **Every open-items section in the twelve documents has either a closed decision
   or a named owner.** Met. The twelve are the eleven rows of
   `design-phases/README.md`'s inventory plus `audits/architecture-audit.md`. The
-  five that were genuinely
-  unowned at the end are
-  `input.md` §7.2's device-rule type tag and its `isallowconflict` test. The first
-  two name phase 02 and phase 01 respectively, and the last two are external facts
-  rather than design questions and belong to phase 02's build half. Nothing is
-  left unowned: the fifth, which had been a genuine gap, was the Lua deliverable,
+  two that were genuinely unowned at the end are `input.md` §7.2's device-rule
+  type tag and its `isallowconflict` test. Both are named, and the second is
+  unambiguous: **phase 01 item 5** is the binding match test and already names two
+  conflicting bindings in one bucket as the case that matters. The first was named
+  twice and to two different phases, which was an ownership conflict rather than a
+  gap, and it is now resolved rather than averaged: `input.md` §7.2 and
+  `03-input.md` item 2 agree that **the number is chosen in phase 03, when the
+  input design is fleshed out**, because the device rule's record shape is only
+  knowable once the rest of input is, so `configstorelayout.md` §4's vocabulary and
+  the static assert follow this phase's work rather than leading it. The item that
+  had been a genuine gap was the Lua deliverable,
   and the owner answered it — no interpreter and no library is a deliverable of the
   window manager at all, since they are separate example programs written after the
   project is complete to prove the surface is generic, which is why they are last on
-  the   roadmap. `generaldesign.md` §17 and §19, and `12-languages.md` item 6.
+  the roadmap. `generaldesign.md` §17 and §19, and `12-languages.md` item 6.
   The `input.md` §7.2 `spec` field that was named but unplaced is now gone rather
   than placed: `generaldesign.md` §14.1 drops it beside `line_number` and
   `file_index`, because it is a shim over a storage model that could not hand a
@@ -365,8 +370,10 @@ plan.** Four, each a real disagreement between two documents:
 
 - The catalog freelist was described as chained through `name_ref` while the
   creator seeds a low run and chains the remainder, and `catalog_free_count` was
-  written as zero. Fresh slots are chained, the count is nonzero, and a `DESTROYED`
-  slot that was never allocated has its name cleared rather than left stale.
+  written as zero. Fresh slots are chained, the count is nonzero, and a
+  never-allocated slot has `DESTROYED` deliberately clear rather than set, since
+  `DESTROYED` is a statement about a name that existed and was deleted and
+  `entry_generation` = 0 is what distinguishes that from a slot freed after use.
 - The solver weight comment and its values disagreed: 60000 is `PROGRAM` and
   6000 is `CLIENT_RULE`, so the header's mapping was inverted relative to the text
   above it, and the text did not say what a decade ratio actually buys. It buys
@@ -576,3 +583,158 @@ word. The error is the exact one the previous paragraph is about: a count assert
 without being derived, in a file whose own discussion of the count changes it. Both
 are now stated as the three documents that contain the word, which no paragraph
 here can invalidate.
+
+## Second post-completion audit, 2026-09-27
+
+This pass was asked one question: within phase 00's twelve-document scope, is
+anything still open and does anything contradict anything else. The answer is that
+the design is in much better shape than the record of it, and the ratio is the
+finding worth keeping, because it is the same ratio the first audit found. The
+documents record a decision accurately once the decision is written down, and they
+record their own status inaccurately in a way no single reader is positioned to
+see, because the stale status is always in a summary, an inventory or a heading,
+and never in the section it summarises.
+
+**Six defects in the main design documents.** The first is a genuine
+self-contradiction in a numeric contract. The capability bit pairing was stated in
+`omni_layout.h` and in `configstorelayout.md` §3, and both said the same thing:
+"bit *n* is the section whose id is *n*+1 for *n* in 0..5, 7 and 8". For *n* = 7
+that clause yields id 8, which is wrong, and for *n* = 8 it yields 9, which does
+not exist. The actual pairing is bits 0 to 5 against ids 1 to 6, bit 6 as the
+socket with no section at all, and bits 7 and 8 against ids 7 and 8 unchanged, and
+the break is the socket's. §4 of the same document carried the same claim in a
+second phrasing, "the bits are the ids shifted, except that the socket's bit has no
+row here", which is the same error with the exception left out. All three passages
+now state the pairing in the order the bits actually come in, and the header
+comment says why the assert cannot catch a mispairing: it holds `OMNI_CAP_DEFAULT`
+to every defined bit, so it catches a bit added without widening the default and
+nothing else.
+
+The second is the only one that was a design contradiction rather than a
+bookkeeping one. `layoutengine.md` §7.7 claimed "**Focus is an ejection**" and
+built an argument on it, while `tags.md` §8.4 and `windows.md` §5 both say focus
+does not touch the membership child and that the mutation is the hide *into* the
+scratchpad. The section now states the opposite, with the reason that the ejection
+is Wayfire's behaviour rather than this design's, and points at the two documents
+that own the decision. Three other places in `layoutengine.md` repeated the claim
+in weaker form and were corrected with it: the §8 mechanism table's client-set
+membership row, the §3.2 bullet that said §7.7's question was waiting on the
+determinism requirement, and §3.2's determinism bullet itself.
+
+The third is a heading that lied about its own list. §3.2 was headed "Still open:"
+over two bullets, of which the first was struck through and closed and the second
+opened by saying the answer "is now a requirement rather than a question". Both
+are now struck and closed, under a heading that says so. §3.3 opened on the surface
+syntax of a program, which `layoutlanguage.md` owns, is normative for, and settles,
+and §3.4 carried the same heading over four entries of which two were decisions and
+two were open; the two open ones are now marked `**Open:**` in place. §3.6's list
+was headed "Still open in this section:" over four entries of which three state
+decisions, and the fourth carried the one genuine question, so the heading now says
+that and the question is marked where it appears.
+
+The fourth is the one that would have cost a reader the most. §4.7 asked two
+questions that §3.5 and §3.6 had already answered several sections earlier: whether
+a tag or a monitor names a layout independently of the current one, and whether a
+group carries its own layout reference. §3.5 says a tag holds a layout name and a
+monitor derives one from the head of its list; §3.6 opens by saying a group names a
+layout. Both bullets now say so and cite the section that settled them.
+
+The fifth is a count that three documents disagreed about. `layoutlanguage.md` §1
+says a program is four keys under one prefix, `tomlparser.md` §11 already reasoned
+in terms of "all four", and `layoutengine.md` said "three keys under one prefix" in
+§4.4 and "the three keys it is stored under" in §2.10. The engine's two sentences
+were not simply wrong, and saying so would have lost the thing that distinguishes
+them: three of the four keys are structural and carry the program, and the fourth,
+`rearrange_on_focus`, is a boolean about when a pass runs with no representation in
+the block at all. Both sections now say three parts, four keys, and why, and
+`layoutlanguage.md` §1's two sentences that said "all three absent" now say
+"all three of the structural keys absent", which is the same claim with the fourth
+excluded and one sentence of reasoning.
+
+The sixth is a dangling citation. `input.md` §4 cited "§14.2" for the rule that a
+binding's action name resolves on use rather than at set time, and `input.md` has
+eight sections. The rule is `generaldesign.md` §14.1, with `helpers.md` §6.2 for the
+`action_ref` resolution. This is the second `input.md` reference to a section that
+does not exist to be fixed, the first having been the private-cache worked example
+the earlier pass corrected.
+
+**Four in the bookkeeping, which is where the errors concentrated.** The
+`design-phases/README.md` inventory said `configstorage.md` §14 has 14 bullets; it
+has 11, being 8 in §14 and 3 in §14.1. It said `tomlparser.md` §11 has 3 bullets; it
+has 5, none of them open, and the row now names what each one is. The preamble of
+`07-layoutengine.md` said the document has "eleven closed open-items kept as a
+record and six still open" while item 6 of the same stub said §11 carried no open
+item at all. §11 has 21 items, all closed or deferred, one of the 21 deferred to
+phase 10; the stub's preamble is corrected, its item 2 is rewritten because the
+question it asked was closed here as one buffer with a stage byte, and its "Done
+when" clause that asked the same question a second time is aligned.
+
+This file's own record was wrong twice. The unowned-items paragraph had become
+garbled, promising "the five that were genuinely unowned" and then referring to
+"the first two" and "the last two" over a list of two items, with a fifth item
+appearing two sentences later; it now names the two, and records the real finding
+that one of them is claimed by two different phases. And the catalog-freelist entry
+said a `DESTROYED` slot that was never allocated "has its name cleared rather than
+left stale", which is not the rule: `configstorage.md` §13 says a never-allocated
+slot has `DESTROYED` deliberately clear rather than set, because `DESTROYED` is a
+statement about a name that existed and was deleted, and `entry_generation` = 0 is
+what distinguishes the case from a slot freed after use.
+
+**The structural finding, which is the reason phase 07's stub gained a table.**
+`layoutengine.md` keeps its open questions in two places, and the two do not
+correspond: §11 is clear, and the body is not. A reader who checks §11, as the
+inventory tells them to, concludes the document is finished. Twelve questions are
+open in §3.2, §3.3, §3.4, §3.6, §3.7, §4.5, §7.2 and §7.5. One of the twelve is
+already phase 07's, as its item 3, and eleven are assigned to nobody. Re-entrancy
+is a thirteenth question in the same family and is not in the list, because
+`layoutengine.md` §1 defers it to phase 10 on purpose. The stub now carries the
+twelve with their locations and their owners, `layoutengine.md` §1's status table
+names the residuals on the §3.3, §3.4 and §3.6 rows rather than calling them
+settled, and the stub's preamble points at its own table. This is the one place
+where the phase's "every open item has a closed decision or a named owner" criterion
+is not yet met, and it is met for the wrong reason: the criterion was checked
+against §11 and §11 was the easy half.
+
+**Checked and found already correct,** so that the next reader does not spend the
+same pass on it. The frame header at 16 bytes with `node_count` delimiting the
+occupied range; the freelist link in `name_ref` on a `FREE` slot with
+`catalog_free_count` seeded nonzero; `boot_time_ns` stamped from `CLOCK_MONOTONIC`
+at creation and stored, with both sides reading the same clock so the comparison is
+a subtraction; the dropped fields; the catalog freelist's seeded low run; the
+payload split between `REGION_DESC` and `REGION_PAYLOAD`; the three
+cross-references the earlier pass fixed; `layoutlanguage.md`'s authority over the
+surface and `omni_layout.h`'s over the numbers; and the claim that no `wholesale`
+occurrence asserts a port was taken unchanged, which is still three documents, this
+one and `generaldesign.md` §14 and `11-protocols.md`, and every one of the three is
+about the wording rather than about the port.
+`xref.py` and `lcheck.py` do not exist in the repository, as the earlier pass
+recorded, so the cross-reference check in this pass was done by reading every
+citation it touched rather than by running a tool: `tags.md` §4, §5, §8.2 and §8.4,
+`windows.md` §4 and §5, and this document's §3.3, §3.4, §3.5, §3.6, §4.5, §7.2,
+§7.3, §7.5 and §7.7 all exist and are the sections they are cited as.
+
+**One thing this pass did not decide,** and one the developer did. The developer
+settled the device-rule tag: it is chosen in phase 03, when the input design is
+fleshed out, on the ground that fleshing it out is what requires knowing the input
+design, so a number picked before then would be a number picked for a record shape
+that is still moving. `input.md` §7.2 and `03-input.md` item 2 now say that
+instead of claiming phase 02, and the criterion above is met by a decision rather
+than by two owners who happen to overlap. The developer also settled the second:
+**the eleven unassigned `layoutengine.md` questions are all part of the
+layoutengine design and are finalized in `07-layoutengine.md`, as items 9 to 19.**
+The stub's preamble used to answer that by assertion, with a count of six that was
+wrong, and the questions were distributed across eight sections of a document whose
+§11 is complete, which is how a phase reports itself finished while eleven
+questions are open in its body.
+
+**Re-verification after this pass.** The header compiles under `-std=c11 -Wall
+-Wextra -Iinclude` with no warnings, all 81 `OMNI_STATIC_ASSERT`s pass, and
+`OMNI_CAP_DEFAULT` is still `0x1FF`, now checked by a `_Static_assert` of its own
+rather than by reading the macro. `git diff --check` is clean. The guard table
+counts 49 rows, L1 8, L2 10, L3 17, L4 10, R 4, and `configstorelayout.md` §12
+still has no `Semantic` tier. A grep for the retracted phrasings returns nothing in
+the design documents: "the three keys it is stored under", "focus is an ejection",
+"§3.2's open question", and "`layoutengine.md` §5.4" each come back with hits in
+this file and nowhere else, and every hit is a paragraph quoting the phrase in
+order to record that it was wrong, which is the same self-reference the `wholesale`
+paragraph above had to be corrected for.

@@ -80,8 +80,8 @@ person who has to guess.
 input at priority `100`, below core and the config facade and above tags and
 windows. That ordering is load-bearing in one direction only: a binding names an
 action, so input needs the action registry to exist, and it does not need tags or
-windows to exist to hold a binding, because §14.2 makes a binding's action name
-resolve on use rather than at set time.
+windows to exist to hold a binding, because `generaldesign.md` §14.1 makes a
+binding's action name resolve on use rather than at set time (`helpers.md` §6.2).
 
 The descriptor's shape is `helpers.md` §3.1's. The parts that are specific here:
 
@@ -260,15 +260,18 @@ about what the mode means.
 
 ### 7.2 Smaller open items
 
-- **Device rules have no type tag. Owned by phase 02, and it is the one item on
-  this list with no decision behind it yet.** §5.1 places a device rule as a
-  match-and-apply record, and the `client_rule` tag at `0x33` cannot be reused
-  because its fields are layout vocabulary, so a new tag is needed. The number
-  itself is trivial; what is not trivial is that it is an ABI addition to the
-  block, which makes it substrate rather than input. It belongs in
-  `configstorage.md` §4's vocabulary with a static assert in
-  `include/shared/omni_layout.h`, and **phase 01 item 2** is where that assert is
-  specified, so the two phases have to agree on the number. The namespace is a
+- **Device rules have no type tag. Deferred, and not phase 02's to pick.** §5.1
+  places a device rule as a match-and-apply record, and the `client_rule` tag at
+  `0x33` cannot be reused because its fields are layout vocabulary, so a new tag is
+  needed. The number itself is trivial; what is not trivial is that it is an ABI
+  addition to the block, which makes it substrate rather than input. **It is
+  decided when the input design is fleshed out**, and the reason it cannot be
+  decided earlier is that fleshing it out is what requires knowing the input
+  design: a device rule's record shape is only knowable once the rest of input is,
+  and picking a number for a shape that is still moving is how two phases end up
+  asserting different ones. So neither `03-input.md` item 2 nor phase 02 claims the
+  number, and `configstorelayout.md` §4's vocabulary and the static assert in
+  `include/shared/omni_layout.h` are written when the number is. The namespace is a
   separate and easier question, since a device rule is keyed by device and
   `wm.input.device.<n>.*` follows from the same convention as the other options.
 - **`isallowconflict` interacts with the index and needs a test. Owned by phase 01

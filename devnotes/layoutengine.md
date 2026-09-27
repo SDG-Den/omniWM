@@ -33,16 +33,19 @@ each, after the update pipeline in §6 and the layout set in §8 were settled.
 |---|---|---|
 | 3.1 | the constraint record on a client | **resolved.** A rule set is reached by name and never matches a window; the record is the language's own keys in 24 bytes with no payload |
 | 3.2 | the soft-with-priority model and how the solver degrades | **resolved.** Weighted least squares, no weight is hard, and there is one weight per solved family rather than four named bands |
-| 3.3 | the constraint language a user writes | settled, and written out in `layoutlanguage.md` |
-| 3.4 | built-in layouts as constraint presets | mechanism exists, unstated |
+| 3.3 | the constraint language a user writes | settled, and written out in `layoutlanguage.md`; three questions in §3.3 itself are still open, about cross-references, arithmetic on operands, and the viewport's position relative to the solver |
+| 3.4 | built-in layouts as constraint presets | mechanism stated, as one write path shared with the TOML parser; two questions in §3.4 are still open, about which of the §8 set ships at stage 6 and what a layout name denotes |
 | 3.5 | how a layout is selected per tag | **resolved.** A tag is a catalog entry holding a layout name, a monitor displays an ordered list whose head is primary, and a per-monitor tag's monitor is part of its identity |
-| 3.6 | nested layouts for groups, clusters and scratchpads | intent fixed, and the required set confirms all three cases |
+| 3.6 | nested layouts for groups, clusters and scratchpads | intent fixed, and the required set confirms all three cases; one question in §3.6 is still open, about which of a client's two constraint sets the solver is responsible for |
 | 3.7 | the arrange pass | **resolved except re-entrancy.** The pipeline is fixed by §6, solved storage by §2.10, the trigger is per layout as `rearrange_on_focus`, arranged storage is the stage byte in `configstorelayout.md` §11, and re-entrancy is deferred to phase 10 |
 
 The four rows that were open when this table was written are closed by §11's own
 record and, for 3.5, by `tags.md` §3 to §5. A table of statuses that is not
 updated when the sections below it are is worse than no table, because it is
-precisely the thing a reader checks instead of reading.
+precisely the thing a reader checks instead of reading. The residuals named in the
+three rows above are the ones §11 does not carry, and they are phase 07's work as
+items 9 to 19, listed with their locations in `design-phases/07-layoutengine.md`
+so that a second reader does not have to find them a second time.
 
 `layoutlanguage.md` owns the syntax: the model, the rule kinds, the keys at each
 level, the guards and the frozen limits. It is normative, and where this document
@@ -207,11 +210,13 @@ set holds the container and the contents are in it, which is what makes the solv
 input in the next paragraph flat. `tags.md` §4 and §5 have the rule.
 
 `generaldesign.md` §5 also says every user-facing capability is a component,
-which is in tension with the two paragraphs above, and the tension is not
-cosmetic. §3.7 needs the answer, because the answer decides whether the engine
-appears in the `helpers.md` registration table with a priority band and an
-`enable_key` at all, or is wired directly into `core/server.c` the way the store
-is. §3.7 records it as open.
+which was in tension with the two paragraphs above, and the tension was not
+cosmetic. It decided the question: the answer decides whether the engine appears
+in the `helpers.md` registration table with a priority band and an `enable_key` at
+all, or is wired directly into `core/server.c` the way the store is, and §11
+records it as a **core service**. The engine gets no band and no `enable_key`,
+which also means the two paragraphs above are not competing with a registration
+table at all.
 
 ### 2.5 The engine's inputs must be expressible in the block
 
@@ -315,8 +320,11 @@ releases its subscriptions and actions and a resumed one re-registers them.
 `helpers.md` §11 puts tags and windows in band 200 and decorate and draw in 300,
 and states that priority is advisory and not a dependency edge, so a component
 that activates before something it implicitly needs surfaces as an init failure
-rather than as a detected violation. Where the engine sits in that order is
-open, and it is a real question rather than a detail: see §3.7.
+rather than as a detected violation. The engine is not in that table at all, so it
+has no place in the order and no band that could express one: §2.4 and §11 make
+it a core service wired into `core/server.c`. What is still open is the narrower
+question §3.7 carries, which is when the first pass can run before there are
+clients to place.
 
 `server.md` §7 and `helpers.md` §6.1 fix the execution model. Dispatch is
 single-threaded on the event loop, there is no quiescence protocol, a callback
@@ -551,16 +559,22 @@ array: it is the `spaces` key of `omniwm.layouts.<name>`, and its payload is
 `constraint := array of space` with each space an `option` and a nested group a
 child `constraint`. Its siblings `.rules` and `.viewport` are the mapping rules
 and the viewport, so the three names this document uses for a program's parts are
-the three keys it is stored under. There is no fixed-width record to keep at any
-size, because every argument is an enumeration, a number, or a name
-(`configstorage.md` §4, `layoutlanguage.md` §9, `omni_layout.h` section 7).
+three of the keys it is stored under. The fourth is `rearrange_on_focus`, which
+is not a part of the program and has no representation here at all, which is why
+counting the parts gives three and counting the keys gives four
+(`layoutlanguage.md` §1, which is the authority on both). There is no fixed-width
+record to keep at any size, because every argument is an enumeration, a number, or
+a name (`configstorage.md` §4, `layoutlanguage.md` §9, `omni_layout.h` section
+7).
 
 Blocks §3.3, §3.4, §3.6, `windows.md` and `animate.md`.
 
 ### 3.2 The soft-with-priority model and how the solver degrades
 
 Resolved: the degradation mechanism, and determinism, which its own last bullet
-states as a requirement. Open: what a user writes.
+states as a requirement. What a user writes belongs to `layoutlanguage.md`, which
+is normative for the language, so the status of the surface is this section's
+reconciliation to read rather than a second opinion to hold.
 
 **Weighted minimisation, and nothing is dropped.** §2.3's inherited wording asked
 for a drop rule. The mechanism is weighted least squares over the constraint
@@ -620,7 +634,7 @@ renames are recorded here because the names were the thing worth fixing:
 `REQUIRED` would have been read as a guarantee the solver does not make, and
 `DOMINANT` described a band that no longer exists.
 
-Still open:
+Closed, and both closures are by removal rather than by answer:
 
 - ~~Whether priority is a strict order, whether equal priorities are allowed, and
   what a user writes to set it.~~ **Closed, by removal.** There is no priority in
@@ -631,11 +645,12 @@ Still open:
   and `helpers.md` §11's component priority is a separate concept that no longer
   risks colliding with a layout band because there is no layout band to collide
   with.
-- Whether the solve is deterministic given the same input set, and this is now a
-  requirement rather than a question. Weighting makes it load-bearing in a way
-  dropping did not: the solve is iterative and warm-started, so its output depends
-  on the order constraints and variables are visited in. Without determinism "the
-  solver degraded" is not a debuggable claim, `layoutengine.md` bugs are not
+- ~~Whether the solve is deterministic given the same input set.~~ **Closed, and
+  closed as a requirement rather than a question.** Weighting makes it load-bearing
+  in a way dropping did not: the solve is iterative and warm-started, so its output
+  depends on the order constraints and variables are visited in. Without
+  determinism "the solver degraded" is not a debuggable claim,
+  `layoutengine.md` bugs are not
   reproducible, and the layout test `testing.md` owes stays unwritable. The
   requirement is that a solve is a pure function of the committed block state, so
   the same block always produces the same layout.
@@ -647,16 +662,23 @@ Still open:
   non-reproducible output. And the warm start has to be keyed on something stable
   across the animation, not on wall-clock or frame count, or a solve that happens
   to run twice with identical inputs will disagree with itself. This is also the
-  constraint that limits §7.7's membership fork, and it is why that fork is not
-  this document's to close.
+  constraint that decided §7.7's membership question, which is why that question
+  was not this document's to close: it was closed in `tags.md` §5 and
+  `windows.md` §4, against derivation, on exactly this requirement.
 
-Not blocked. Priority lives in the record and the record's shape is settled by
-§3.1; what is left here is the band naming, which is a config surface question.
+Not blocked. The weights are settled in `omni_layout.h` as one value per solved
+family, `OMNI_SOLVER_WEIGHT_PROGRAM` 60000 and `OMNI_SOLVER_WEIGHT_CLIENT_RULE`
+6000, and the four named bands that used to sit on top of them are deleted rather
+than renamed, because three of them had no caller. What is left here is nothing:
+the record's shape is settled by §3.1 and the band naming with it.
 
 ### 3.3 The constraint language a user writes
 
-Open: the surface syntax, its semantics, and the storage representation coupled
-to it.
+The surface syntax, its semantics and its storage representation are written and
+live in `layoutlanguage.md`, which is normative for the language; §2.10 settled
+the representation half of this question and the language document settled the
+other two. What follows is the residue that belongs to the engine rather than to
+the language, and it is a shorter list than this section used to carry.
 
 - The four named constraints imply a shape of left-of-a, half-width-of,
   gap-around, fills-parent, which is a predicate plus an operand plus an implied
@@ -744,7 +766,9 @@ least two built-ins are not constraint programs is §7.1 and §7.2, not §7.1 an
 §7.4; §7.4 says grid and tile are the same constraints with a different
 leftover-space policy, which is the opposite of what it was cited for.
 
-Still open, and all of it downstream of the decision:
+The registration decision is stated first because two of the four entries below are
+downstream of it and two are open. It reads as a decision rather than as a bullet
+because that is what it is; the open entries are marked where they appear.
 
 **A built-in is registered by calling the same functions the TOML path calls.**
 There is one write path into the store and a built-in uses it, so registration is
@@ -767,7 +791,7 @@ it as one write path is the version that cannot drift: there is no second path t
 keep in step, and a built-in that used the seed mechanism but not the function
 would be a divergence nobody would notice until it behaved differently.
 
-- Which of the §8 set ship at stage 6 is unstated. `README.md` stage 6 says a
+- **Open: which of the §8 set ship at stage 6 is unstated.** `README.md` stage 6 says a
   single demo layout, and `generaldesign.md` §18 maps stage 6 to this document.
   On the required set, the cheapest genuine first deliverable is a one-axis stack
   in a nested group, because it needs only §7.1 and §7.3's attach mode and no
@@ -775,7 +799,7 @@ would be a divergence nobody would notice until it behaved differently.
   `layout-test-examples.md` holds a mock design for most of the required set, so the
   first built-ins are a transcription exercise rather than a design one, and §9
   already names which primitives each one needs.
-- The existing `wm.cycle_layout` example passes a layout name
+- **Open: the existing `wm.cycle_layout` example** passes a layout name
   (`ipc.md` §exec), so names are already part of the surface vocabulary. Whether
   a name selects a seeded key, an entry reference, or an `enum` constant is
   unstated, and it interacts with §3.5 because a per-tag layout needs a name
@@ -898,7 +922,8 @@ states. Rejecting the program at load means the user is told which layout is at
 fault and the running layout is untouched, whereas checking during an arrange pass
 means the pass has to unwind a partial cascade before it can report anything.
 
-Still open in this section:
+Reconciled here. Three of the four entries below state a decision rather than a
+question, and the fourth carries the one residual this list does not close.
 
 - `generaldesign.md` §8 and §6 fix that a group is a nested layout with a
   titlebar that can be moved as one window, that a scratchpad lays out its
@@ -953,12 +978,15 @@ Still open in this section:
   `generaldesign.md` §8 says a scratchpad's windows are hidden until summoned,
   that both special tags can hold clients that are also on ordinary tags, and
   §7.7 requires a minimized client to stay on its tag's client list while being
-  in no visible scope. A client in two scopes is in two constraint sets, only
-  one of which is visible, and which one the solver is responsible for is
-  unstated. The minimized case is the harder one because the client is in *no*
-  scope rather than two, so there is nothing for the solver to satisfy and
-  something for a switcher to display, and §7.7's conclusion is that a switcher
-  reads membership rather than a solved layout.
+  in no visible scope. **Open, and the only entry here that is:** a client in two
+  scopes is in two constraint sets, only one of which is visible, and which of
+  the two the solver is responsible for is unstated. The minimized case is the
+  harder one because the client is in *no* scope rather than two, so there is
+  nothing for the solver to satisfy and something for a switcher to display, and
+  §7.7's conclusion is that a switcher reads membership rather than a solved
+  layout. `tags.md` §8.2 answers the half of it that is about membership, since
+  participation rather than membership is what the scratchpad withholds, and the
+  half that is left is the solver's input set.
 - Cluster is now load-bearing in three places rather than one. `generaldesign.md`
   §10 defines it, §7.5's gravity canvas needs cluster-on-attach, and §7.3's
   replace spawn mode pushes a displaced client somewhere that in a master and
@@ -1033,16 +1061,15 @@ part the pipeline does not answer.
   chose to do with the previous pass's transition. That is what keeps the
   deferral safe: `animate.md` can choose any of the three answers without any of
   them being able to leave the block without an endpoint.
-- **Where the engine sits in activation order.** §2.7 notes that `helpers.md` §11
-  makes priority advisory, so a wrong band is an init failure rather than a
-  detected violation, and a layout engine that activates before there are
-  clients has nothing to do while a layout engine that activates after tags
-  cannot lay them out at `init`. Whether the engine is a component at all, or a
-  service borrowed the way the store is (`server.md` §1), changes its band, its
-  `enable_key`, and whether it appears in the registration table in
-  `core/server.c` at all. §9 sharpens this, because four of the six mechanisms
-  in its table are not the solver and may not belong to the engine component at
-  all.
+- **When the first pass can run.** §11 settles that the engine is a core service
+  with no band and no `enable_key`, so the registration order and its advisory
+  priority are not the mechanism here, and the band question this bullet used to
+  ask is closed. What is left is narrower and still open: a pass that runs before
+  any client exists has no input set, and `init` is the point at which a tag
+  arrives, so whether the first pass is driven by the first client or by the first
+  tag is a real question about when the engine may safely read the client set.
+  §9 sharpens it, because four of the six mechanisms in its table are not the
+  solver and so their activation does not settle it either.
 
 ## 4. The layout namespace
 
@@ -1162,16 +1189,22 @@ is deliberately not a registry, so nobody wires it up as one later.
 ### 4.4 Layouts are keys, so the reserved set is a list and not a grammar
 
 Each layout is an ordinary catalog key whose name component is the layout name,
-holding a constraint program. A program is three keys under one prefix, which
-`layoutlanguage.md` §1 settles and `layout-test-examples.md` demonstrates:
+holding a constraint program. A program is four keys under one prefix, which
+`layoutlanguage.md` §1 settles and `layout-test-examples.md` demonstrates. Three
+of the four are structural and carry the program, and the fourth is a boolean
+about when a pass runs and has no representation here at all, which is the
+difference between counting the parts and counting the keys. All four are optional
+and each is resolved from a compiled-in default, so the example below carries the
+fourth only to show the shape:
 
 ```
-omniwm.layouts.master_stack.rules     = [...]   # a user layout, the user's own name
-omniwm.layouts.master_stack.spaces    = [...]
-omniwm.layouts.master_stack.viewport? = {...}
-omniwm.layouts.sidebar.rules          = [...]
-omniwm.layouts.sidebar.spaces         = [...]
-omniwm.layouts.monocle                           # a built-in, compiled in, no stored definition
+omniwm.layouts.master_stack.rules              = [...]   # a user layout, the user's own name
+omniwm.layouts.master_stack.spaces             = [...]
+omniwm.layouts.master_stack.viewport?          = {...}
+omniwm.layouts.master_stack.rearrange_on_focus? = true
+omniwm.layouts.sidebar.rules                   = [...]
+omniwm.layouts.sidebar.spaces                  = [...]
+omniwm.layouts.monocle                                 # a built-in, compiled in, no stored definition
 ```
 
 A prefix with `rules` but no `spaces` is a valid blank program rather than a
@@ -1286,13 +1319,16 @@ the letter never has to be agreed on with anyone.
 
 ### 4.7 What the namespace does not cover
 
-- **Tags and monitors.** Whether a tag or a monitor names a layout independently
-  of the current one is §3.2's open question about layouts-as-values, and the
-  namespace neither answers nor obstructs it.
+- **Tags and monitors.** A tag names a layout and a monitor does not: §3.5 settles
+  both, the tag's own under its entry and a monitor's derived from the primary tag
+  at the head of its list. This bullet used to point at a §3.2 question about
+  layouts-as-values that no longer exists in that form, and the answer it now gets
+  is the namespace's: one name field, taken from the closed set, either stored on
+  the tag or derived from it, with no second spelling.
 - **Groups.** §7.1 resolves a stack to a group with no bar, and §7.5's deck to
-  monocle inside a group. Whether a group carries its own layout
-  reference is open, and the namespace makes it a one-field question rather than
-  a naming one.
+  monocle inside a group. §3.6 answers the question this bullet used to leave
+  open: a group names a layout, and that name is one field on the group rather
+  than anything the namespace has to reserve.
 - **Node identity across a definition change.** §2.10 settles that a solved
   layout's per-node identity is an `entry_ref`, so a layout's *name* is not node
   identity and redefining a slot does not need to preserve it. Under §3.1 the
@@ -1696,13 +1732,26 @@ Two consequences:
   already makes overview a special tag whose contents are the union of the
   others, so overview needs the client set and not the solved layout. That is a
   useful separation, because it means a switcher does not wait on a solve.
-- **Focus is an ejection.** "Kicked out of the scratchpad when focused" means
-  focus is not only a pointer at a client, it is a mutation of which scope
-  contains that client. That is the second place in this document where an
-  apparently simple interaction turns out to change a client set, after spawn
-  modes in §7.3, and the two together suggest that client-set membership is a
-  first-class thing the engine has to be able to see rather than something each
-  caller edits.
+- **Focus is not a membership mutation here, and that is a decision rather than
+  an oversight.** Wayfire kicks a minimized client out of the scratchpad when it
+  is focused and this design does not, because `tags.md` §8.4 makes focus the
+  thing that brings a scratchpad member onto the overlay and states that the
+  membership child is not touched by the focus event, and `windows.md` §5 says
+  the same. The membership mutation is the hide *into* the scratchpad, in the
+  other direction, and that one is an addition rather than a move, so dismissal
+  is a single deletion with nothing to restore. The engine's requirement is
+  unchanged either way, and it is the one §7.3's spawn modes already create:
+  **client-set membership is a first-class thing the engine can see rather than
+  something each caller edits.**
+
+**Where membership is decided, and where it is stored.** This section used to
+carry the stored-or-derived question as its own and it does not any more.
+`tags.md` §5 stores a client's membership as one `WINDOW_DEPENDENT` child per
+member, and `windows.md` §4 fixes the walk at ascending `entry_id`, so a solve
+reads a list in a total order that is stable across restarts and reproducible
+across machines. Both are the same decision, recorded at `tags.md` §9, and
+§3.2's determinism requirement is the reason. This section points there rather
+than reopening it.
 
 ### 7.8 The empty program is a blank canvas, and it has to mean something
 
@@ -1746,7 +1795,7 @@ worth collecting because they say the engine is not one solver.
 | solve | constraints in, geometry out | this document, §3.1 to §3.3 |
 | arrange | the solved value becomes the live one | this document, §6 |
 | viewport | pan and zoom, a transform from canvas space to an output | the canvas, §7.2 and §7.5 |
-| client-set membership | which clients a scope contains, mutated by spawn modes, focus, and minimization | `windows.md` and `tags.md`, §7.3 and §7.7 |
+| client-set membership | which clients a scope contains, mutated by spawn modes and by hide, and read by a solve | `windows.md` §4 and `tags.md` §5, §8.2 and §8.4, with this document's §7.3 and §7.7 |
 | snap-area resolution | a pointer or a keybind to a chosen rect | input plus this document, §7.6 |
 | relaxation | magnetize, applied after a solve | this document, §7.5 |
 

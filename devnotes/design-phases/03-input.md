@@ -24,7 +24,13 @@ and not a string compare on the hot path.
 **2. The device-rule tag and namespace.** `input.md` §5.1 places Mango's
 `ConfigDeviceRule` as a match-and-apply record, and §7.2 notes it has no tag.
 `client_rule` at `0x33` cannot be reused, because its fields are layout
-vocabulary. A new tag number is needed and it is not chosen.
+vocabulary. A new tag number is needed and it is not chosen. **It is chosen in this
+phase, when the input design is fleshed out**, rather than by phase 02, because
+`input.md` §7.2 now records the tag as unowned and says why: the record shape is
+only knowable once the rest of input is, so the number is a consequence of this
+phase's work rather than a substrate fact that phase 02 can supply in advance. The
+namespace, `wm.input.device.<n>.*`, follows from the same convention as the other
+options and is not waiting on the number.
 
 **3. The stylus binding kind.** Mango has `tablet.c` and the full `tablet_v2`
 protocol, and no binding struct to copy, so this is fresh work rather than a

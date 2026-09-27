@@ -56,8 +56,11 @@ A program has one rule list, at program level, and it applies to all of that pro
 spaces. There is no `groups` part and no `group` field; §5 explains what replaced them
 and why a rule list is a program, so a program wanting a second one nests.
 
-`spaces` and `rules` are the two things a program always has. All three absent is a
-**blank program**: valid, and the blank canvas of `devnotes/layoutengine.md` §7.8.
+`spaces` and `rules` are the two things a program always has. All three of the
+structural keys absent is a **blank program**: valid, and the blank canvas of
+`devnotes/layoutengine.md` §7.8. The fourth key does not enter into it, because a
+program that does not write `rearrange_on_focus` is a program that wants the
+default `true`, and the default is indistinguishable from having written it.
 
 ## 2. The model
 
@@ -885,11 +888,12 @@ four is a blank program, and a program wanting a second rule list nests a group,
 
 All four keys are each optional, and each one that is missing or blank is resolved
 independently by the consumer from a static default compiled into the code. "At most
-one" is therefore the real cardinality: a program that omits all three is the blank
-canvas of `layoutengine.md` §7.8, a program that writes only `rules` has spaces it
-did not ask for, and neither is an error. The defaults are not values, they are the
-absence of a value, and that is the whole of the rule: nothing is ever written into
-the block to stand in for one, and no consumer writes a default back. A key present
+one" is therefore the real cardinality: a program that omits all three structural
+keys is the blank canvas of `layoutengine.md` §7.8, a program that writes only
+`rules` has spaces it did not ask for, and neither is an error. The defaults are
+not values, they are the absence of a value, and that is the whole of the rule:
+nothing is ever written into the block to stand in for one, and no consumer writes
+a default back. A key present
 but malformed is a different case and is a parse error, not a fallback; see
 `tomlparser.md` §11.
 

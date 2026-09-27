@@ -376,9 +376,14 @@ OMNI_STATIC_ASSERT(OMNI_MAX_POOL > OMNI_INITIAL_POOL, "pool headroom");
 /* Section capability bits.
  *
  * The bits are not the section ids and are not offset from them by a fixed
- * amount, so the pairing is written out here rather than computed: bit n is the
- * section whose id is n+1 for n in 0..5, 7 and 8, and bit 6 is the socket, which
- * is a facade over the arena and has no section of its own. */
+ * amount, so the pairing is written out here rather than computed. Bits 0 to 5
+ * are the section whose id is n+1. Bit 6 is the socket, which is a facade over
+ * the arena and has no section of its own, and because it sits in the middle
+ * the last two bits are not offset at all: bit 7 is section 7 and bit 8 is
+ * section 8. That break is the reason there is no arithmetic here to check, and
+ * the assert below only catches a bit that is added without widening the
+ * default, not one that is paired with the wrong id, so the pairing below is the
+ * only statement of it. */
 #define OMNI_CAP_HAS_CATALOG (UINT64_C(1) << 0)
 #define OMNI_CAP_HAS_ARENA (UINT64_C(1) << 1)
 #define OMNI_CAP_HAS_JOURNAL (UINT64_C(1) << 2)

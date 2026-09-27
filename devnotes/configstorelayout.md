@@ -252,11 +252,16 @@ error rather than a disagreement between this table and the header. That is why
 this section can carry nine bits and the header's numeric literal need not appear
 twice.
 
-The bits are not the section ids and are not offset from them by a fixed amount:
-bit *n* names the section whose id is *n*+1 for *n* in 0..5, 7 and 8, and bit 6 is
-`HAS_SOCKET`, which is a facade over the arena and has no section of its own.
-There is therefore no arithmetic that keeps the two tables in step, which is
-another reason the coverage is asserted rather than computed.
+The bits are not the section ids and are not offset from them by a fixed amount.
+Bits 0 to 5 are the section whose id is *n*+1; bit 6 is `HAS_SOCKET`, which is a
+facade over the arena and has no section of its own; and the run then resumes at
+the other offset, with bit 7 naming section 7 and bit 8 naming section 8. The
+socket bit sitting in the middle is the whole reason there is no single offset,
+and therefore no arithmetic that keeps the two tables in step, which is another
+reason the coverage is asserted rather than computed. The static assert in the
+header holds `OMNI_CAP_DEFAULT` to every defined bit, but it cannot catch a bit
+paired with the wrong id, so the pairing is stated here and in the header and
+nowhere is it derived.
 
 Mappers must not trust the block until the header parses cleanly against
 `OMNI_MAGIC`, `OMNI_FORMAT_VERSION`, the expected header/section constants,
@@ -304,9 +309,12 @@ Row order is fixed; `id == row`. Fixed ids:
 
 Rows 9 through 15 are spare and carry `id == NONE` with `PRESENT` clear. Eight
 rows are used, one per section, and they are ids 1 through 8. Every one of them has
-a capability bit in §3, so the two tables cover the same eight sections; the bits
-are the ids shifted, except that the socket's bit has no row here because the
-socket is a facade over the arena rather than a place in the block.
+a capability bit in §3, so the two tables cover the same eight sections. The bits
+are not the ids shifted by one number, though: bits 0 to 5 are, the socket's bit
+has no row here at all because the socket is a facade over the arena rather than a
+place in the block, and bits 7 and 8 are the ids unchanged. §3 states the same
+pairing, and it is stated twice because neither table is derivable from the
+other.
 
 `ARENA` and `REGION_PAYLOAD` are windows into the same physical pool:
 `ARENA.offset = pool_base`, `ARENA.size = arena_end - pool_base`;
