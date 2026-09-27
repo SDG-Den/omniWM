@@ -53,7 +53,7 @@ much information they carry, and the missing parts are filled by TOML's own
 rules: a bare local date is midnight local, a bare local time is today local,
 and a local date-time is that wall-clock time in the machine's zone.
 
-Three tags are not inferred from the TOML value shape, because the TOML shape
+Four tags are not inferred from the TOML value shape, because the TOML shape
 does not determine them: the tag comes from the key, the same rule §3 already
 states for integers.
 
@@ -73,7 +73,8 @@ levels inside a `constraint` value rather than values in their own right
 therefore an `option` table and a rule is a key within it, and the tag a table
 binds to is the one §3 declares for its key, not a per-level tag invented here.
 
-A binding, a layout program and a client rule table are all tables, and §6 would
+A binding, a layout program, a client rule table and a window rule table are all
+tables, and §6 would
 otherwise bind each to a `tuple` whose `field_types` come from field order. That is
 wrong for all of them: the fields are named, and a positional encoding would make a
 layout file unreadable and a reordering silent. So each binds to its own composite

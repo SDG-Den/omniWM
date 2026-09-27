@@ -25,7 +25,11 @@ nix run nixpkgs#gcc -- -std=c11 -Wall -Wextra -Iinclude -fsyntax-only -x c \
 ```
 
 Run it from the repository root. As of 2026-09-27 it exits 0 with no output
-against GCC 15.3.0.
+against GCC 15.3.0. The gcc that command resolves to is already realised in the
+Nix store, so the run is a store lookup: it fetches nothing and writes nothing to
+the environment or to the working tree. The fact is recorded because the argument
+this file makes about a criterion has a second half, and a check a reader has to
+weigh before running it is a check that does not get run.
 
 The flags after the `--` describe the task rather than the project's real build
 flags, and each one is there for a reason:

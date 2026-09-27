@@ -1086,7 +1086,7 @@ OMNI_STATIC_ASSERT(OMNI_SOCK_SUN_PATH_MAX <= OMNI_SOCK_MAX_LINE, "path fits a li
 #define OMNI_ERR_REQUEST_EXPIRED UINT8_C(16)
 #define OMNI_ERR_VALUE_UNREADABLE UINT8_C(17)
 
-/* The four read codes exist because a read is a plain memory access with no slot
+/* The five read codes exist because a read is a plain memory access with no slot
  * to hold a result, and this set is what it returns instead:
  *
  *   KEY_NOT_FOUND        the name is not in the index. An absence, and a normal

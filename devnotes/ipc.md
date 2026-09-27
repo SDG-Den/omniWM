@@ -922,10 +922,13 @@ Soft reset is two steps and takes no snapshot of its own:
 
 **There is no snapshotting here, and the absence is the design.** A soft reset is
 not reversible by itself, and nothing in the block or on the socket makes it so. A
-caller that wants a way back asks for one explicitly, by `save`-ing first: `save
-omniwm.* /tmp/before.toml` then `reset soft` is reversible, because `save` is
+caller that wants a way back asks for one explicitly, by `save`-ing first:
+`save omniwm.* /tmp/before.toml` then `reload /tmp/before.toml` is reversible,
+because `save` is
 already a narrowed export of the block to a file and `reload` already reads one
-back. Both of those exist for other reasons, and a reset that reused them needs no
+back. `reset soft` is not the restoring step, because it re-runs the config the WM
+booted from rather than the file just written. Both of those exist for other
+reasons, and a reset that reused them needs no
 mechanism of its own. Building a snapshot into the reset instead would have meant
 a block-layout section, a temp-file lifetime policy, and a path in the event, for
 a capability the facade already had.

@@ -236,8 +236,11 @@ input in the next paragraph flat. `tags.md` §4 and §5 have the rule.
 which was in tension with the two paragraphs above, and the tension was not
 cosmetic. It decided the question: the answer decides whether the engine appears
 in the `helpers.md` registration table with a priority band and an `enable_key` at
-all, or is wired directly into `core/server.c` the way the store is, and §11
-records it as a **core service**. The engine gets no band and no `enable_key`,
+all, or is a core service in `src/core` that the server starts, and §11
+records it as a **core service**. The answer is the second, so the engine is
+implemented at `src/core/layoutengine.c`: being a core service is what puts it
+there, and being in the same directory as the registry and the server is not what
+makes it a registered component. The engine gets no band and no `enable_key`,
 which also means the two paragraphs above are not competing with a registration
 table at all.
 
@@ -345,7 +348,8 @@ and states that priority is advisory and not a dependency edge, so a component
 that activates before something it implicitly needs surfaces as an init failure
 rather than as a detected violation. The engine is not in that table at all, so it
 has no place in the order and no band that could express one: §2.4 and §11 make
-it a core service wired into `core/server.c`. What is still open is the narrower
+it a core service in `src/core`, implemented at `src/core/layoutengine.c`. What is
+still open is the narrower
 question §3.7 carries, which is when the first pass can run before there are
 clients to place.
 
@@ -2086,8 +2090,9 @@ mapping phase later made it eight rather than seven.
   looked like two documents disagreeing and was really one rule stated only
   halfway. §5.1 now states the test that resolves it, and the test is necessity
   rather than user-facingness: the compositor cannot manage windows without a
-  layout, so the engine is core, is wired into `core/server.c` like the store, and
-  gets no band and no `enable_key`. A *built-in layout* is the opposite case and
+  layout, so the engine is core, is implemented at `src/core/layoutengine.c` beside
+  the registry and the server rather than in `src/windows`, and gets
+  no band and no `enable_key`. A *built-in layout* is the opposite case and
   is a component, because the core needs the mechanism to place a window and does
   not need any particular layout compiled in. So the engine is not in the
   `helpers.md` registration table, and the activation-order worry in §3.7 dissolves

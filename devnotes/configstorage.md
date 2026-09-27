@@ -194,6 +194,11 @@ place would move live entries, invalidate every held
 `(entry_id, entry_generation)`, and make delete an O(n) move of the catalog
 rather than of a derived index.
 
+The C signature of the read this section describes is not restated here.
+`configstorelayout.md` §14.1 owns it, as
+`OMNI_ERR_* omni_get(omni_block *, const char *name, omni_value *out)`, and it is
+stated there once rather than in both places.
+
 **2. Hot reads use private-copy indexes, rebuilt once per change.** A process
 that reads the same keys every frame keeps its own copy of what it needs, and
 refreshes it when the store says something changed rather than re-resolving per
@@ -704,11 +709,14 @@ to whoever uses the value.
   value in any of them means the bytes are not this format at all, so there is no
   header left to check a field of. L1 then checks the header as bytes.
   `block_size` is a multiple of 4096 and between `header_size` and the maximum. The
-  two value words are value sets, and each refuses a value outside its own:
-  `state` in {CREATING, READY, BROKEN} and `commit_state` in {IDLE, ACTIVE,
-  GROWING, BROKEN}. The futex protocol and the writer identity it carries are the
-  next two. The last three are the relationships between the value words that make
-  a commit's stage changes coherent, and the terminality of a BROKEN block. A
+  three value words are value sets, and each refuses a value outside its own:
+  `state` in {CREATING, READY, BROKEN}, `commit_state` in {IDLE, ACTIVE, GROWING,
+  BROKEN}, and `ready` in {NOT_READY, READY, DEGRADED, FAILED}. The futex protocol
+  and the writer identity it carries are the next two. The next three are the
+  relationships between the value words that make a commit's stage changes
+  coherent, and the terminality of a BROKEN block. The last one is the other half
+  of the `ready` axis: `ready` reaches READY only in a commit that sets `state` to
+  READY, and DEGRADED only in a commit that sets it to DEGRADED. A
   CREATING block is `OMNI_ERR_NOT_READY`; a BROKEN block is
   `OMNI_ERR_STORE_BROKEN`. Both are refusals, not corruption, and neither is
   logged per entry because there is no consumer state to log into yet.

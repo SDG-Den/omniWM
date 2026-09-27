@@ -93,12 +93,17 @@ One directory per compositor subsystem, each a component in the sense of
 `helpers.md` §3 and each paired with its `include` counterpart: `input`, `windows`,
 `tags`, `monitor`, `decorate`, `draw`, `animate`, and `ext-protocol`.
 
-Three of those have designs now: `windows` (`windows.md`), `tags` (`tags.md`),
-and the layout solver, which is `windows`-adjacent and specified by
-`layoutengine.md` with `layoutlanguage.md` for its syntax. `input` is the
-fourth, and `input.md` §3 settles the decomposition this document previously
-declined to sanction. The other four have no design, and for those this document
-still does not invent a contract.
+Two of those have designs now: `windows` (`windows.md`) and `tags` (`tags.md`).
+`input` is the third, and `input.md` §3 settles the decomposition this document
+previously declined to sanction. The other five have no design, and for those this
+document still does not invent a contract.
+
+The layout solver is not one of those eight. It is a core service rather than a
+component (`layoutengine.md` §11), so it is implemented at
+`src/core/layoutengine.c` and is specified by `layoutengine.md` with
+`layoutlanguage.md` for its syntax. It sits in `src/core` beside the registry and
+the server because it has to run whether or not any component is enabled, which is
+the same reason `src/core` holds the substrate.
 
 `input.md` §3 keeps `input.c` and `binds.c`, keeps `devices.c`, `keyboard.c`,
 `mouse.c`, `tablet.c` and `trackpad.c`, drops `gestures.c` because a gesture is a

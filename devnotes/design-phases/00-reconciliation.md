@@ -84,7 +84,7 @@ function's out-parameter cannot fail to be delivered and therefore needs no slot
 and no lifecycle.
 
 **2. The invariant table and the guard tiers. Closed: four structural tiers plus a
-fifth replay tier, 49 rows, one tier per row.** The `Semantic` tier is deleted
+fifth replay tier, 51 rows, one tier per row.** The `Semantic` tier is deleted
 outright rather than given rows, because
 a semantic check is not a guard — a guard answers whether bytes are readable as
 what they claim to be, and "is this value sensible" belongs to whoever uses it. The
@@ -298,7 +298,7 @@ three were run after the final edit.
   tier at all. `configstorage.md` §12's L1 bullet states `magic`,
   `format_version` and the section constants as preconditions on mapping rather
   than as tier invariants, which is the framing `configstorelayout.md` §2 already
-  used, and the two value words it did enumerate now have a row each.
+  used, and the three value words the L1 bullet enumerates each have a row.
 - **A grep for "wholesale" returns no place that *asserts* a port was taken
   unchanged.** Met. The word occurs in three documents, and every occurrence is
   about the wording rather than about the port: this file, `generaldesign.md` §14,
@@ -320,7 +320,7 @@ three were run after the final edit.
   counts, which is what the first audit's removed criterion did and what this
   criterion's own parenthetical did in the third pass.
 - **The header compiles and every `OMNI_STATIC_ASSERT` passes.** Met. Verified
-  under `-std=c11 -Wall -Wextra` with no output, which covers all 81
+  under `-std=c11 -Wall -Wextra` with no output, which covers all 79
   `OMNI_STATIC_ASSERT`s and `OMNI_CAP_DEFAULT == 0x1FF`. The property is stated
   here and the invocation lives once, in `build.md` §1, because the three copies
   of the command this file carried had each drifted into a form that could not be
@@ -585,8 +585,8 @@ across the design documents are unchanged, which is a question about the convent
 and not a defect. `countlines.sh` had an unrelated uncommitted edit.
 
 **Re-verification after the corrections.** The header compiles under `-std=c11
--Wall -Wextra`, per `build.md` §1, and all 81 `OMNI_STATIC_ASSERT`s pass, up from
-79 because the capability coverage check is one of the two added. `git diff --check` is clean.
+-Wall -Wextra`, per `build.md` §1, and all 79 `OMNI_STATIC_ASSERT`s pass, up from
+77 because the capability coverage check is one of the two added. `git diff --check` is clean.
 The guard table counts 49 rows, L1 8, L2 10, L3 17, L4 10, R 4. A grep for
 `xref.py` and `lcheck.py` finds both names only in this file. A grep for the twelve
 wrong claims listed above returns nothing in the design documents. It returns two
@@ -748,7 +748,7 @@ wrong, and the questions were distributed across eight sections of a document wh
 questions are open in its body.
 
 **Re-verification after this pass.** The header compiles under `-std=c11 -Wall
--Wextra`, per `build.md` §1, with no warnings, all 81 `OMNI_STATIC_ASSERT`s pass,
+-Wextra`, per `build.md` §1, with no warnings, all 79 `OMNI_STATIC_ASSERT`s pass,
 and
 `OMNI_CAP_DEFAULT` is still `0x1FF`, now checked by a `_Static_assert` of its own
 rather than by reading the macro. `git diff --check` is clean. The guard table
@@ -776,7 +776,7 @@ and one of them is a comparison, and it is the one that does not hold.
 not spend the pass on them: the guard table is 49 rows distributed L1 8, L2 10,
 L3 17, L4 10, R 4 with no `Semantic` tier, and the capability-bit pairing is stated
 identically in `omni_layout.h` §4, `configstorelayout.md` §3 and its §4, which is
-the defect the second audit opened with. The header compiles and all 81
+the defect the second audit opened with. The header compiles and all 79
 `OMNI_STATIC_ASSERT`s pass. `git diff --check` is clean. The `wholesale` grep still
 returns three documents, all about the wording. The `design-phases/README.md`
 inventory's eleven bullet counts were re-derived from the documents and all eleven
@@ -853,7 +853,7 @@ would go looking for and not find: a criterion that cannot be run as written is
 worse than no criterion, because it reports a pass that was never demonstrated.
 The two verification paragraphs at the end of the first and second audit sections
 carry the same unrunnable form. The finding is not that the compile does not
-succeed; it does, and the count of 81 is right. The finding is that the sentence
+succeed; it does, and the count of 79 is right. The finding is that the sentence
 describing how to reproduce it is wrong, and no document in the repository records
 that this project's C is compiled through `nix run` rather than through a compiler
 on `PATH`, which is the fact the next reader needs and the one thing here a
@@ -990,7 +990,7 @@ have to be designed.
 
 The header compiles under `nix run nixpkgs#gcc -- -std=c11 -Wall -Wextra
 -Iinclude -fsyntax-only -x c include/shared/omni_layout.h` with no warnings, so
-all 81 `OMNI_STATIC_ASSERT`s pass and `OMNI_CAP_DEFAULT` is `0x1FF`. `git diff
+all 79 `OMNI_STATIC_ASSERT`s pass and `OMNI_CAP_DEFAULT` is `0x1FF`. `git diff
 --check` is clean. The guard table counts 49 rows, L1 8, L2 10, L3 17, L4 10, R 4,
 and `configstorelayout.md` §12 still has no `Semantic` tier; what this pass adds is
 that L1 is short of rows for guards `configstorage.md` §12 names, which is a
@@ -1155,7 +1155,7 @@ item 8: both are the stub's to resolve when phase 01 begins.
 ### Re-verification after these edits
 
 `git diff --check` is clean. The header compiles under the `build.md` §1
-invocation with no output, so all 81 `OMNI_STATIC_ASSERT`s pass and
+invocation with no output, so all 79 `OMNI_STATIC_ASSERT`s pass and
 `OMNI_CAP_DEFAULT` is `0x1FF`. The guard table is 51 rows distributed L1 10, L2 10,
 L3 17, L4 10, R 4, with no `Semantic` tier, and a grep of it for `magic` and
 `format_version` still returns nothing, which is now the intended result rather
