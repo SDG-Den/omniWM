@@ -836,8 +836,10 @@ disagrees with its frame header is malformed. Neither is repaired.
 
 The "allocated" test in the `framed` line is the free list's discriminator, and
 it is the one thing that makes a recycled frame safe to hand out. A free frame
-stores its successor at `OMNI_FRAME_OFF_NEXT_FREE`, which is the first word of
-its payload (`configstorelayout.md` §5), and a live frame stores zero there, so
+stores its successor at `OMNI_FRAME_OFF_NEXT_FREE`, which is the second word of
+its 16-byte frame header, ahead of the payload that starts at
+`OMNI_FRAME_OFF_PAYLOAD` (`configstorelayout.md` §5), and a live frame stores
+zero there, so
 the two cannot be confused: `next_free == 0` is allocated, and any non-zero
 `next_free` is on the free list. The free-list head itself
 (`OMNI_HDR_OFF_ARENA_FREE_HEAD`) and a free list's tail both use
@@ -937,15 +939,15 @@ a recycled file, which is otherwise indistinguishable until it matters.
 | `state` | `OMNI_STATE_CREATING` | **not** READY. A reader that mapped the file before this line ran sees CREATING and gets `NOT_READY`, which is a refusal it already knows how to make |
 | `commit_id` | 1 | the seeding commit is the first published state, so the first `commit_id` a reader can see is 1 and never 0 |
 | `epoch` | fresh, never reused | one per compositor instance; zero is not a legal epoch because a zeroed block must never look like a live one |
-| `boot_time_ns` | `CLOCK_BOOTTIME` at creation | the compositor's start, not the block's, so a recreate after a crash does not move it backwards |
-| `capabilities` | `OMNI_CAP_DEFAULT` | all eight bits; the sections are all created empty rather than absent, so presence is stated once and up front |
+| `boot_time_ns` | `CLOCK_MONOTONIC` at creation | a witness of when the creator started, so a reader can tell a block it is looking at was written by this compositor instance or by a previous one. Both sides read the same clock, so the comparison is a subtraction and not a conversion, and `CLOCK_MONOTONIC` is the clock the rest of the design already uses for a stored timestamp (`configstorelayout.md` §9's `terminal_at_ms`, `ipc.md` §4's entry `time`), so this field is not the one exception that has to remember which of two clocks it meant |
+| `capabilities` | `OMNI_CAP_DEFAULT` | all nine bits; the sections are all created empty rather than absent, so presence is stated once and up front. `OMNI_CAP_DEFAULT` is `OMNI_CAP_ALL_BITS` in the header, so the ninth bit is the catalog index and a block that has one is visible as having one |
 | `wm_pid` | creator's pid | recovery evidence, cleared on clean shutdown |
 | `pool_base`, `pool_size` | `OMNI_POOL_OFF`, `OMNI_INITIAL_POOL` | from §2's derivation; asserted against `OMNI_POOL_OFF` at build time |
 | `arena_end` | `pool_base` | an empty arena. The end is the bump cursor, so an empty arena is where they meet |
 | `arena_free_head` | `OMNI_REF_NONE` | an empty free list terminates on the sentinel rather than on 0, because 0 is not a valid frame offset: the pool starts at `OMNI_POOL_OFF` |
 | `region_head` | `OMNI_REF_NONE` | same reason, same sentinel |
 | `catalog_free_head` | the first unseeded slot, or `OMNI_REF_NONE` only if seeding consumed every slot | a fresh block is not short of free slots, it is *entirely* free slots, so the freelist is a chain over the unseeded tail of the array rather than the sentinel. The creator seeds a low run of slots for the core `wm.*` keys and links the whole remainder, which is why the head is usually a real index and the sentinel is the rare case it was designed for |
-| `catalog_free_count` | `OMNI_CATALOG_SLOTS` minus the number of slots seeding consumed | the honest count for the same reason. Zero is correct only for a block whose catalog is full, and a fresh block is the opposite of full, so a creator that wrote zero here would have its first `omni_set` walk an empty freelist while sixteen thousand FREE slots sat in the array looking unavailable |
+| `catalog_free_count` | `OMNI_CATALOG_SLOT_COUNT` minus the number of slots seeding consumed | the honest count for the same reason. Zero is correct only for a block whose catalog is full, and a fresh block is the opposite of full, so a creator that wrote zero here would have its first `omni_set` walk an empty freelist while sixteen thousand FREE slots sat in the array looking unavailable |
 | `request_ticket_next` | 1 | 0 is reserved as "no ticket ever issued", so the first real ticket is 1. A u32 wraps in practice, so §0.1's no-wrap rule holds within an epoch and a wrapped ticket is rejected against the live one rather than trusted |
 | `catalog` slots, the 16,384 not handed to a seeded entry | `entry_generation` = 0, `FREE` set, `DESTROYED` clear, `name_ref` = the next unseeded slot, `0xFFFFFFFF` on the last one | these are the empty slots, and generation 0 is what distinguishes "never allocated" from "allocated and later freed" (`configstorelayout.md` §6 gives 1 to the first allocation of a slot). `name_ref` carries the freelist link that §6 reserves for a FREE entry, which is what makes them allocatable rather than merely present. `DESTROYED` is deliberately clear, and it stays clear on a chain of never-allocated slots rather than being set to match the generic FREE rule in `configstorelayout.md` §6: that rule describes a slot freed from a live entry, where `DESTROYED` is a statement about a name that existed and was deleted, and a slot that was never named has nothing to have destroyed |
 | `catalog` slots handed to a seeded entry | `entry_generation` = 1, both lifecycle bits clear | the first allocation of a slot is generation 1. The creator takes these from the low end of the array directly rather than from the freelist, so seeding never has to distinguish a fresh slot from a recycled one, and the chain of unseeded slots above stays intact for the first real `omni_set` |

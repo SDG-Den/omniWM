@@ -841,8 +841,8 @@ of `include/shared/omni_layout.h` is no longer implied by anything: there is no
 fixed-width record in this language, because every argument is either a small
 enumeration, a number, or a name. A program is a table, and it is stored as one.
 
-That reverses `devnotes/layoutengine.md` §2.10's claim that a record is 16 bytes,
-and the header has been changed to match: `OMNI_TAG_CONSTRAINT` at `0x32` is a
+That reverses the fixed-width record that `devnotes/layoutengine.md` and the
+header used to imply, and the header has been changed to match: `OMNI_TAG_CONSTRAINT` at `0x32` is a
 composite value rather than a record array, and its payload is
 `constraint := array of space` with a space being an `option` and a rule a named
 key of that option (`configstorage.md` §4, `omni_layout.h` section 7). The

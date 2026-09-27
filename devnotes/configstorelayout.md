@@ -221,7 +221,7 @@ took the word at `0x0A4`). `commit_state` and `active_commit_id` are
 accessed with aligned atomic operations. `writer_pid` and `writer_token` are
 meaningful only while `futex == 1`.
 
-Capabilities bits (u64, default `0xFF` = all store sections present):
+Capabilities bits (u64, default `0x1FF` = all store sections present):
 
 ```
 bit 0  HAS_CATALOG       bit 4  HAS_REGION_DESC
@@ -240,11 +240,23 @@ problem for every client on the socket. So a block whose index row is absent or
 malformed, or whose `OMNI_CATALOG_INDEX_VERSION` does not match, is one this
 build cannot read: `get` returns `OMNI_ERR_BLOCK_UNSUPPORTED` rather than
 scanning.
-A consumer that sees `0x7F` is looking at a block written
-before the solved layout section existed, and it must not read section 7; a
-consumer that sees bit 7 clear must not read section 7 either. Either way the
-absence is a fact about the block rather than an error, so the bit is a presence
-statement and `OMNI_CAP_DEFAULT` covers all eight.
+A consumer that sees bit 7 clear is looking at a block written before the solved
+layout section existed, and it must not read section 7. The absence is a fact
+about the block rather than an error, so the bit is a presence statement and
+`OMNI_CAP_DEFAULT` covers all nine.
+
+The default is not written out by hand. `omni_layout.h` builds it as
+`OMNI_CAP_ALL_BITS`, the union of every bit the header defines, and asserts that
+the result is `0x1FF`, so adding a bit without widening the default is a compile
+error rather than a disagreement between this table and the header. That is why
+this section can carry nine bits and the header's numeric literal need not appear
+twice.
+
+The bits are not the section ids and are not offset from them by a fixed amount:
+bit *n* names the section whose id is *n*+1 for *n* in 0..5, 7 and 8, and bit 6 is
+`HAS_SOCKET`, which is a facade over the arena and has no section of its own.
+There is therefore no arithmetic that keeps the two tables in step, which is
+another reason the coverage is asserted rather than computed.
 
 Mappers must not trust the block until the header parses cleanly against
 `OMNI_MAGIC`, `OMNI_FORMAT_VERSION`, the expected header/section constants,
@@ -287,7 +299,14 @@ Row order is fixed; `id == row`. Fixed ids:
 ```
 0 NONE       1 CATALOG   2 ARENA          3 JOURNAL
 4 REQUESTS   5 REGION_DESC 6 REGION_PAYLOAD 7 SOLVED_LAYOUT
+8 CATALOG_INDEX
 ```
+
+Rows 9 through 15 are spare and carry `id == NONE` with `PRESENT` clear. Eight
+rows are used, one per section, and they are ids 1 through 8. Every one of them has
+a capability bit in §3, so the two tables cover the same eight sections; the bits
+are the ids shifted, except that the socket's bit has no row here because the
+socket is a facade over the arena rather than a place in the block.
 
 `ARENA` and `REGION_PAYLOAD` are windows into the same physical pool:
 `ARENA.offset = pool_base`, `ARENA.size = arena_end - pool_base`;
@@ -1055,7 +1074,7 @@ L2    a section extending past block_size is skipped, never clamped
 L3    catalog freelist is an acyclic index chain, head/count consistent
 L3    arena freelist is an acyclic frame chain from arena_free_head, terminating on OMNI_REF_NONE
 L3    every frame on the arena freelist lies in [OMNI_POOL_OFF, arena_end) and is unreachable from any live body_ref
-L3    the catalog name index is sorted ascending by its 64-bit hash, and its entry_count equals the number of live catalog slots
+L3    the catalog name index is sorted ascending by its 64-bit hash, and its live_count equals the number of live catalog slots
 L3    every name-index row resolves to a live catalog slot whose name hashes to the row's value
 L3    every arena allocation base and every region payload base is 16-aligned
 L3    no live reader result depends on stale bytes of a recycled slot

@@ -33,14 +33,20 @@ what an animation is still moving. Phase 10 depends on this, and so does
 **5. Activation ordering.** What order layouts are activated in when a solve
 touches several, and whether that order is observable.
 
-**6. The six open items of §11.** The priority bands are ordinal and the values
-inside a band are not, which §3.2 and `omni_layout.h` already handle by naming
-the constant `DOMINANT` rather than `REQUIRED`; the arranged-layout question is
-item 2 above; the rest need enumerating against §11 at the time of the phase.
+**6. The two §11 questions phase 00 closed, recorded here so this phase does not
+reopen them.** *The priority bands* are closed as **one weight per solved family**,
+`OMNI_SOLVER_WEIGHT_PROGRAM` 60000 and `OMNI_SOLVER_WEIGHT_CLIENT_RULE` 6000, with
+the four named bands deleted rather than renamed. *The arranged-layout question* is
+item 2 above and is closed as **one buffer, two stages**, a `stage` byte in
+`configstorelayout.md` §11's header rather than a second section. `layoutengine.md`
+§11 now carries no open item, so the part of this that was going to need
+enumerating against §11 no longer exists.
 
-**7. `layoutengine.md` §3.2's false Mango attribution** for cluster behaviour,
-carried from phase 00 if it was not done there, and `layoutengine.md` §7.7's
-membership determinism question, which `tags.md` §9 also carries.
+**7. The two §7 questions phase 00 closed.** *§3.2's Mango attribution for cluster
+behaviour* is corrected: §3.2 named no Mango behaviour, and the derivation runs the
+other way, from our group plus chrome to a Mango-style group (`layoutengine.md`
+§7.1). *§7.7's membership determinism question* is closed as **stored**, by the same
+decision `tags.md` §9 records, and §7.7 points there rather than asking.
 
 **8. The roadmap inversion.** Phase 08's first item is whether the scene graph has
 to exist before decorations, and the answer changes what this phase owes

@@ -266,8 +266,9 @@ matched pair:
   see and jump to anything. It is not a separate view mode with its own state
   machine; it is a tag whose contents are the union of the others, which makes it
   the degenerate case of the list rule above. One per monitor.
-- **Scratchpad** is a special tag, exclusive to itself, which no other tag
-  interacts with. It holds a **layout of its own** and is an **overlay workspace**:
+- **Scratchpad** is a special tag whose *arrangement* is exclusive to itself: no
+  other tag's layout places its clients, because it holds a **layout of its own**
+  and is an **overlay workspace**:
   summoning it places its clients by that layout over the top of the monitor's
   existing view rather than replacing it. It can be **one shared tag across all
   monitors, in which case it is openable on at most one monitor at a time**, or
@@ -284,7 +285,8 @@ applied to a tag that is not pinned to a monitor. Making it per-monitor is not a
 different feature, it is the same code with N tags.
 
 Both special tags hold clients that are also on ordinary tags, and both animate,
-decorate, and bind like any other tag. The two differ in what that overlap means:
+decorate, and bind like any other tag, so the exclusivity above is about
+placement and never about membership. The two differ in what that overlap means:
 overview is a *union*, so an ordinary member appears in it and appears twice, and
 the scratchpad is *outside* the union, so an ordinary member is skipped by its
 ordinary tag's layout and placed only by the scratchpad's own. Membership is
@@ -546,8 +548,7 @@ What Mango's `KeyBinding` carries, and where each field goes:
 | `arg` | `args_ref` and the inline positional array, already in the header |
 | `mode`, `iscommonmode`, `isdefaultmode` | fields in the header, subject to §14.4's namespace mapping, which `input.md` §7.1 records as still open |
 | `islockapply`, `isreleaseapply`, `ispassapply`, `isallowconflict` | flag bits in the header's flags word |
-| `spec` | a field in the header, the config line a user would edit to change this binding |
-| `line_number`, `file_index` | **dropped.** They are TOML parse diagnostics, they describe where a binding was written rather than what it does, and no reader of the block has a use for them |
+| `spec`, `line_number`, `file_index` | **dropped, all three, for one reason.** They describe where a binding was *written* rather than what it does, and none of them is a fact a reader of the block can use. `line_number` and `file_index` are plainly TOML parse diagnostics. `spec` is subtler and deserves the reasoning, because it looks load-bearing in Mango and is not load-bearing here: it is a shim over Mango's original storage, where a binding lived in process memory and could not be fetched over the IPC, so the only handle a human had on a binding was the config line the user had written. `spec` was how Mango echoed something recognizable back. In a block the binding *is* the record, it has a key, and `ipc.md` §4's `get` returns it verbatim, so the handle already exists and does not need a stored copy of the source text. Storing one would also be a second copy of the truth that only some bindings would have: a binding written by `set` over the socket never had a config line, and a value reconstructed from a record by running a parser backwards is lossy in a way the record itself is not. A redesign that allows scriptable configuration is exactly the case where a binding's origin text is the *least* interesting thing about it. |
 
 The header therefore grows past its current 24 bytes, which answers the question
 this supersedes: the `binding` tag is one tag with a kind field, not five tags,

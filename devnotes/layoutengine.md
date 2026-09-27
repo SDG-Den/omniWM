@@ -474,8 +474,10 @@ assigned, so the table had room.
 row leaves `JOURNALLED` clear, so a solve is a bounded memcpy and a `generation`
 bump rather than a commit. This is what makes the answer to §3.7's "how does an
 external program read a layout" cheap rather than expensive, and it is why
-`OMNI_CAP_DEFAULT` moved from `0x7F` to `0xFF`: the new section's presence is
-what tells a reader the block is one it can read a solve from.
+`OMNI_CAP_DEFAULT` grew: `0x7F` to `0xFF` when the solved layout section took bit
+7, and `0xFF` to `0x1FF` when the catalog index took bit 8. A new section's
+presence bit is what tells a reader the block is one it can read that section
+from, so the default has to widen every time one is added.
 
 ## 3. What is not decided
 
@@ -538,14 +540,20 @@ as an intent or as a resolution rule, it is a program-level declaration and it
 costs no engine change. If it needs the solver to know something new, it belongs
 in §7 first.
 
-**The program format.** A program is a space table, a set of mapping rules, and an
-array of constraint records, and it is stored in SHM in exactly one shape however
-the user authored it. A space needs a name, a capacity, and an optional nested
-layout name. A resolution rule needs a source space, a target space and a
-declared position in the partial order that makes cascades terminate. A record names a subject space and an operand space,
-and no client. `OMNI_TAG_CONSTRAINT` at `0x32` is therefore a program rather than
-a bare record array, and the record itself is unchanged in size at 16 bytes with
-its two space references as `u16`.
+**The program format.** A program is a space table, a set of mapping rules, and a
+viewport, and it is stored in SHM in exactly one shape however the user authored
+it. A space needs a name, a capacity, and an optional nested layout name. A
+resolution rule needs a source space, a target space and a declared position in
+the partial order that makes cascades terminate. A space names a nested program
+rather than an operand space, and no space names a client.
+`OMNI_TAG_CONSTRAINT` at `0x32` is therefore a program rather than a bare record
+array: it is the `spaces` key of `omniwm.layouts.<name>`, and its payload is
+`constraint := array of space` with each space an `option` and a nested group a
+child `constraint`. Its siblings `.rules` and `.viewport` are the mapping rules
+and the viewport, so the three names this document uses for a program's parts are
+the three keys it is stored under. There is no fixed-width record to keep at any
+size, because every argument is an enumeration, a number, or a name
+(`configstorage.md` §4, `layoutlanguage.md` §9, `omni_layout.h` section 7).
 
 Blocks §3.3, §3.4, §3.6, `windows.md` and `animate.md`.
 
@@ -690,7 +698,8 @@ to it.
   places no nodes. `OMNI_SECTION_SOLVED_LAYOUT` carries the per-node
   `entry_ref` identity, one node per placed client, and that is what the animator
   diffs. The representation therefore needs no identity field at all, which is why
-  `OMNI_TAG_CONSTRAINT` is 16 bytes and holds no entry reference.
+  `OMNI_TAG_CONSTRAINT` is a composite program rather than a record and holds no
+  entry reference.
 - A config file is TOML, and `tomlparser.md` binds TOML literals to the core
   tags and adds none of its own. Whatever the constraint syntax is, a TOML user
   must be able to write it, which means either a table-shaped encoding that

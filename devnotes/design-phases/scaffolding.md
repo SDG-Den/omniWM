@@ -149,7 +149,7 @@ in the plan rather than an unstarted phase.
 | component activation order (`Registration`) | D1 |
 | which component fields live in the block (`SHM and store handling`) | D2 |
 | per-component store handle (`SHM and store handling`) | D2 |
-| process-private derived cache and its invalidation (`SHM and store handling`) | D3, the worked example already being `input.md` §14.2 |
+| process-private derived cache and its invalidation (`SHM and store handling`) | D3; no worked example exists yet, so this phase has to write the first one |
 | the event and subscription pattern (`Registration`, the in-process row) | D4 |
 | error and diagnostic reporting outside the store (`Registration`) | D5 |
 | what belongs in a public header versus a private one (`Conventions`) | D6 |

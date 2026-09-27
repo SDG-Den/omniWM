@@ -70,8 +70,8 @@ table listed all three, and they named nothing that exists: the store has no
 `layout` tag, a program is `constraint`, and a space and a rule are the two
 levels inside a `constraint` value rather than values in their own right
 (`configstorage.md` §4, `omni_layout.h` section 7). A TOML table for a space is
-therefore an `option` table and a rule is a key within it, and the reader in
-§6 must nest them rather than bind each to a distinct tag.
+therefore an `option` table and a rule is a key within it, and the tag a table
+binds to is the one §3 declares for its key, not a per-level tag invented here.
 
 A binding, a layout program and a client rule table are all tables, and §6 would
 otherwise bind each to a `tuple` whose `field_types` come from field order. That is
@@ -81,9 +81,11 @@ tag with the field names preserved, and the tag itself is declared by the key pe
 
 The layout keys live under one prefix, `omniwm.layouts.<name>`, and the two rule
 namespaces are `omniwm.clients.<set>.rules` and `omniwm.snaps.<set>.rules`
-(`layoutlanguage.md` §3.6.1). So a whole program is four keys and nothing else,
-and the fourth (`rearrange_on_focus`) is a plain boolean rather than a table, so
-it writes inline where the other three write as `[[...]]` arrays:
+(`layoutlanguage.md` §3.6.1). So a whole program is four keys and nothing else:
+three structural ones and the fourth (`rearrange_on_focus`), a plain boolean
+rather than a table, which is why it writes inline while the structural keys
+write as themselves. `.rules` and `.spaces` are `[[...]]` arrays, and
+`.viewport` is an inline table holding a two-field option:
 
 ```toml
 [[omniwm.layouts.delta.rules]]
@@ -102,6 +104,10 @@ name = "main"
 [[omniwm.layouts.delta.spaces]]
 name = "side"
 layout = "vertical_stack"
+
+[omniwm.layouts.delta.viewport]
+offset = [0, 0]
+ratio = 1.0
 
 [omniwm.layouts.delta]
 rearrange_on_focus = false
@@ -213,6 +219,13 @@ wm.border = { width = 2, color = "#3d6bff" }
 becomes a `tuple` with `field_types` `["u32", "rgba8"]` once each field is bound
 to its registered type. As with arrays, a table nested inside an array is a
 `tuple` inside an `array`, and the discriminators make that unambiguous.
+
+The rule above has the exception §2 states, and it is not a small one: a table
+whose key is declared composite binds to that composite tag with its field names
+preserved, not to a `tuple`. The keys are `binding`, `constraint`, `client_rule`
+and `map`, and they cover every table whose fields are named rather than
+positional. A positional `tuple` is the default, not the answer for a table whose
+field names the user wrote down.
 
 A table is a value, not a container of independent writes: assigning a table is
 one commit replacing the whole value, not a merge. A user who wants a merge

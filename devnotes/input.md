@@ -277,10 +277,16 @@ about what the mode means.
   config order is load-bearing inside a bucket, and Mango's `isallowconflict` means
   the scan continues past a match so the first match in document order wins. The
   index preserves that, and the only way to be sure is that test.
-- **The `spec` field.** Mango keeps `char *spec`, the config line a user would
-  edit, on every binding. `generaldesign.md` §14.1 keeps it as a field. Where it
-  is *rendered* is a question for `ipc.md`'s `get binds` equivalent, which does
-  not exist yet.
+- ~~**The `spec` field.**~~ **Moot: the field is not carried.** Mango keeps
+  `char *spec`, the config line a user would edit, on every binding, and it exists
+  there as a workaround for a storage model that could not hand a binding back over
+  its IPC: the binding lived in process memory, so the source text was the only
+  handle a human had on it. `generaldesign.md` §14.1 now drops it alongside
+  `line_number` and `file_index`, because in a block the handle is the key and the
+  record is the value, both of which `ipc.md` §4's `get` returns verbatim. There is
+  no field to place and therefore nothing this document owes for it, and no
+  `get binds` wrapper is wanted for the same reason: there is nothing a binding
+  would return that the general `get` does not already return.
 
 ## 8. References
 
@@ -294,7 +300,7 @@ about what the mode means.
 | `configstorelayout.md` §4, §8 | the `binding` record at `0x2B`, its known-too-small header, the deferred offsets, and the `BINDS_UPDATED` and `KEY_SET` journal entries |
 | `windows.md` §2, §9 | a client as an `entry_ref`, which is what a `tc` argument becomes |
 | `tags.md` | a tag as a catalog entry, which is one of the scoping candidates in §7.1 |
-| `ipc.md` | the socket surface, and the absent `get binds` equivalent noted in §7.2 |
+| `ipc.md` | the socket surface, and §4's general `get`, which is how a binding is read now that `spec` is not carried (see §7.2) |
 | `filestructure.md` | `src/input`'s place in the tree, and the unsanctioned decomposition this document replaces |
 | `layoutengine.md` §7.6 | floating snap, whose direction argument arrives with the port rather than waiting on the solver |
 | Mango | `include/mango/input/` and `src/input/` at `d5a0e1e`, the five binding structs in `parse_config.h:61-302`, `Arg` in `dispatch/bind.h:8-19`, `set_binding_keymode` in `parse_config.c:261-274`, `find_device_rule` in `keyboard.c:33`, and the absence of a stylus binding struct |

@@ -36,8 +36,11 @@ trigger kinds with per-kind `enable_key` is a real option and nothing needs it a
 stage 4.
 
 Two smaller items ride along: whether key repeat should fire bindings at all, and
-where a binding's `spec` field is rendered given that `ipc.md` has no `get binds`
-equivalent.
+the deferred `binding` header offsets. The `spec` field is not on this list and
+does not belong on it: `generaldesign.md` §14.1 drops it, because it is a shim over
+a storage model that could not hand a binding back over its IPC, and a binding here
+is a catalog entry that the general `get` in `ipc.md` §4 already returns verbatim.
+There is no field to place, so the deferred offsets do not owe it a position.
 
 ## What it resolves
 

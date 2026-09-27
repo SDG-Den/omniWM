@@ -9,9 +9,10 @@ lists what it did not cover. This phase is the prototype becoming a specificatio
 ## What it should contain
 
 **1. The surface syntax for anything in it.** The whole document is currently
-reachable only through Mango's config grammar. `tomlparser.md` §3 has no binding
-for a window rule table, which `audit-2-findings.md` already flagged, so this
-belongs here as much as in phase 00's item 1.
+reachable only through Mango's config grammar. `tomlparser.md` §2 now has a
+binding for a window rule table, at `omniwm.window_rules.<name>` as a `map`, which
+closes the gap `audit-2-findings.md` flagged; what is left for this phase is the
+rule syntax itself, which is item 5 below.
 
 **2. The client protocol surface.** `generaldesign.md` §13 makes fake clients
 layout participants. What a client can be told, and what it can be asked, is not
@@ -67,7 +68,9 @@ work until a user minimises a client and finds it tagged.
 - The client kind list, which is needed by phase 07: the solver partitions clients
   by kind, so an open kind set is an open solver input. **Now closed at seven**,
   so phase 07 has a fixed input rather than an open one.
-- The window-rule syntax, which phase 00's `tomlparser.md` item needs.
+- The window-rule syntax. The table binding is closed (`tomlparser.md` §2, `map` at
+  `omniwm.window_rules.<name>`); the `if` and `then` keys inside it are this
+  phase's.
 - The per-client focusability default of 3a, and the visibility/membership/
   minimisation distinction of 3b, both of which the reconciliation pass left to
   this phase.

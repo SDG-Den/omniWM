@@ -451,8 +451,9 @@ silently invalidated by a restart, and cannot survive a `save` and reload at all
 
 So resolution happens on use, not at set time. A binding stores the name; the
 registry looks it up when the key fires; a name that is not registered is
-`ACTION_NOT_FOUND` on use. This contradicts what §6.2 said about failing at set
-time, and it is the weaker of the two checks deliberately: a store that can be
+`ACTION_NOT_FOUND` on use. This reverses the earlier rule in this section that an
+unregistered action is refused when the binding is written, and it is the weaker
+of the two checks deliberately: a store that can be
 edited by hand cannot promise that every name in it resolves, and refusing the
 write would mean refusing to store a binding for a component that has not
 activated yet, which is the normal state during boot.

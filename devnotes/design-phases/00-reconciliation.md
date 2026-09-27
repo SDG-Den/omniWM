@@ -5,6 +5,10 @@ below and the work log at the end. Nothing here is outstanding.
 
 This phase began as a reconciliation of twelve documents carrying an open,
 deferred or not-covered section, eleven of which carried something genuinely open.
+The twelve are the eleven rows of [README.md](README.md)'s inventory plus
+`audits/architecture-audit.md`, which predates the inventory, is not one of its
+rows, and states on its own first page that it is not a readiness gate — it is
+counted here only because it carries an "Out of scope, deferred" section.
 It closes those before any new document is written, because every later phase reads
 them and a later phase written against an unsettled document has to be revised.
 
@@ -21,11 +25,11 @@ most.
 Every item here was a stale statement rather than a question, and each is
 corrected in the document that carries it.
 
-- **`include/shared/omni_layout.h` §11's fallback comment.** It documented a
+- **`include/shared/omni_layout.h` §4's fallback comment.** It documented a
   reader that "degrades `get` to a catalog walk" when it cannot validate the
   `CATALOG_INDEX` row, which is the design `configstorelayout.md` §3 reversed
   and §3's own `BLOCK_UNSUPPORTED` line replaced. The comment now states the
-  refusal and records that its result code is undefined.
+  refusal and names its result code, `OMNI_ERR_BLOCK_UNSUPPORTED`.
 - **`configstorelayout.md` §5's four-records wording.** The heading called all
   four composite tags "a fixed-shape header" and the text said "Four tags carry
   a fixed-size record", four lines before the same section said two of them are
@@ -75,8 +79,9 @@ is what the index's own header row carries. The `get` signature is
 function's out-parameter cannot fail to be delivered and therefore needs no slot
 and no lifecycle.
 
-**2. The invariant table and the guard tiers. Closed: four tiers, 45 rows, one tier
-per row.** The `Semantic` tier is deleted outright rather than given rows, because
+**2. The invariant table and the guard tiers. Closed: four structural tiers plus a
+fifth replay tier, 49 rows, one tier per row.** The `Semantic` tier is deleted
+outright rather than given rows, because
 a semantic check is not a guard — a guard answers whether bytes are readable as
 what they claim to be, and "is this value sensible" belongs to whoever uses it. The
 two compound rows are split, so no row joins two unrelated comparisons. Three
@@ -85,11 +90,17 @@ acyclicity, for termination on `OMNI_REF_NONE`, and for every frame on it lying
 inside the arena and being unreachable from a live `body_ref`; the **`ready` axis**
 is checked for being one of its four values and for reaching `READY` and `DEGRADED`
 only in a commit that sets the matching `state`; and the **catalog name index** is
-checked for ascending sort order, for an `entry_count` equal to the live slot
+checked for ascending sort order, for a `live_count` equal to the live slot
 count, and for every row resolving to a live slot whose name hashes to the row's
 own value. That last one is the row the index most needed, because an index that
 is internally sorted but describes a deleted entry is the failure the read path
 cannot detect on its own.
+
+The row count is 49, not the 45 an earlier draft of this paragraph claimed, and the
+tier count is five labels rather than four: `configstorage.md` §12 describes four
+ordered structural tiers and then calls the replay tier a fifth, and
+`configstorelayout.md` §12's table carries one `R` row per check. The distribution
+is L1 8, L2 10, L3 17, L4 10, R 4.
 
 **3. The three-key layout program. Closed, and the three keys are now named in both
 documents.** `.viewport` is parsed and is not optional in the sense of being
@@ -100,9 +111,13 @@ framing exists, so the tree change `layoutengine.md` §11 records is visible to 
 parser instead of being a documentation-only change. Nested layouts have an
 authoring rule, partial-program deletion is specified for the case where only one
 of the three keys is present, and key-shape guards exist. `tomlparser.md` §2's
-instruction to nest spaces is now what §6 does. And `layoutengine.md` §3.1's
-"space table, mapping rules, constraint records" is reconciled with §4.4's `rules`,
-`spaces`, `viewport`, so the two lists name the same three things.
+exception to the rule in its own §6 is now written down in both places, so a
+`binding`, a `constraint` program, a `client_rule` set and a window `map` all bind
+to a named-field composite tag instead of to a positional `tuple`, and `.viewport`
+appears in the example. And `layoutengine.md` §3.1's "space table, mapping rules,
+constraint records" is reconciled with §4.4's `rules`, `spaces`, `viewport`, so the
+two lists name the same three things; §3.1 and §3.3 no longer describe a 16-byte
+record.
 
 **4. Creation-time header initialization. Closed: a value and a reason for every
 field.** `configstorage.md` §13's table states all of them, and two rows are
@@ -206,10 +221,13 @@ sequence of swaps rather than a move.
 **9. The wholesale-port wording. Closed.** The owner supplied the replacement
 sentence and it is now the policy in `generaldesign.md` §14: **we use Mango's code
 where we can, and change what we need.** The word "wholesale" is gone from every
-place that asserted a completeness nobody had checked. It is retained in exactly two
-places, both of which are about the word rather than the decision: item 9 above,
-which is the record of the correction, and this acceptance criterion, which can only
-be evaluated by searching for it. §14 now also states *why* the substitution was
+place that asserted a completeness nobody had checked. It survives in five places,
+all of which are about the word rather than the decision: this item, this
+phase's acceptance criterion, the work log, and two sentences that exist to
+explain the substitution — `generaldesign.md` §14, which says the old word told a
+reader there was nothing to audit, and `design-phases/11-protocols.md` item 1, which
+records that its own heading used the word. §14 now also states *why* the
+substitution was
 worth making rather than treating it as a synonym: "wholesale" told a reader there
 was nothing to audit, and the three documented seams are what a reader should audit
 against instead.
@@ -233,11 +251,13 @@ not to validate a convention is rewritten to give the reason on its own terms.
 
 ## Why it is first
 
-It is unglamorous and it blocks everything. Six of the ten remaining documents
-cite `omni_layout.h` constants, and all of them cite `configstorage.md` §4 for
-what a record means. Writing `monitor.md` against an unsettled `tomlparser.md`
-means revising it, and writing `testing.md` against unassigned guard tiers means
-inventing an assertion set that phase 00 then contradicts.
+It is unglamorous and it blocks everything. Every one of the eleven inventory
+documents above is written against `omni_layout.h`'s constants and
+`configstorage.md` §4's definitions of what a record means, and so is every
+document a later phase writes: an unsettled one is a document that has to be
+revised, and `monitor.md` against an unsettled `tomlparser.md` is a rewrite, while
+`testing.md` against unassigned guard tiers means inventing an assertion set that
+phase 00 then contradicts.
 
 ## Done when
 
@@ -245,7 +265,10 @@ All six met. Each is a check that can be run rather than a judgement, and the la
 three were run after the final edit.
 
 - **Every open-items section in the twelve documents has either a closed decision
-  or a named owner.** Met. The five that were genuinely unowned at the end are
+  or a named owner.** Met. The twelve are the eleven rows of
+  `design-phases/README.md`'s inventory plus `audits/architecture-audit.md`. The
+  five that were genuinely
+  unowned at the end are
   `input.md` §7.2's device-rule type tag and its `isallowconflict` test. The first
   two name phase 02 and phase 01 respectively, and the last two are external facts
   rather than design questions and belong to phase 02's build half. Nothing is
@@ -253,18 +276,28 @@ three were run after the final edit.
   and the owner answered it — no interpreter and no library is a deliverable of the
   window manager at all, since they are separate example programs written after the
   project is complete to prove the surface is generic, which is why they are last on
-  the roadmap. `generaldesign.md` §17 and §19, and `12-languages.md` item 6.
+  the   roadmap. `generaldesign.md` §17 and §19, and `12-languages.md` item 6.
+  The `input.md` §7.2 `spec` field that was named but unplaced is now gone rather
+  than placed: `generaldesign.md` §14.1 drops it beside `line_number` and
+  `file_index`, because it is a shim over a storage model that could not hand a
+  binding back over its IPC. A binding here is a catalog entry that the general
+  `get` already returns, so there is no field to place and no `get binds` to want.
 - **The guard table has one tier per row and no guard without a row.** Met: four
-  tiers, 45 rows, one tier per row, and no `Semantic` tier at all.
+  structural tiers and one replay tier, 49 rows, one tier per row, and no `Semantic`
+  tier at all.
 - **A grep for "wholesale" returns no place that *asserts* a port was taken
-  unchanged.** Met. It returns this file's item 9, this criterion, the work log,
-  and two sentences that exist to explain the substitution: `generaldesign.md` §14,
+  unchanged.** Met. The word occurs in three documents, and every occurrence is
+  about the wording rather than about the port: this file, `generaldesign.md` §14,
   which says the old word told a reader there was nothing to audit, and
   `design-phases/11-protocols.md` item 1, which records that its own heading used
-  the word. Those are about the wording; none of them is a claim about the code.
-- **A grep for `xref.py` and `lcheck.py` returns only this item and this
-  criterion.** Met. Neither script is referenced as a thing to run anywhere in the
-  repository.
+  the word. None of them is a claim about the code. This criterion is stated by
+  document rather than by line count deliberately: every paragraph in this file
+  that discusses the grep adds a line to it, so a count is a number this file can
+  invalidate by mentioning the thing it counts. Naming the three documents cannot
+  change.
+- **A grep for `xref.py` and `lcheck.py` finds no document that names either script
+  as a thing to run.** Met. Both names occur only in this file — item 10, this
+  criterion, and two work-log paragraphs — and nowhere else in the repository.
 - **The header compiles and every `OMNI_STATIC_ASSERT` passes.** Met, under
   `-std=c11 -Wall -Wextra -Iinclude`.
 - **`git diff --check` is clean.** Met, after fixing one line of trailing
@@ -344,8 +377,8 @@ plan.** Four, each a real disagreement between two documents:
   asserting them.
 - `README.md`'s inventory table counted open items per document and was wrong for
   five of the eleven rows after the edits above. It now records where the open
-  items actually are, and the honest answer is that there are two documents left
-  with one question between them, which is now closed as well.
+  items actually are, and the honest answer is that no document listed in it is
+  left with an open item.
 
 **A fifth, found last and the only one that changed a decision rather than a
 sentence.** Three documents disagreed about what "exclusive" means for the
@@ -390,6 +423,156 @@ subtree exchange treated as its own operation rather than a reuse of the delete.
 
 **Verification.** The header compiles under `-std=c11 -Wall -Wextra` and every
 `OMNI_STATIC_ASSERT` passes. `git diff --check` is clean. A grep for `wholesale`
-returns only this file's item 9, its acceptance criterion, and the two sentences
-that exist to explain the substitution. A grep for `xref.py` and `lcheck.py` returns
-only item 10 and its criterion. Nothing is committed.
+finds the word in this file, in `generaldesign.md` §14, and in
+`design-phases/11-protocols.md` item 1, and all three are about the wording rather
+than about the port. A grep for `xref.py` and `lcheck.py` finds both names only in
+this file. This phase is committed as `0151ed8`.
+
+## Post-completion audit
+
+This phase was committed on the strength of its own acceptance criteria. A later
+pass went back and checked each claim against the documents rather than against the
+record of having made it. The record was wrong in more places than the design was,
+which is the opposite of the usual outcome and worth writing down before the
+next phase does the same thing.
+
+**The phase's own record was inaccurate in eleven places.** The guard table has 49
+rows, not the 45 stated in item 2 and in the acceptance criterion, and it carries
+five tier labels rather than four: `configstorage.md` §12 describes four ordered
+structural tiers and then calls replay a fifth, and the distribution is L1 8, L2 10,
+L3 17, L4 10, R 4. The catalog-index refusal comment is in `omni_layout.h` §4,
+not §11 as the first-pass list says, and it still said the result code was
+undefined and an open item in `configstorelayout.md` §14, which item 1 had already
+closed. `tomlparser.md` §2's claim that its nesting instruction "is now what §6
+does" pointed at a section that does the opposite, and §6 was still missing the
+exception §2 states. The `xref.py` criterion promised two lines and returns five,
+all in this file, which is the same defect class as the `wholesale` one this phase
+was correcting; item 9's "exactly two places" was five. `entry_count` is not a
+field, the index header carries `live_count`. "Nothing is committed" was untrue,
+this file is in `0151ed8`. The twelve documents are the eleven inventory rows plus
+`audits/architecture-audit.md`, which says on its first page that it is not a
+readiness gate. "Six of the ten remaining documents cite `omni_layout.h`
+constants" was not checkable, because nine of those ten documents do not exist. And
+the `scaffolding.md` work-log entry said `input.md` §14.2 had been cited twice and
+both citations fixed, when one of the two was still there, contradicting a line in
+the same file.
+
+**Six contradictions survived between design documents.** The worst was the one
+item 3 claimed to have fixed: `layoutengine.md` §3.1 and §3.3 still described
+`OMNI_TAG_CONSTRAINT` as a 16-byte record, against `layoutlanguage.md` §9,
+`configstorage.md` §4, `configstorelayout.md` §5, the header, and `layoutengine.md`
+§11. `omni_layout.h` defined the arena frame header twice, §2 as `next_free` and
+`free_size` and §5 as `RESERVED32` and `RESERVED64`, so the free-list
+discriminator the guard design rests on lived in the block another section called
+reserved. `configstorage.md` §12.3 put the free-list link in the first word of the
+payload when it is the second word of the header, ahead of the payload.
+`configstorelayout.md` §3 listed a ninth capability bit the header did not define
+while §4 omitted the eighth section row the header did define, and the reason is
+structural rather than clerical: eight capability bits cover seven sections plus
+the socket facade, so the catalog index had a row and no bit.
+`missing-devnotes-topics.md` said the catalog name index "degrades to a walk rather
+than failing if its section row does not validate", which reverses the no-fallback
+decision in the same repository. And `generaldesign.md` §6 still carried, verbatim,
+the exclusivity sentence this file's work log cites as the wrong reading of the
+scratchpad.
+
+**Four things the first pass had not looked for.** The no-fallback contradiction
+above, because it is in a document whose subject is what is *missing* rather than
+what exists. `07-layoutengine.md`'s items 6 and 7, which restate two of this
+phase's closed decisions as open in the same way `05-tags.md` did, and which
+surfaced only when the stubs were grepped as a set rather than one at a time.
+`tomlparser.md`'s example, which omitted `.viewport` from a program it had just
+declared to have three structural keys. And the fact that the header's
+`OMNI_CAP_DEFAULT` and `configstorelayout.md`'s bit list were describing different
+numbers of sections without either document noticing, which is what turned a
+clerical disagreement into the question below.
+
+**Why the acceptance criteria did not catch any of it.** Four of the six are checks
+on this file rather than on the design: the ownership criterion, both greps, and
+`git diff --check`. The fifth is a compile, and the header compiled throughout,
+including with the frame header defined two contradictory ways. The sixth, the guard
+table, was a check on the design but stated its own number, and a criterion that
+supplies the number it is checking cannot fail. Not one of the six read two
+documents and compared them, which is the only thing that would have found any of
+the six contradictions. The lesson for the next phase is that "Done when" has to
+name the comparison, not the conclusion: a criterion like "`configstorelayout.md`
+§3's bit count equals the `OMNI_CAP_*` defines in the header" is checkable, and
+"the guard table has one tier per row" is not, because the row count was the thing
+in doubt.
+
+**Three questions the audit raised that were not the audit's to answer.** The audit
+found the capability-bit gap, the clock disagreement on `boot_time_ns`, and
+`input.md` §7.2's `spec` field assigned to an `ipc.md` surface that does not exist.
+All three went to the owner rather than being resolved by picking the answer that
+looked more consistent.
+
+*Capability bit 8.* **The bit exists**, so `omni_layout.h` gained
+`OMNI_CAP_HAS_CATALOG_INDEX (UINT64_C(1) << 8)` and `OMNI_CAP_DEFAULT` moved to
+`0x1FF`. It is now built as `OMNI_CAP_ALL_BITS`, the union of every bit the header
+defines, and a static assert holds it at `0x1FF`. That assert is the part worth
+keeping: defining a bit without widening the default was the original defect, and
+it is now a build failure rather than a disagreement between a header and a
+document. The header also records that the bits are not offset from the section ids
+by a fixed amount, since the socket's bit has no row, so nobody tries to derive one
+table from the other.
+
+*`boot_time_ns`.* **`CLOCK_MONOTONIC`.** The field is a witness of when the creator
+started, so a reader can tell a block written by this instance from one written by
+a previous one; both sides read the same clock, so the comparison is a subtraction
+rather than a conversion. The stated reason in `configstorage.md` had not
+discriminated either way, since a recreate writes a fresh value and moves forward.
+`CLOCK_MONOTONIC` is already the design's stored-timestamp clock,
+`configstorelayout.md` §9's `terminal_at_ms` and `ipc.md` §4's entry `time` both,
+so this field is not the one exception that has to remember which clock it meant.
+
+*The `spec` field.* **Dropped, and the question went with it.** It was assigned to
+an absent `get binds` because the reachability of a binding looked like a separate
+question from the binding's storage, and it is not: a binding is a catalog entry,
+it has a key, and `ipc.md` §4's `get` returns it verbatim. `generaldesign.md` §14.1
+now drops `spec` beside `line_number` and `file_index`, on the grounds that all
+three describe where a binding was written rather than what it does. `spec` needs
+its own reasoning, because it is not a parse diagnostic and looks load-bearing: it
+is a shim over Mango's original storage, where a binding lived in process memory
+and could not be fetched over the IPC, so the source text was the only human handle
+on it. A stored copy would also be a second copy of the truth that only some
+bindings would have, since one written by `set` over the socket never had a config
+line at all, and reconstructing a config line from a record by running a parser
+backwards is lossy in a way the record is not.
+
+**Also corrected, in the same pass.** `tags.md` §9 listed a covered decision under
+"not covered" and announced an exception that was itself closed. `helpers.md` §6.2
+said it contradicted "what §6.2 said", a document disagreeing with itself. The
+`design-phases/README.md` inventory was stale in precisely the two rows this phase
+had closed, and its closing paragraph announced two documents still holding an open
+question between them. `scaffolding.md` cited a nonexistent worked example in one
+line while another line in the same file said it did not exist. `layoutlanguage.md`
+attributed the reversal of the 16-byte record to a section that had itself been
+rewritten, so its pointer was to a claim no longer in the document.
+
+**Left alone deliberately.** `devnotes/audits/` holds `architecture-audit.md` and
+`audit-2-findings.md`, moved there during this pass to keep the audit record out of
+the set of documents the design treats as authoritative. Both are point-in-time
+records and their line-number citations were accurate when written, so correcting
+them would falsify what they are for. The bare-filename cross-references to them
+across the design documents are unchanged, which is a question about the convention
+and not a defect. `countlines.sh` had an unrelated uncommitted edit.
+
+**Re-verification after the corrections.** The header compiles under `-std=c11
+-Wall -Wextra -Iinclude` and all 81 `OMNI_STATIC_ASSERT`s pass, up from 79 because
+the capability coverage check is one of the two added. `git diff --check` is clean.
+The guard table counts 49 rows, L1 8, L2 10, L3 17, L4 10, R 4. A grep for
+`xref.py` and `lcheck.py` finds both names only in this file. A grep for the twelve
+wrong claims listed above returns nothing in the design documents. It returns two
+things that are not instances of them: `omni_layout.h` §2's "A frame is 16 bytes
+of header", which is a true statement about the frame and not the retracted
+constraint record, and the paragraphs of this section that quote the claims in
+order to record them.
+
+**One of those twelve was committed while writing this section.** The `wholesale`
+criterion and the work log's verification paragraph both said the grep returned
+"seven lines in four files". It returns nine lines in three files, and it returned
+seven in three before this section was added, because this section mentions the
+word. The error is the exact one the previous paragraph is about: a count asserted
+without being derived, in a file whose own discussion of the count changes it. Both
+are now stated as the three documents that contain the word, which no paragraph
+here can invalidate.

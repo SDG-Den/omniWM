@@ -24,20 +24,21 @@ being tracked separately, so there is one place to look:
 | `helpers.md` §11 | 5 bullets, **none open**: 2 are struck and closed, and the other 3 restate decisions `§6.1` or `§14` already fixed. The `omni_event` payload question that was the one genuine item is closed — the field set is final and is not extended |
 | `configstorelayout.md` §14 | 8 bullets, **none open**: the `get` result vocabulary is struck and closed, and the remaining 7 are v1 capacity choices with stated rationales rather than questions |
 | `configstorage.md` §14 | 14 bullets in two groups. The first records 3 things fixed and 5 deliberate deferrals, none of them a question. **§14.1 is a second group and is not a deferral**: 3 store operations (`tags.md` §5 and §7 oblige) recorded as *required* rather than deferred, with the subtree exchange called out as not being a special case of the subtree delete |
-| `layoutengine.md` §11 | 21 bullets: 18 closed and kept as record, 1 deferred to phase 10 (mid-animation retarget, which phase 10 now owns), 1 closed this pass (core versus component), and **1 open**, which points at `tags.md` §9's stored-or-derived membership |
+| `layoutengine.md` §11 | 21 bullets: 20 closed or struck, 1 deferred to phase 10 (mid-animation retarget, which phase 10 now owns), and **none open**. The stored-or-derived membership bullet that used to be the open one is closed as **stored**, by the same decision `tags.md` §9 records |
 | `tomlparser.md` §11 | 3 bullets, none open: 1 decided in favour of `duration`, 1 delegated to the upstream specification, 1 out of scope |
 | `windows.md` §13 | 2 groups, **none open**: 5 numbered items all closed or deferred-with-shape-fixed, and a closing paragraph that settled the override-representation blockers. The one thing recorded as inferred rather than decided is where a deferred tag-seed write is kept, and `§9.3` names it |
-| `tags.md` §9 | two lists. 4 "not covered" bullets, then 4 "open" of which **2 are open** (stored-or-derived membership, and the surface form of the swap's keypath arguments) and 2 are struck and closed |
+| `tags.md` §9 | 3 "not covered" bullets, one placement decision recorded separately, then 4 struck and closed, **none open** |
 | `input.md` §7, §7.2 | 4 not-covered bullets in §7 and 3 more in §7.2; one of the seven is the substantive gap and the rest are owned elsewhere or not needed at stage 4 |
 | `ipc.md` §8 | 8 bullets; 2 of them were stale restatements of decisions already closed and have been corrected. `swap_tags` was added to §4 rather than here, because it is specified rather than open |
 | `server.md` §9 | 2 bullets, both delegating to the compositor subsystem work that follows it |
 
-The counts are as of this reconciliation pass and the two documents with open
-items left are `layoutengine.md` §11 and `tags.md` §9, which point at each other on
-a single question. Neither blocks another phase: the question is whether client-set
-membership is stored or derived, both of which `layoutengine.md` §3.2's determinism
-requirement can be satisfied by, so the solve is implementable either way and the
-question is a cost decision rather than a correctness one.
+The counts are as of this reconciliation pass, and **no document listed above
+carries an open item**. The two that used to, `layoutengine.md` §11 and `tags.md`
+§9, pointed at each other on a single question, and both now close it the same
+way: client-set membership is stored, not derived, because `layoutengine.md` §3.2
+makes the solve a pure function of committed state and a derived membership is a
+`HashSet`-shaped iteration order that no golden-file test could pin. Neither blocks
+another phase, and the choice costs one write per membership change.
 
 ## What the design work is actually for
 

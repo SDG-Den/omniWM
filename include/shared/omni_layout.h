@@ -373,7 +373,12 @@ OMNI_STATIC_ASSERT(OMNI_MAX_POOL > OMNI_INITIAL_POOL, "pool headroom");
 #define OMNI_COMMIT_GROWING UINT32_C(2)
 #define OMNI_COMMIT_BROKEN UINT32_C(3)
 
-/* Section capability bits. */
+/* Section capability bits.
+ *
+ * The bits are not the section ids and are not offset from them by a fixed
+ * amount, so the pairing is written out here rather than computed: bit n is the
+ * section whose id is n+1 for n in 0..5, 7 and 8, and bit 6 is the socket, which
+ * is a facade over the arena and has no section of its own. */
 #define OMNI_CAP_HAS_CATALOG (UINT64_C(1) << 0)
 #define OMNI_CAP_HAS_ARENA (UINT64_C(1) << 1)
 #define OMNI_CAP_HAS_JOURNAL (UINT64_C(1) << 2)
@@ -382,7 +387,26 @@ OMNI_STATIC_ASSERT(OMNI_MAX_POOL > OMNI_INITIAL_POOL, "pool headroom");
 #define OMNI_CAP_HAS_REGION_PAYLOAD (UINT64_C(1) << 5)
 #define OMNI_CAP_HAS_SOCKET (UINT64_C(1) << 6)
 #define OMNI_CAP_HAS_SOLVED_LAYOUT (UINT64_C(1) << 7)
-#define OMNI_CAP_DEFAULT UINT64_C(0xFF)
+#define OMNI_CAP_HAS_CATALOG_INDEX (UINT64_C(1) << 8)
+
+/* Every defined bit, which is what OMNI_CAP_DEFAULT has to be. Defining a bit
+ * without widening this mask is a build failure rather than a document
+ * disagreement, which is the whole point: the default is the one field a creator
+ * writes once, and a new section that is created present but not advertised is
+ * invisible to every reader that checks capabilities before reading a section. */
+#define OMNI_CAP_ALL_BITS                                              \
+	(OMNI_CAP_HAS_CATALOG | OMNI_CAP_HAS_ARENA |                       \
+	 OMNI_CAP_HAS_JOURNAL | OMNI_CAP_HAS_REQUESTS |                    \
+	 OMNI_CAP_HAS_REGION_DESC | OMNI_CAP_HAS_REGION_PAYLOAD |           \
+	 OMNI_CAP_HAS_SOCKET | OMNI_CAP_HAS_SOLVED_LAYOUT |                \
+	 OMNI_CAP_HAS_CATALOG_INDEX)
+
+#define OMNI_CAP_DEFAULT OMNI_CAP_ALL_BITS
+
+OMNI_STATIC_ASSERT(OMNI_CAP_DEFAULT == UINT64_C(0x1FF),
+                   "capability default is every defined bit");
+OMNI_STATIC_ASSERT(OMNI_CAP_HAS_CATALOG_INDEX == (UINT64_C(1) << 8),
+                   "catalog index capability bit");
 
 /* Section ids; row order is fixed and id == row. */
 #define OMNI_SECTION_NONE UINT32_C(0)
@@ -410,8 +434,9 @@ OMNI_STATIC_ASSERT(OMNI_MAX_POOL > OMNI_INITIAL_POOL, "pool headroom");
  * A reader that cannot validate the CATALOG_INDEX row refuses `get`. There is
  * no catalog scan behind it, because a walk's cost scales with how many keys
  * the user has configured, and a cost that depends on unrelated configuration
- * is one nobody profiles. The refusal's result code is not defined yet and is
- * an open item in `configstorelayout.md` §14. */
+ * is one nobody profiles. The refusal's result code is
+ * OMNI_ERR_BLOCK_UNSUPPORTED, the one code in the vocabulary that means "this
+ * block does not describe something you asked for". */
 #define OMNI_SECTION_FLAG_PRESENT_0 (UINT32_C(1) << 0)
 #define OMNI_SECTION_FLAG_JOURNALLED_1 (UINT32_C(1) << 1)
 #define OMNI_SECTION_FLAG_RESERVED_MASK UINT32_C(0xFFFFFFFC)
@@ -438,15 +463,18 @@ OMNI_STATIC_ASSERT(OMNI_HDR_OFF_REGION_HEAD % 8 == 0, "region_head aligned");
 /* 5. Arena frame header (configstorelayout.md section 5)             */
 /* ------------------------------------------------------------------ */
 
-#define OMNI_FRAME_OFF_LENGTH UINT32_C(0)  /* payload bytes, excl. header */
-#define OMNI_FRAME_OFF_RESERVED32 UINT32_C(4)
-#define OMNI_FRAME_OFF_RESERVED64 UINT32_C(8)
-#define OMNI_FRAME_HEADER_SIZE UINT32_C(16)
+/* The frame header's fields are defined once, in section 2 above, which
+ * carries the live/free byte map. configstorelayout.md section 5 owns the
+ * layout and states the same map. This section adds only the payload offset,
+ * because section 2 describes the payload in prose.
+ *
+ * A framed payload of `payload_len` bytes occupies
+ * OMNI_FRAME_BYTES(payload_len). There is deliberately no second formula for
+ * that size: the two that were here, OMNI_FRAME_BYTES and
+ * OMNI_FRAME_ALLOC_SIZE, computed align16(16 + n) and 16 + align16(n), which
+ * agree for every n only because 16 is a multiple of the alignment. One
+ * quantity, one name. */
 #define OMNI_FRAME_OFF_PAYLOAD UINT32_C(16)
-
-/* A framed allocation occupies FRAME_HEADER_SIZE + align16(payload_len). */
-#define OMNI_FRAME_ALLOC_SIZE(payload_len) \
-	(OMNI_FRAME_HEADER_SIZE + OMNI_ALIGN_UP((payload_len), OMNI_ALIGN))
 
 /* ------------------------------------------------------------------ */
 /* 6. Catalog entry (configstorelayout.md section 6)                   */

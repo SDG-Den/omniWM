@@ -27,13 +27,16 @@ phase has to produce half of it and coordinate the other half. `input.md` §7.1'
 scoping question is entangled: if a binding is scoped to a tag, then the syntax
 for setting a tag is what a binding most often needs.
 
-**5. The two open questions `tags.md` §9 still carries.** Stored versus derived
-membership, where the recommendation is stored on access-pattern grounds and
-`layoutengine.md` §7.7 has to agree because §3.2 makes the solve deterministic.
-And the surface form of the swap's keypath arguments, which is small: the operation
-itself is settled as a content swap in one grouped commit, and `ipc.md` §4 writes
-the two arguments as full `wm.monitor.<m>.tag.<n>` keypaths, so what is left is
-whether to keep that or take a pair of monitor/number fields.
+**5. The two questions `tags.md` §9 used to carry, now closed by phase 00 and
+recorded here so this phase does not reopen them.** *Stored versus derived
+membership* is closed as **stored** on the tag (`tags.md` §5, `wm.monitor.<id>.tags`),
+on access-pattern grounds, and `layoutengine.md` §3.2's determinism requirement is
+the reason; §7.7 agrees by pointing at the same decision. *The surface form of the
+swap's keypath arguments* is closed as **two full keypaths**: `ipc.md` §4 writes
+them as `wm.monitor.<m>.tag.<n>` and the operation is a content swap in one grouped
+commit. Both were struck from `tags.md` §9 when they were decided. What remains for
+this phase is the bar-side surface in item 1, which is a gap rather than an open
+decision.
 
 **6. The three store operations `configstorage.md` §14.1 now owes tags.** These are
 not design questions for this phase to answer, because `tags.md` §5 and §7 have

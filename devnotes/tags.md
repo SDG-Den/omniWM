@@ -770,19 +770,22 @@ Not covered, deliberately, and listed so the omission is a decision:
   that need a document of their own; they do not bear on the layout engine.
 - The surface syntax for setting, unsetting and exclusively setting a tag, which
   belongs to `input.md` and `helpers.md` §11.
-- Where a monitor's ordered tag list is stored, which this section assigns to
-  `wm.monitor.<id>.tags` in §5 rather than to a separate document, because no
-  `monitor.md` exists yet and a promise to hand storage to a document that has not
-  been written is how a tag list ends up owned by nobody. The ordering semantics
-  are this document's and the storage follows them, so holding both here is the
-  lower-risk arrangement until a monitor document exists to take it. A monitor
-  document, when there is one, reads these two rather than being cited by them.
 
-**Nothing on either list is a question any more**, with one exception that is
-recorded rather than hidden: the remaining `layoutengine.md` §11 item is the same
-membership question this list used to carry, and it is closed by the same decision.
-What is still genuinely undesigned is the bar-side surface — what a tag is *called*
-in a user interface, its colour, its icon, and the order the bar draws them in —
+Covered here rather than elsewhere, and listed because the placement is a
+decision: a monitor's ordered tag list is stored at `wm.monitor.<id>.tags` (§5)
+rather than in a monitor document of its own, because no `monitor.md` exists yet
+and a promise to hand storage to a document that has not been written is how a tag
+list ends up owned by nobody. The ordering semantics are this document's and the
+storage follows them, so holding both here is the lower-risk arrangement until a
+monitor document exists to take it. A monitor document, when there is one, reads
+these two rather than being cited by them.
+
+**Nothing in either group above, or in the list below, is a question any more.** The
+one item `layoutengine.md` §11 used to carry, stored or derived membership, is the
+same question the first entry below used to carry and is closed by the same
+decision; `layoutengine.md` §11 agrees and does not reopen it. What is still
+genuinely undesigned is the bar-side surface — what a tag is *called* in a user
+interface, its colour, its icon, and the order the bar draws them in —
 which is a real gap and is phase 05's deliverable rather than an open decision in
 this document.
 

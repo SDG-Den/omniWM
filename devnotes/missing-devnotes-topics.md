@@ -25,8 +25,8 @@ instead.
 | topic | document | what hasn't been answered yet | stage | priority |
 |---|---|---|---|---|
 | tags | `tags.md` | what a tag looks like; tag rules; per-output tag defaults; the surface syntax for setting, unsetting and exclusively setting a tag | 7 | P1 |
-| windows | `windows.md` | the surface syntax for anything in it; the client protocol surface; the five open decisions in its §13 (membership walk order, whether a focus change causes a pass, whether a fake client can take keyboard focus, whether the client kind set is closed, what a cluster contributes beyond moving as one) | 5, 8 | P0 |
-| layout engine | `layoutengine.md` | pass triggers in detail, meaning when a solve is scheduled versus coalesced; the solved-to-arranged persistence rule; idempotence and re-entrancy; animation-driven updates; activation ordering; the six open items in its §11 | 6 | P0 |
+| windows | `windows.md` | the surface syntax for anything in it; the client protocol surface; §13's one deferred item (what a cluster contributes to stacking and focus beyond moving as one) and the phase-08 handoff it names | 5, 8 | P0 |
+| layout engine | `layoutengine.md` | pass triggers in detail, meaning when a solve is scheduled versus coalesced; the solved-to-arranged persistence rule; idempotence and re-entrancy; animation-driven updates; activation ordering | 6 | P0 |
 | draw | `draw.md` | the scene graph node types and their animatable properties; backgrounds as colour, image, shader, vector overlay and panning infinite canvas; vector line objects; text and images; how the compositor's own drawn surfaces are produced; how externally rendered regions become nodes | 12, 13, 14 | P1 |
 | decorate | `decorate.md` | multi-layer borders including gradients and textures; shadows; blur; glow; opacity; rounding; window overlays and underlays; dimming; the three per-window override routes converging on WINDOW_DEPENDENT keys; global versus per-window precedence | 8, 11 | P1 |
 | animate | `animate.md` | animatable properties on nodes; timelines declared in config; curves; stagger; 2D versus 3D; shader-driven animation; how a live gesture keeps animation live; the interaction with the solver's geometry | 9 | P1 |
@@ -181,8 +181,11 @@ reasoning is the thing worth keeping:
    - an in-block **catalog name index** (`OMNI_SECTION_CATALOG_INDEX` id 8,
      16,384 x 16 B, sorted by name hash, binary searched, collision runs walked),
      maintained by the writer in the same commit as the catalog entry, so it is
-     never stale, never rebuilt, and degrades to a walk rather than failing if
-     its section row does not validate;
+     never stale and never rebuilt, and refusing rather than degrading if its
+     section row does not validate: `get` returns
+     `OMNI_ERR_BLOCK_UNSUPPORTED` and there is no walk behind it, because a
+     fallback scan's cost scales with how many keys the user has configured
+     rather than with the size of the block;
    - a **`BINDS_UPDATED` journal kind** (id 5), because a binding change
      invalidates a derived structure rather than one cached value, so one rebind
      and a two-hundred-binding reload are one event to a client that only needs
