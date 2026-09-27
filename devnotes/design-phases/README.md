@@ -18,16 +18,26 @@ The open decisions are not only in the table. Each existing document carries its
 own open-items section, and those are folded into the phases below rather than
 being tracked separately, so there is one place to look:
 
-| source | open items |
+| source | what is actually there |
 |---|---|
-| `generaldesign.md` §19 | 5 |
-| `helpers.md` §11 | 5 (one closed) |
-| `configstorelayout.md` §14 | 8 |
-| `layoutengine.md` §11 | 6 open, 11 closed and kept as record |
-| `tomlparser.md` §11 | 3 (one is a decision already made) |
-| `windows.md` §13 | 5 open, 5 closed |
-| `tags.md` §9 | 4 open, 1 closed |
-| `input.md` §7 | 4 open |
+| `generaldesign.md` §19 | 5 bullets, none open: 2 unresolved external facts now owned by phase 02's build half (the scenefx extension set, and the wlroots release it constrains), 1 closed this pass (no interpreter or library is a deliverable of the window manager), 1 owned by `tags.md` §7, and 1 explicitly deferred to `draw.md` |
+| `helpers.md` §11 | 5 bullets, **none open**: 2 are struck and closed, and the other 3 restate decisions `§6.1` or `§14` already fixed. The `omni_event` payload question that was the one genuine item is closed — the field set is final and is not extended |
+| `configstorelayout.md` §14 | 8 bullets, **none open**: the `get` result vocabulary is struck and closed, and the remaining 7 are v1 capacity choices with stated rationales rather than questions |
+| `configstorage.md` §14 | 14 bullets in two groups. The first records 3 things fixed and 5 deliberate deferrals, none of them a question. **§14.1 is a second group and is not a deferral**: 3 store operations (`tags.md` §5 and §7 oblige) recorded as *required* rather than deferred, with the subtree exchange called out as not being a special case of the subtree delete |
+| `layoutengine.md` §11 | 21 bullets: 18 closed and kept as record, 1 deferred to phase 10 (mid-animation retarget, which phase 10 now owns), 1 closed this pass (core versus component), and **1 open**, which points at `tags.md` §9's stored-or-derived membership |
+| `tomlparser.md` §11 | 3 bullets, none open: 1 decided in favour of `duration`, 1 delegated to the upstream specification, 1 out of scope |
+| `windows.md` §13 | 2 groups, **none open**: 5 numbered items all closed or deferred-with-shape-fixed, and a closing paragraph that settled the override-representation blockers. The one thing recorded as inferred rather than decided is where a deferred tag-seed write is kept, and `§9.3` names it |
+| `tags.md` §9 | two lists. 4 "not covered" bullets, then 4 "open" of which **2 are open** (stored-or-derived membership, and the surface form of the swap's keypath arguments) and 2 are struck and closed |
+| `input.md` §7, §7.2 | 4 not-covered bullets in §7 and 3 more in §7.2; one of the seven is the substantive gap and the rest are owned elsewhere or not needed at stage 4 |
+| `ipc.md` §8 | 8 bullets; 2 of them were stale restatements of decisions already closed and have been corrected. `swap_tags` was added to §4 rather than here, because it is specified rather than open |
+| `server.md` §9 | 2 bullets, both delegating to the compositor subsystem work that follows it |
+
+The counts are as of this reconciliation pass and the two documents with open
+items left are `layoutengine.md` §11 and `tags.md` §9, which point at each other on
+a single question. Neither blocks another phase: the question is whether client-set
+membership is stored or derived, both of which `layoutengine.md` §3.2's determinism
+requirement can be satisfied by, so the solve is implementable either way and the
+question is a cost decision rather than a correctness one.
 
 ## What the design work is actually for
 
@@ -100,9 +110,15 @@ Phases 00 to 03 are the substrate: the store, the build and libraries, and input
 Nothing after 03 blocks on another phase's prose, which is the property that
 makes a thin phase recoverable.
 
-`monitor` before `tags` matches the roadmap (stage 5 before stage 7) and follows
-the precedent `tags.md` §9 already set: tags owns the ordering semantics and
-deliberately left the storage to `monitor.md`. `languages` is last because it is
+`monitor` before `tags` matches the roadmap (stage 5 before stage 7), and the
+dependency runs the other way than it used to: `tags.md` §9 previously left the
+storage of a monitor's tag list to `monitor.md` as a deliberate split, and it no
+longer does, because a promise to hand storage to a document that has not been
+written is how a tag list ends up owned by nobody. `tags.md` now holds both the
+ordering semantics and the storage, and `monitor.md` reads them. So phase 04 reads
+phase 05 rather than the reverse, which is a stronger ordering constraint than the
+one this plan was built on and does not change the phase order. `languages` is last
+because it is
 the only phase whose two inputs (`ipc.md`, `helpers.md` §6) are already finished,
 so it is the lowest-risk phase and there is no reason to spend early attention on
 it.
@@ -136,3 +152,19 @@ that keeps a phase from being written against a document that has not been
 decided yet. Phases 8 through 12 are the ones most likely to be reordered once
 phase 8's roadmap question is answered, because that answer decides whether the
 scene graph is written before decorations or after.
+
+## Design Phase Tracking
+- [x] Phase 00
+- [ ] Phase 01
+- [ ] Phase 02
+- [ ] Phase 03
+- [ ] Phase 04
+- [ ] Phase 05
+- [ ] Phase 06
+- [ ] Phase 07
+- [ ] Phase 08
+- [ ] Phase 09
+- [ ] Phase 10
+- [ ] Phase 11
+- [ ] Phase 12
+- [ ] post-phases: finalize scaffolding requirements.

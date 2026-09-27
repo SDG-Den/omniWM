@@ -34,6 +34,12 @@ Design and development notes. Each file is authoritative for one concern, and a
 concern is documented in exactly one of them; other documents link rather than
 restate. The authority map is `server.md` §8.
 
+## debugger
+
+holds the code for the visual debugger, a graphical interface to analyze the SHM block in its entirety.
+
+
+
 ## docs
 
 User-facing documentation. Not compiled.

@@ -173,15 +173,35 @@ client layer hands over.
   cannot hold, and `tags.md` §5 is explicit that refusing it is the point, because
   it is what stops a window being placed by one layout while counted by another.
   The client layer must therefore never write both.
-- **The solver's input is a walk, so the walk has an order.** `layoutengine.md`
-  §3.2 requires a reproducible iteration order and rules out a `HashSet`-shaped
-  derivation, and Mango cannot supply one: its membership is a `wl_list`, so its
-  order is the history of the insertions and two monitors that reached the same
-  set by different routes would walk it differently. The prototype therefore takes
-  the store's order, children by ascending `entry_id`, which is a slot index and
-  therefore identical on every machine and after every restart. This is a
-  prototype choice under rule 3 and it is cheap, since the hot direction is
-  already only the tags a monitor actually displays.
+- **The solver's input is a walk, so the walk has an order: ascending
+  `entry_id`, and this is now settled rather than a prototype choice.**
+  `layoutengine.md` §3.2 requires a reproducible iteration order and rules out a
+  `HashSet`-shaped derivation, and Mango cannot supply one: its membership is a
+  `wl_list`, so its order is the history of the insertions and two monitors that
+  reached the same set by different routes would walk it differently. The walk
+  therefore takes the store's own order, children by ascending `entry_id`, which is
+  a slot index and therefore identical on every machine and after every restart.
+
+  This was a prototype choice under rule 3 and is now the design, because
+  `layoutengine.md` §3.2's determinism requirement needs an order that is a
+  function of the block alone and no prototype was ever going to supply a better
+  one. The properties it has, and the reason each is enough:
+
+  - it is **total and stable**, because `entry_id` is a slot index and slots are
+    never renumbered while a block lives;
+  - it is **free**, because the walk is over an array and needs no pointer chasing,
+    where a linked list would be cache-hostile on the solve's hot path;
+  - it is **free of history**, so two clients that reached the same set by
+    different routes walk identically. This is the property that matters most, and
+    it is the one insertion order cannot give.
+
+  The cost is that the order is not user-meaningful, and that is accepted rather
+  than solved. Nothing in the language exposes a client's position in its tag's
+  membership, `layoutlanguage.md` §3 has no rule that reads one, and a rule that
+  wanted a stable user-defined order would need a field the entry does not have.
+  If one is ever wanted it belongs in the membership child rather than in the walk
+  order, and this paragraph would then be about sorting by that field rather than
+  by `entry_id`.
 - **A membership change is an ordinary commit.** It is a child entry set or
   deleted, and `configstorage.md` §1 orders commits by `commit_id` and gives
   readers a coherent snapshot by double-reading `commit_state` and `commit_id`.
@@ -207,11 +227,20 @@ follow that the rest of the design leans on.
   `generaldesign.md` §6 makes overview a tag whose contents are the union of the
   others, so it needs the membership walk and not the solver's output, and a
   switcher that can show a minimized client does not wait on a solve.
-- **Focus is an ejection, and it is two writes.** Focusing a minimized client
-  kicks it out of the scratchpad, which `tags.md` §8 defines as deleting the
-  membership child for that client from the scratchpad tag. The visibility state
-  has to clear as well, or the window would stay invisible on its ordinary tag
-  after leaving the scratchpad.
+- **Focus is not a membership mutation, and this paragraph used to say it was.**
+  It read that focusing a scratchpad client "kicks it out", deleting the scratchpad's
+  membership child and clearing a visibility flag, as two writes. `tags.md` §8.4
+  corrected both halves: focusing a client holding scratchpad membership is what
+  brings it onto the overlay, and **the focus event does not touch the membership
+  child at all**. What removes a client from the scratchpad is the *hide into
+  scratchpad* operation in the other direction, and there is no second write
+  because there is no separate visibility flag to clear — a client holding
+  scratchpad membership is skipped by every layout but the scratchpad's
+  (`tags.md` §8.2), so clearing that one membership child is the whole of leaving.
+  An earlier revision had the two writes in the other order as well, which is a
+  different bug: the membership has to go first, or a solve landing between the
+  two sees a client that is both a member of the scratchpad and arranged by its
+  ordinary tag.
 
 That second write is where our design and Mango's part company, and it is worth
 being precise about because the obvious reading of Mango is wrong. The hidden or
@@ -235,11 +264,29 @@ holding an `entry_ref`, so the mutation is a store commit that is ordered by
 and writable by a script. Mango's is an assignment to a `uint32_t` and a
 `wl_list` splice, which is cheaper and disappears with the process. The thing
 `generaldesign.md` §6 buys by making the scratchpad a tag rather than a flag is
-that it can be moved to another monitor and carry its clients, and Mango has to
-reimplement that by hand in `switch_scratchpad_client_state`, which rescales the
-client's `float_geom` by the ratio of the two monitors' dimensions and rewrites
-`oldmonname`. That is a special case our design does not have, and it is the
-clearest argument in this document for the tag.
+three things at once, and the third is the one that matters. A scratchpad is an
+ordinary tag entry, so a client parked in it is *stored* the way any other
+membership is: one `WINDOW_DEPENDENT` member child naming an `entry_ref`, in a
+tag's own subtree, participating in the same grouped commits and the same
+generation checks as everything else. The scratchpad can be one shared tag opened
+on whichever monitor the user is on, or one per monitor, chosen by a config key
+(`tags.md` §8.2), and because it is a tag either way, `swap_tags` moves a whole
+tag's worth of clients in or out of it in one operation. The third is that the
+scratchpad has its own **layout** and opens as an overlay over the existing view,
+so a client summoned out of it is *placed*, not merely und-hidden.
+
+What Mango does instead is worth naming precisely, because the earlier version of
+this paragraph cited it for the wrong thing. Mango's scratchpad is a flag on a
+client, and toggling it is a hand-written routine,
+`switch_scratchpad_client_state`, which rescales the client's `float_geom` by the
+ratio of the two monitors' dimensions and rewrites `oldmonname`. That is a special
+case this design does not have, and it is the clearest argument in this document for
+the tag: a per-client flag that has to be switched by hand and whose switching
+depends on the aspect ratio of two monitors is a layout concern that has been
+written down in the window layer. Here the same operation is a membership change
+plus a solve of a tag that has a layout. The design did not become able to move an
+entity between monitors, which is a thing it deliberately cannot do; it became able
+to exchange two containers, and to arrange a tag as an overlay.
 
 ## 6. The floating layer
 
@@ -307,10 +354,14 @@ tends to blur.
   focus-to-front is a decision a caller makes, focus-without-raise is available,
   and a focus policy that never raises cannot accidentally destroy a layout's
   intended z-order.
-- **Raising moves a whole group together.** `client_raise_group` raises every
-  member, which is the same rule the client layer needs for a cluster, and it is
-  why a cluster that travels as one unit also stacks as one unit rather than
-  being interleaved by focus.
+- **Raising moves a whole group together, and a group is a group rather than a
+  cluster.** `client_raise_group` raises every member, and for a group that is
+  correct because a group is one occupant with a titlebar: raising its titlebar
+  without its window would detach them. It is **not** the rule for a cluster, and
+  applying it to one was an earlier error in this section that Mango's model invited
+  because Mango has no cluster to tell the two apart. A cluster constrains geometry
+  and grouping only (§8), so its members focus, raise, and interact individually
+  and a cluster never raises as a unit.
 
 The refusals are worth carrying over verbatim, because each is a case where
 focusing is meaningless rather than merely undesirable: a locked session, a client
@@ -319,14 +370,16 @@ Focusing a client on another monitor also selects that monitor
 (`set_selected_monitor`), so focus and the active monitor are one operation rather
 than two that can disagree.
 
-One coupling is deliberately left open. The focused client is an *input to
-arrangement*, since a stack or a monocle shows the focused member, and Mango
-re-arranges on a focus change but only conditionally, and only when the layout
-wants it: the check in `client_focus` requires both the previous and the new
-client to match the monitor's tags, neither to be floating, and the layout to be
-the scroller or the monocle. That condition is a layout's business, not the
-window layer's, so this document records the dependency and leaves the trigger
-with `layoutengine.md` §3.7.
+The focus-to-arrangement coupling is now decided and is per layout. The focused
+client is an *input to arrangement*, since a stack shows the focused member, and
+Mango re-arranges on a focus change but only conditionally, and only when the layout
+wants it: the check in `client_focus` requires both the previous and the new client
+to match the monitor's tags, neither to be floating, and the layout to be the
+scroller or the monocle. That condition is a layout's business rather than the
+window layer's, and it is now expressed as `rearrange_on_focus` at program level
+in `layoutlanguage.md` §3.0, defaulting to `true`. The window layer's obligation
+is only to make the focus change and the pass one commit apart rather than
+racing, which §4's single-commit membership rule already covers.
 
 ## 8. Groups and clusters, as the client layer sees them
 
@@ -347,23 +400,52 @@ What the client layer therefore holds is small and mostly about identity:
 - **Membership of a container is not tag membership.** A group on three tags has
   three tag entries pointing at the group, and the windows inside it have none
   (`tags.md` §5). The client layer must not add any.
+- **A cluster constrains geometry and grouping, and nothing else.** This is the
+  decision, and it is worth being exact about what it excludes, because the
+  earlier text got it wrong by importing Mango's group behaviour. A cluster's
+  members:
+  - stay **individually focusable**, each one reachable by the focus order and
+    each one appearing in the focus-recency chain in its own right;
+  - stay **individually interactive**, so a click, a keybind, and a close request
+    all address one member rather than the cluster;
+  - are **not** raised as a unit, because there is no unit to raise: a raise is a
+    z-order decision about windows, and grouping windows for geometry has no
+    opinion about z-order;
+  - are **not** a single focus target, so tabbing through a cluster visits each
+    member.
+
+  The reason each exclusion follows from the same fact is that a cluster is
+  several real windows that happen to share one space of a parent layout, while a
+  group is one occupant with a titlebar. Anything that treated the cluster as one
+  interactive thing would make its members unreachable, and anything that made it
+  raise as one would make the z-order of individually-focused windows depend on a
+  geometry decision. Both were live in an earlier draft because Mango's
+  `group_prev`/`group_next` links and its `is_group` export make grouping and
+  stacking look like one mechanism; Mango has no cluster, so nothing in it is
+  evidence for the cluster case.
 - **A group's titlebar is a fake client**, not a decoration, and §10 covers why
   that is a different thing from what Mango does.
 
-**Clusters do not exist in Mango, and its groups are not our groups.** This is
-worth stating plainly because `layoutengine.md` §3.2 currently attributes the
-cluster arrangement to Mango and is wrong to. What Mango has is a flat linked
-list of clients, `group_prev` and `group_next` on `struct Client`, where a client
-is in a group exactly when either link is set, and it exports that test as
-`is_group` over IPC. Its `ismaster`, `isleftstack` and the way
-`pre_calculate_before_arrange` walks members show what it is for: it is a
-**stack**, a set of windows bound together with one of them showing and focus
-moving within the chain, which is what `layoutengine.md` §7.1 means when it says a
-stack is a group. A cluster, in the sense `generaldesign.md` §8 defines, is
-several windows that occupy one space of a parent layout, and nothing in Mango
-expresses that. The flat links are the arrangement `generaldesign.md` §8 already
-names and rejects when it says that treating the two as one concept cannot express
-both intents.
+**Clusters do not exist in Mango, and its groups are not our clusters.** What
+Mango has is a flat linked list of clients, `group_prev` and `group_next` on
+`struct Client`, where a client is in a group exactly when either link is set,
+and it exports that test as `is_group` over IPC. Its `ismaster`, `isleftstack`
+and the way `pre_calculate_before_arrange` walks members show what it is for: it
+is a **stack**, a set of windows bound together with one of them showing and
+focus moving within the chain, which is what `layoutengine.md` §7.1 means when it
+says a stack is a group. A cluster, in the sense `generaldesign.md` §8 defines,
+is several windows that occupy one space of a parent layout, and nothing in
+Mango expresses that. The flat links are the arrangement `generaldesign.md` §8
+already names and rejects when it says that treating the two as one concept
+cannot express both intents.
+
+The correction is worth stating plainly because an earlier draft of this note
+recorded it as a live error in `layoutengine.md` §3.2, and §3.2 no longer
+contains one: it names no Mango behaviour at all, and its determinism
+requirements are Mango-free. The correspondence that is real, and that Mango
+does support, is the group one, and `layoutengine.md` §7.1 states it in the right
+direction, deriving a Mango-style group from our group plus chrome rather than
+deriving our group from Mango.
 
 Mango's group bar is the second half of the correction, and it is the opposite of
 ours. `mango_group_bar_create` in `src/draw/text-node.c` returns a `MangoGroupBar`
@@ -546,12 +628,20 @@ and recomputed rather than maintained.
   client's own member entries otherwise. So `if.tags` on a grouped client matches
   the group's tags, which is the answer a user would give if asked, and a rule
   cannot filter on an intention because there is no intention stored to read.
+  Under `tags.md` §3 each of those is a `(monitor, number)` pair, so `if.tags` is a
+  set of pairs and a filter naming only a number is not well formed: a client on
+  monitor 1's tag 3 does not match a filter for monitor 2's tag 3, and that is the
+  decision rather than a gap in the filter. The surface syntax for spelling a
+  monitor is `input.md`'s to choose; the semantics are that the monitor is
+  mandatory.
 - **A seed writes membership, not a field.** `then.tags` is the one `then` value
   that is not a write to the client's entry: it adds a member child to each named
   tag's entry, so it lands in the same grouped commit as the rule's other writes
   (`configstorage.md` §3) and it is the only seed that asserts something about the
   solve. This is the "this program lives on that workspace" case, and it is why the
-  field exists despite membership being central.
+  field exists despite membership being central. Each named tag is a full
+  `wm.monitor.<m>.tag.<n>` keypath for the same reason `ipc.md` §4's `swap_tags`
+  takes two: there is no monitor-independent way to write one.
 - **A seed landing on a grouped client is inert, and §9.4's answer still holds.**
   `tags.md` §5 refuses to represent a client with member entries while inside a
   container, since that is one client arranged by one layout and counted by another.
@@ -757,9 +847,12 @@ other tools accept and that nobody has to use here; sorting a canonicalised name
 a comparison a reader cannot predict by looking at the namespace. The whole point of
 borrowing the
 convention is that it needs nothing added to it, and a guard would reintroduce
-exactly the complexity the convention exists to avoid. `lcheck.py` cannot check this
-either, and does not try: the suite has no case of two sets both resolving one
-client, so there is nothing to assert against.
+exactly the complexity the convention exists to avoid. The test suite cannot
+express this rule either, and does not try: there is no case of two sets both
+resolving one client, so there is nothing to assert against. That is a limitation
+of the suite rather than a reason for the convention, and it is recorded here so
+that a later contributor does not read the absence of a test as a decision that
+the ambiguity is acceptable.
 
 
 ## 10. Fake clients take part in layout and in focus
@@ -784,10 +877,34 @@ already requires of a client:
   the solver places.
 - **It has a `kind`**, which is Mango's `Client.type` in the one place Mango is
   the right guide: a single tag on the client distinguishing a real toplevel from
-  a compositor-drawn one. Mango's enum runs `XDGShell`, `LayerShell`, `X11`,
-  `Snapshot`, `XdgPopup`, `XdgImPopup` and `GroupBar`, and the prototype keeps the
-  idea and not the members, because our kinds are chosen by what participates
-  differently.
+  a compositor-drawn one. The set is now **closed at seven**, and the closure
+  matters more than the individual members:
+
+  | kind | is a fake client | notes |
+  |---|---|---|
+  | `XDG_TOPLEVEL` | no | Mango's `XDGShell` |
+  | `LAYER_SHELL` | no | Mango's `LayerShell` |
+  | `X11` | no | Mango's `X11` |
+  | `SNAPSHOT` | no | Mango's `Snapshot`; a still image, not an application |
+  | `XDG_POPUP` | no | Mango's `XdgPopup` |
+  | `XDG_INPUT_METHOD_POPUP` | no | Mango's `XdgImPopup` |
+  | `FAKE_CLIENT` | **yes** | ours; no Mango member |
+
+  Mango's seventh member, `GroupBar`, is deliberately not carried over, and the
+  reason is the same reason §8 keeps our titlebar out of the chrome: Mango's group
+  bar is chrome hung off a client and measured by the layout, so it is not a
+  participant, while ours is placed by the group's own program and therefore is
+  one. Copying the name would import a distinction we have already resolved
+  differently. The remaining six keep Mango's members because they describe *what
+  the client talks to the compositor about*, which is a protocol fact rather than a
+  design choice, and renaming `XDGShell` to `XDG_TOPLEVEL` only makes the name
+  accurate.
+
+  A kind is a tag on the client and never a branching site in the compositor.
+  Everything that behaves differently by kind reads the tag, and the two questions
+  it can answer are "does this client talk a protocol" and "is this drawn by us".
+  Adding an eighth kind is not a small change: it means a new protocol surface or a
+  new kind of thing we draw, and neither is something to do incidentally.
 - **It has the same lifecycle**, because §3's table is written in terms of states
   rather than surfaces and a fake client moves through them unchanged. A
   compositor-drawn client is constructed at a config-driven time rather than at a
@@ -796,13 +913,36 @@ already requires of a client:
   group's program and Mango's is measured by the layout, so ours is a participant
   and Mango's is chrome.
 
-The one place Mango and this section genuinely disagree is focusability, and here
-`generaldesign.md` §13 is the authority and Mango is the discarded alternative:
-Mango's bar and jump label are not focusable, because they are not clients, while
-§13 says a fake client participates in focus exactly as a real window does. That
-is defensible and it is also the decision most likely to need revisiting, since a
-focusable bar is a bar that can take the keyboard away from the user's window, so
-§13 carries it as an open question rather than a settled one.
+**A fake client participates in focus, and whether it can *hold* focus is a separate
+property that phase 06 decides.** These are two different questions and the design
+keeps them apart deliberately, because §13's sentence is about the first and has
+been read as being about the second.
+
+Participation is settled: a fake client is in the client's focus list, in the
+focus-recency chain, and in the per-monitor focus pointer's domain, because a widget
+that is placed by a layout and can be raised by a click is a thing the user
+interacts with and pretending otherwise would make the focus order lie about the
+screen. Mango's bar and jump label are not focusable because they are not clients
+at all, which is the discarded alternative rather than a disagreement to resolve.
+
+Holding focus is a different question with a real cost, and it is **deferred to
+phase 06** rather than answered here. The cost is specific: a focusable bar is a bar
+that can take the keyboard away from the user's window, and whether that is
+acceptable depends on things this document does not know — on what a click on the
+bar means, on whether the user can tab past it, and on what the compositor does
+with keystrokes when focus is held by a surface with no text input. So the
+decision belongs with the input and focus design, where those are answered.
+
+What is fixed here is the shape of the answer, so phase 06 does not have to invent
+one: focusability is a **per-client property**, not a property of the kind and not a
+compositor-wide setting. A bar and a jump label differ in whether the user wants
+them focusable, and two bars configured differently differ too, so a per-kind or
+per-compositor answer would be wrong for at least one of the cases that will
+actually occur. The property therefore rides on the client entry alongside the
+other per-client flags in §9, defaults to **non-focusable**, and the default is
+the conservative one: a fake client that nobody has opted in does not take the
+keyboard. The open question is only whether the default should ever be the other
+value for some kind, and that is phase 06's to answer.
 
 ## 11. Teardown is an exclusion, and then a delete
 
@@ -852,26 +992,47 @@ its input is a coherent snapshot (`configstorage.md` §1), so:
 
 ## 13. Open decisions this prototype does not settle
 
-1. **Whether the membership walk order is catalog order for good.** §4 takes
-   `entry_id` order because it is reproducible and Mango's list order is not. It
-   has not been checked against the cost of a sparse client-id space, where
-   ascending order is a scattered walk rather than a dense one.
-2. **Whether a focus change causes a pass.** Deliberately left to
-   `layoutengine.md` §3.7. §7 records that the focused client is an input to a
-   stack and a monocle, and that Mango makes the trigger conditional on the
-   layout, which is evidence that the answer is per layout rather than global.
-3. **Whether a fake client can hold the keyboard focus.** `generaldesign.md` §13
-   says it participates in focus exactly as a real window does, Mango's equivalent
-   surfaces are not focusable because they are not clients, and the honest reading
-   is that §13's sentence is about participating in a focus *order* and not about
-   being able to take the keyboard.
-4. **Whether the client kind set is closed.** §10 takes Mango's single tag on the
-   client as the shape and leaves the members open, because our kinds are decided
-   by what participates differently in layout, focus and stacking, and that list
-   has not been written down.
-5. **What a cluster contributes to stacking and focus beyond moving as one.**
-   §7 and §8 take Mango's raise-the-whole-group rule by analogy for a cluster,
-   which is an analogy rather than a finding, because Mango has no cluster.
+Four were open here and are now decided. Kept because the reasoning is the useful
+part, not the conclusion.
+
+1. ~~**Whether the membership walk order is catalog order for good.**~~ **Decided:
+   ascending `entry_id`, and it is the design rather than a prototype choice.**
+   §4 records why: it is total, stable across restarts, cheap on the solve's hot
+   path, and free of insertion history, which is the property that makes two
+   clients reaching the same set walk identically. The sparse-id concern is real
+   and is accepted rather than deferred: the walk is over the membership children
+   of one tag, not over the whole catalog, so the scattered part is bounded by how
+   many clients a tag holds rather than by how many exist.
+2. ~~**Whether a focus change causes a pass.**~~ **Decided: per layout, as a
+   program-level key.** `layoutlanguage.md` §3.0 adds `rearrange_on_focus`,
+   defaulting to `true`, and the reason for the default is that the case needing
+   it (`stack` with `raise`) breaks silently without it while the case not needing
+   it merely wastes a pass. The trigger being per layout rather than global is what
+   Mango's conditional re-arrange was evidence for.
+3. ~~**Whether a fake client can hold the keyboard focus.**~~ **Deferred to phase
+   06, with the shape fixed here.** §10 settles that a fake client *participates*
+   in focus and that focusability is a per-client property defaulting to
+   non-focusable. What phase 06 decides is whether the default should ever be the
+   other value for some kind, which needs the input and focus design this document
+   does not have.
+4. ~~**Whether the client kind set is closed.**~~ **Decided: closed at seven.**
+   §10 has the table. Mango's six protocol kinds are kept because they describe
+   what the client talks to the compositor about, `GroupBar` is dropped because
+   ours is a placed participant rather than chrome, and `FAKE_CLIENT` is ours.
+
+One was open here and is now closed, and the reason it was ever a question is worth
+recording:
+
+5. **What a cluster contributes to stacking and focus beyond moving as one:
+   nothing.** §7 and §8 used to take Mango's raise-the-whole-group rule by
+   analogy, which was an analogy rather than a finding since Mango has no cluster.
+   A cluster constrains **geometry and grouping only**. Its members stay
+   individually focusable and individually interactive, they do not raise as a unit
+   because there is no unit to raise, and they do not become a single focus
+   target. This is what makes a cluster different from a group, and the difference
+   is not a detail: a group is a nesting concept with one occupant and a titlebar,
+   while a cluster is several real windows that merely share a space, and collapsing
+   their interaction would mean a user could not click one of them.
 
 Four that were open here and are now settled, kept because the reason is the useful
 part. **The window-rule matchers** are §9: a block-structured if/then over any

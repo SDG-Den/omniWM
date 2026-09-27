@@ -18,16 +18,27 @@ written against an earlier draft of this language can be read rather than guesse
 
 ## 1. What a program is
 
-A program is **three keys** under one prefix, and it is three because this
-document and `layout-test-examples.md` are the authority on keys. Both say
-`rules`, `spaces` and `viewport`, and the 1,138-line suite is written in that
-form throughout, so the form is settled and every other document conforms to it.
+A program is **four keys** under one prefix, and this document and
+`layout-test-examples.md` are the authority on keys. `rules`, `spaces` and
+`viewport` are the three the 1,138-line suite is written in throughout, and
+`rearrange_on_focus` is the fourth, added because a focus change is an arrange
+trigger whose answer differs per layout and belongs in the layout rather than in a
+compositor-wide setting (§3.0). A suite written without the fourth key is
+conforming, because the key is optional and defaults.
 
 ```
-omniwm.layouts.<name>.rules     array of rule
-omniwm.layouts.<name>.spaces    array of space
-omniwm.layouts.<name>.viewport  the viewport, at most one
+omniwm.layouts.<name>.rules              array of rule
+omniwm.layouts.<name>.spaces             array of space
+omniwm.layouts.<name>.viewport           the viewport, at most one
+omniwm.layouts.<name>.rearrange_on_focus boolean, at most one
 ```
+
+All four are optional, and each missing one falls back to a static default in the
+consumer's code, independently of the others. "Optional" is a statement about
+this syntax and nothing more: a program does not have to be complete to be valid,
+and the block never holds a copy of a default in place of a key the author left
+out. §11.1 has the per-key rule and `tomlparser.md` §11 says why the default is
+code rather than a stored value.
 
 The tag is read off the key rather than declared once, which is the same rule
 `tomlparser.md` §3 states for integers. `spaces` is an `OMNI_TAG_CONSTRAINT` at
@@ -128,6 +139,39 @@ and no weight band. A later `share` cannot override an earlier `inset`, and to
 change the order you move the rule. This is both the readable form and the honest
 one: the duckWM weights existed to make a least-squares solve converge, and a
 layout with four geometry rules does not need a solver to decide between them.
+
+### 3.0 Whether a focus change re-arranges
+
+A focus change is an arrange trigger, and whether it is one is a property of the
+layout rather than a compositor-wide setting, because the two common answers are
+both right for different layouts. A `stack` wants it: `raise` in §3.1 offsets the
+focused member, so a focus change that did not re-arrange would leave the offset
+pointing at the member that used to be focused. A `run` or a `grid` does not want
+it, because their members' rectangles do not depend on which one is focused and a
+re-arrange would be a pointless pass on every Tab.
+
+So it is a program-level key, and it is the fourth key at that level:
+
+| key | type | present | default | meaning |
+|---|---|---|---|---|
+| `rearrange_on_focus` | boolean | at most one | `true` | whether a focus change runs a pass |
+
+`true` is the default because the case that needs it is the case that silently
+breaks without it: a `stack` whose `raise` does not follow focus is wrong in a way
+a user reads as a compositor bug rather than as a layout setting. A layout that
+does not want the pass writes `rearrange_on_focus = false` once and stops paying
+for it, which is the cheaper direction to be wrong in.
+
+The key is at program level and not on the arrangement rule because the trigger is
+a property of the pass, not of one rule. A program with two groups in different
+regions may reasonably want one to follow focus and the other not, and that is
+expressible by nesting: the group that should not follow focus is a space carrying
+its own `layout`, and the nested program sets the key. The general case is
+therefore available without the flat case needing its own rule.
+
+Being program level also means it is one of the keys subject to §11.1's per-key
+default rule, so an absent key is the compiled-in `true` and no block ever carries
+a seeded copy of it.
 
 ### 3.1 Arrangement arguments
 
@@ -392,8 +436,17 @@ Each rule is one soft equation and the set is solved together, which is where th
 weighted least-squares solver earns its keep. This is why the program layer dropped
 `priority` and the client layer keeps weights: a bar's three
 rules cannot conflict with each other, so a priority between them would order
-nothing, while a snap against a neighbour and a snap against the output can conflict
-and the weight decides which the user meant.
+nothing, while a snap against a neighbour and a snap against the output can
+conflict, and the joint solve is what decides where the client lands.
+
+What that decide is not a winner, and it is worth being exact because the earlier
+text here said the weight "decides which the user meant". Both of those snaps are
+`OMNI_SOLVER_WEIGHT_CLIENT_RULE` (`layoutengine.md` §3.2, which is where both
+weights live), so they carry the same weight and the solve compromises between
+them; the weight separates a client relation from a *program* relation, not one
+client rule from another. A client
+holding both has asked for two positions at once, and the only way to get one of
+them outright is to write one rule rather than two.
 
 ## 3.7 Snapping
 
@@ -734,8 +787,15 @@ held per tag. `devnotes/layoutengine.md` §3.3 reached this already.
 - **No snapping at the program level.** A snap belongs to a client at a moment,
   §3.7, so a program's geometry does not change because a window moved.
 
-Load-time validation of a program, all in the semantic guard of
-`devnotes/configstorage.md` §12, because each is a mistake the user can correct:
+Load-time validation of a program, and **these checks belong to the layout engine,
+not to the store**, because each one is a question about meaning rather than about
+bytes. `configstorage.md` §12 has no semantic tier and does not get one back: the
+store guarantees a program can be *decoded* and refuses with a named code if it
+cannot, and every check below is the consumer's decision about whether a decoded
+program makes sense. That is also why a failed check is a load error naming the
+layout rather than a refused write, since nothing about the write was malformed.
+The engine runs this list when a program is read, and `tomlparser.md` §8's
+per-line failure policy is what a failure looks like through a config file:
 
 1. `rule` is one of the ten kinds, and only the arguments belonging to it are
    present.
@@ -815,12 +875,23 @@ a key that appears in a program but not here is a defect in this file.
 
 | key | type | present | meaning |
 |---|---|---|---|
-| `rules` | array of tables | always, may be empty | **the one rule list**, §3 |
-| `spaces` | array of tables | always, may be empty | §4 |
+| `rules` | array of tables | at most one, may be empty | **the one rule list**, §3 |
+| `spaces` | array of tables | at most one, may be empty | §4 |
 | `viewport` | table | at most one | §7 |
+| `rearrange_on_focus` | boolean | at most one | whether a focus change runs a pass, §3.0 |
 
 There is no `groups` key and no `group` field on a space. A program with none of the
-three is a blank program, and a program wanting a second rule list nests a group, §5.
+four is a blank program, and a program wanting a second rule list nests a group, §5.
+
+All four keys are each optional, and each one that is missing or blank is resolved
+independently by the consumer from a static default compiled into the code. "At most
+one" is therefore the real cardinality: a program that omits all three is the blank
+canvas of `layoutengine.md` §7.8, a program that writes only `rules` has spaces it
+did not ask for, and neither is an error. The defaults are not values, they are the
+absence of a value, and that is the whole of the rule: nothing is ever written into
+the block to stand in for one, and no consumer writes a default back. A key present
+but malformed is a different case and is a parse error, not a fallback; see
+`tomlparser.md` §11.
 
 ### 11.2 A group
 

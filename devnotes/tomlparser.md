@@ -81,7 +81,9 @@ tag with the field names preserved, and the tag itself is declared by the key pe
 
 The layout keys live under one prefix, `omniwm.layouts.<name>`, and the two rule
 namespaces are `omniwm.clients.<set>.rules` and `omniwm.snaps.<set>.rules`
-(`layoutlanguage.md` §3.6.1). So a whole program is three keys and nothing else:
+(`layoutlanguage.md` §3.6.1). So a whole program is four keys and nothing else,
+and the fourth (`rearrange_on_focus`) is a plain boolean rather than a table, so
+it writes inline where the other three write as `[[...]]` arrays:
 
 ```toml
 [[omniwm.layouts.delta.rules]]
@@ -100,7 +102,16 @@ name = "main"
 [[omniwm.layouts.delta.spaces]]
 name = "side"
 layout = "vertical_stack"
+
+[omniwm.layouts.delta]
+rearrange_on_focus = false
 ```
+
+The nested `layout` field on a space is the nesting mechanism, §5 of
+`layoutlanguage.md`: a space carrying a `layout` is a group and one without is not,
+so there is no `groups` array to write and no second rule list to declare. That
+`side` space above is a group holding the whole `vertical_stack` program, and its
+rules live under `omniwm.layouts.vertical_stack.rules` rather than here.
 
 This is the cross-document consequence `layoutengine.md` §3.3 flagged, and it is now
 answered rather than deferred: whatever a constraint language ends up being, a TOML
@@ -276,6 +287,34 @@ explicit table form, which is why that form exists in the input direction too.
   upstream and the parser is expected to conform to it except where this
   document says otherwise, which is only in the type binding and the two
   suffixed forms.
+- **A missing or blank key falls back to a static default, and the fallback is
+  per key.** This is now closed rather than open, and it is worth stating why it
+  is a parser concern and not a store one. The four program keys
+  (`layoutlanguage.md` §1) and a space's `layout` field are the units, and each
+  is independent: a program with `rules` and `spaces` and no `viewport` gets the
+  static identity viewport, a program with no `rearrange_on_focus` gets the static
+  `true`, a program with `viewport` and no `spaces` gets no spaces, and no absence
+  is an error. Two properties follow, and both matter more than the rule itself.
+  - The defaults live in code, not in the block. A consumer that finds a key
+    absent applies the compiled-in default for that key; the block never carries a
+    seeded copy of it, never re-applies a default into an entry, and never
+    records that a default was in force. This is the direct consequence of
+    `configstorage.md` §12's decision that the store holds no defaults: a default
+    written into the block would be indistinguishable from a user's explicit
+    value, so a later change to the default could not reach anyone who had not
+    overridden it, and `save` would write out a value the user never chose.
+  - The fallback is per key, not per program. There is no "the program is
+    incomplete" state, and no failure mode where one missing key discards the
+    others. A partially specified program is the normal case: `layout-test-examples.md`
+    is written in that form throughout, and a program that wants the defaults for
+    everything omits all four and gets the blank canvas of
+    `layoutengine.md` §7.8.
+- A key present but malformed is **not** a fallback case and is not covered by the
+  rule above. Blank is blank; a `spaces` array containing a table that is not a
+  space is a parse error for that line, and it is reported as such per §8 rather
+  than silently replaced by the default. The distinction matters because a
+  fallback is a decision about a key the user did not write, while replacing a
+  malformed key would discard something the user did write and did not mean.
 - Whether a bare unsuffixed numeric string should be a `duration` or an ordinary
   `string` is decided here in favour of `duration`, on the grounds that the
   overwhelmingly common intent for a bare number in a compositor config is a

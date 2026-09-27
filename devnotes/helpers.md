@@ -290,7 +290,25 @@ subscribed here at activation.
   subscriber that blocks, allocates, or throws away events still falls behind.
 - Event struct `omni_event` carries the journal identity fields: `epoch`,
   `commit_id`, `journal_seq`, `entry_id`, `entry_generation`, kind, `time_ns`,
-  key or pattern matched, and the typed value as read from the entry.
+  key or pattern matched, and the typed value as read from the entry. **The field
+  set is final.** It was an open item whether to extend it for richer in-process
+  payloads, and the decision is not to: the struct mirrors one journal slot, and
+  anything a journal slot cannot express has no business arriving through a
+  trigger, because a trigger is a view of the journal rather than a second event
+  channel. A component that needs metadata the journal does not carry gets it from
+  the block, which is where the same data already lives and where reading it costs
+  a guarded lookup instead of a struct that has to stay in step with the slot
+  layout. The one thing this rules out is a synthetic in-process event, and that
+  is the intended outcome: a dispatch that could deliver something no commit
+  produced would break the guarantee below that no partial group is ever
+  delivered.
+
+  The two journal concepts with no field in the struct are handled by not being
+  delivered through it rather than by widening it. A `COMMIT_END` is a group
+  boundary the dispatcher enforces before it calls anything, so a subscriber never
+  needs to see one, and a custom `EVENT` entry arrives as a key/pattern match on
+  its category with the typed value attached, which is the same shape as any other
+  match.
 - Dispatch is synchronous, subscribers in registration order, each guarded
   against reentrancy (a callback committing changes re-enters dispatch one
   nesting level deep, then unwinds).
@@ -761,22 +779,28 @@ component reading config keys instead of `#ifdef`d options.
 
 ## 11. Open items
 
-- `omni_event` field set is fixed by the journal slots (configstorelayout.md
+- ~~`omni_event` field set is fixed by the journal slots (configstorelayout.md
   §8); richer in-process payloads need a follow-up design if components want
-  them (metadata beyond journal entries).
+  them.~~ **Closed by decision: the field set is final and is not extended.**
+  §7 now records the decision and the reasoning. A trigger is a view of the
+  journal, so the struct mirrors one slot and stops there; a component needing
+  more reads the block, and a synthetic event is deliberately not expressible
+  because it would let a dispatch deliver something no commit produced. The
+  `COMMIT_END` and custom-event cases are answered by the dispatcher enforcing
+  the boundary before delivery and by the custom event arriving as an ordinary
+  match, neither of which needs a new field.
 - The action argument schema and result typing are fixed in §6.1: positional
   typed tags plus one declared result tag.
 - ~~The `binding` key-to-action path, the `modmask` text grammar, and the keysym
   name table.~~ **Closed by decision, not by design here.**
-  `generaldesign.md` §14 decides that input is MangoWM's implementation ported
-  wholesale, and Mango's `KeyBinding` already carries `mod`, a `KeySymCode` and
+  `generaldesign.md` §14 decides that we use Mango's code where we can and change
+  what we need, and Mango's `KeyBinding` already carries `mod`, a `KeySymCode` and
   an `Arg` array, with `parse_bind_flags` and the XKB keysym table supplying the
   grammar and the names. So the key-to-action path is Mango's, the `Arg` array
   is this document's `args`, and the modmask and keysym spellings come across
-  with the code rather than being specified twice. What the port does still owe
-  this document is a decision on `action_ref`, which is recorded in
-  `configstorelayout.md` §5 and is the one field in the `binding` record whose
-  meaning is unsettled.
+  with the code rather than being specified twice. The `action_ref` question
+  this bullet used to leave open is closed as well: §6.2 settles it as a frame
+  offset holding the action's name, and `ipc.md` §8 has been corrected to agree.
 - Component dependency edges beyond plain priority (a hard "requires X")
   do not exist at v1, and are not planned; priority ordering is the mechanism
   permanently unless a real dependency failure appears. The observable

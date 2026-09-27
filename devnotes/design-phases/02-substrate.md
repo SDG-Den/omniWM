@@ -101,14 +101,28 @@ this phase says how a component uses it.
 the read path and `generaldesign.md` §14.4 has the index design for bindings. What
 is not written anywhere is the general form every component copies: read through
 the catalog name index, cache privately, invalidate on a journal event, never
-cache a frame offset. `input.md` §14.2's split is the worked example and it should
-be cited as the pattern rather than rediscovered.
+cache a frame offset.
+
+This item used to name `input.md` §14.2 as the worked example, and **that example
+does not exist**: `input.md` has eight sections and no §14, and it describes no
+private cache. Both halves of the pattern are specified and neither has an
+implementation-shaped instance — `configstorage.md` §3.1 is the lookup,
+`helpers.md` §5 is the invalidation trigger — so what is missing is a component
+that does both. `input.md` is the right candidate and the right size, since it is
+the component with the most reads, but writing that instance is a change to
+`input.md` rather than a consequence of it, which is why the pattern has to be
+stated here before it can be cited anywhere.
 
 **D4. The event and subscription pattern.** `helpers.md` §5 and `ipc.md`'s watch
-mechanism both exist, and `helpers.md` §11 records that `omni_event`'s field set
-is fixed by the journal slots, so richer in-process payloads need a follow-up
-design. That follow-up is owed and it belongs here, because a component that
-wants metadata beyond a journal entry will hit it in stage 5.
+mechanism both exist, and this item used to say that a follow-up design was owed
+because `omni_event`'s field set is fixed by the journal slots. That is closed:
+`helpers.md` §7 now records that the field set is final and is **not** extended, so
+there is no follow-up to do and no component should be written expecting one. The
+part of the item that survives is the pattern itself, and the consequence is
+sharper for being settled: a component that wants more than a journal entry reads
+the block, and a synthetic in-process event is deliberately not expressible
+because it would let a dispatch deliver something no commit produced. So D4 is now
+about how a component subscribes and invalidates, not about a payload schema.
 
 **D5. Error and diagnostic conventions.** `configstorage.md` §12.6 has a diagnostic
 policy for the store. A component outside the store has no stated policy: what a
@@ -133,6 +147,20 @@ event loop. This is the gap that makes stages 5 onward either well tested or not
 tested, and it is much cheaper to close now than after four components have each
 solved it differently.
 
+**D9. The three store operations a tag is a container for.** `configstorage.md`
+§14.1 now records these as *required* rather than deferred, because `tags.md` §5
+makes a tag a container and §7 makes a swap an exchange of two containers: a
+subtree delete, a subtree exchange, and generation-correct deletion. D3 is the read
+pattern and this is the write pattern, and the reason it belongs to the substrate
+rather than to phase 05 is that phase 05 states the obligation and cannot choose the
+mechanism — an exchange is a different operation from a delete, not a variation on
+it. A delete may free each frame as it recurses; an exchange frees nothing at all,
+because every child of one tag is still live in the other, and an implementation
+that assumes the second is built from the first runs out of slots halfway through
+the second tag. Generation-correct deletion is the third because the same recursion
+has to invalidate the names of everything it removed, and `catalog_free_count` is
+what tells a reader the chain is consistent.
+
 ## What it resolves
 
 - Whether the design is buildable at all, which is the precondition for phase 01's
@@ -146,6 +174,9 @@ solved it differently.
   subscription, and the error path, in three slightly different ways.
 - The test seam, which is the difference between a project where the later stages
   are verifiable and one where they are not.
+- The write pattern of D9, which phase 05's `configstorage.md` §14.1 rows are
+  specifications for rather than only names, and which phase 01's store tests need
+  in order to assert something more interesting than that a write took effect.
 
 ## Why it is second
 
@@ -165,6 +196,9 @@ that consumes them.
 - The provenance record exists as a file, even if it is nearly empty.
 - One worked component exists in the tree, following the conventions, and later
   phases cite it instead of restating the patterns.
+- The three operations of D9 have a stated mechanism each, and the exchange is
+  documented as a distinct operation from the delete rather than as a reuse of
+  it.
 - The block-versus-process-memory rule is written as a rule, and `configstorage.md`
   §1's scope taxonomy is referenced rather than paraphrased.
 - A component test exists that runs without a wlroots event loop, or the reason it

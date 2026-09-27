@@ -31,13 +31,18 @@ each, after the update pipeline in §6 and the layout set in §8 were settled.
 
 | # | question this document must answer | status |
 |---|---|---|
-| 3.1 | the constraint record on a client | intent fixed, representation open |
-| 3.2 | the soft-with-priority model and how the solver degrades | intent fixed, mechanism open |
+| 3.1 | the constraint record on a client | **resolved.** A rule set is reached by name and never matches a window; the record is the language's own keys in 24 bytes with no payload |
+| 3.2 | the soft-with-priority model and how the solver degrades | **resolved.** Weighted least squares, no weight is hard, and there is one weight per solved family rather than four named bands |
 | 3.3 | the constraint language a user writes | settled, and written out in `layoutlanguage.md` |
 | 3.4 | built-in layouts as constraint presets | mechanism exists, unstated |
-| 3.5 | how a layout is selected per tag | open, and blocked on an identity the block lacks |
+| 3.5 | how a layout is selected per tag | **resolved.** A tag is a catalog entry holding a layout name, a monitor displays an ordered list whose head is primary, and a per-monitor tag's monitor is part of its identity |
 | 3.6 | nested layouts for groups, clusters and scratchpads | intent fixed, and the required set confirms all three cases |
-| 3.7 | the arrange pass | the pipeline is fixed by §6, solved storage by §2.10; triggers, arranged storage and re-entrancy open |
+| 3.7 | the arrange pass | **resolved except re-entrancy.** The pipeline is fixed by §6, solved storage by §2.10, the trigger is per layout as `rearrange_on_focus`, arranged storage is the stage byte in `configstorelayout.md` §11, and re-entrancy is deferred to phase 10 |
+
+The four rows that were open when this table was written are closed by §11's own
+record and, for 3.5, by `tags.md` §3 to §5. A table of statuses that is not
+updated when the sections below it are is worse than no table, because it is
+precisely the thing a reader checks instead of reading.
 
 `layoutlanguage.md` owns the syntax: the model, the rule kinds, the keys at each
 level, the guards and the frozen limits. It is normative, and where this document
@@ -137,13 +142,33 @@ experimentation.
 
 The mechanism was inherited here as a requirement rather than a specification,
 because the original wording was "drops the lowest-priority constraint it cannot
-honour" and both halves of that were undefined. §3.2 settles it as weighting,
-and `omni_layout.h` had already encoded weighting before this document did:
-`OMNI_SOLVER_WEIGHT_*` are documented there as the solver's linear weights, and
-the four bands are separated by an order of magnitude each
-specifically so that a band dominates the compromise rather than trades evenly
-against it. The prose was the stale half, and it has now been amended to match
-the header rather than the other way round.
+honour" and both halves of that were undefined. §3.2 settles it as weighting, and
+the weighting is real: `omni_layout.h` carries two internal weights, one per
+solved family, separated by a decade so that one dominates the compromise rather
+than trading evenly against it.
+
+**The four named weight bands are gone, and the check that retired them is the
+point.** They were `OMNI_SOLVER_WEIGHT_DOMINANT` 60000, `STRONG` 6000, `MEDIUM`
+600, and `WEAK` 60, and this document used to assign them by mapping "positional
+constraints" to STRONG and "structural constraints" to DOMINANT. The current
+language has no positional or structural constraint: a program rule is decided by
+its position in the rule list and never reaches the solver at all, so the mapping
+described a distinction the language had already deleted, and three of the four
+bands had no caller even under the vocabulary it was written for. They were a
+leftover from the constraint-record era, which had a priority field, and the
+record is gone.
+
+What survives is the part that is still load-bearing. A weight exists to break a
+tie inside the solve, and that need is real: two relations that cannot both hold
+need a defined winner, or the output depends on the order the solver visits
+equations in and the determinism requirement in §3.2 is unsatisfiable. So the
+mechanism is retained as `OMNI_SOLVER_WEIGHT_PROGRAM` 60000 and
+`OMNI_SOLVER_WEIGHT_CLIENT_RULE` 6000, one per solved family, and the hierarchy
+of four is not. Neither value is in the format and no program can write either.
+The bands had a fifth appearance worth recording: `configstorage.md` §4 quoted
+them in a paragraph describing the deleted constraint record, which is how a
+reader of that document could learn a priority system the language does not have.
+That paragraph went with the record.
 
 ### 2.4 The engine is a general service, and tags are its first consumer
 
@@ -558,37 +583,46 @@ implementation of the mechanism §2.3 asks for. It solves per strongly-connected
 component rather than as one global system, warms each component from the
 previous frame's solution, and treats the highest-weighted equation whose
 variables are all already-solved as a fixed point, which is what keeps the warm
-start cheap. The weight mapping is already in the header: positional constraints
-are `OMNI_SOLVER_WEIGHT_STRONG` and structural ones are
-`OMNI_SOLVER_WEIGHT_DOMINANT`. These are the solver's internal weights and are
-not part of the format: the program has no priority key, because
-`layoutlanguage.md` §3 makes order in the list the whole of the ordering.
+start cheap. The weight mapping is in the header and is one value per solved
+family: `OMNI_SOLVER_WEIGHT_PROGRAM` for the `share` and `inset` relations the
+duckWM lineage brought, and `OMNI_SOLVER_WEIGHT_CLIENT_RULE` for the snapping and
+sizing equations of `layoutlanguage.md` §3.6. The decade is between the two
+families, so a client relation loses the compromise to a program relation and
+not the other way round. It does not order anything inside the client family: a
+snap against a named neighbour and a snap against an output edge are the same
+weight, and a client carrying both gets a solve that splits the difference
+rather than one of them winning. These
+are the solver's internal weights and are not part of the format: the program has
+no priority key, because `layoutlanguage.md` §3 makes order in the list the whole
+of the ordering.
 
-**There is no hard constraint, and the constant is named for that.** The top
-band was `OMNI_CONSTRAINT_PRIORITY_REQUIRED`, then
-`OMNI_CONSTRAINT_PRIORITY_DOMINANT`, and is now `OMNI_SOLVER_WEIGHT_DOMINANT`
-because the constraint record it was a field of is gone and the band is a weight
-the solver applies rather than anything a program can write. At 60000 against
-`STRONG`'s 6000 it
-is one decade of weight and not a different kind of constraint. DuckWM does the
-same thing with `REQUIRED` special-cased to an effective weight of `1e8`, and its
-own note is that this is a weight large enough for the fit to honour it rather
-than a separate code path, so a program with two of them that cannot both hold
-still produces a compromise. This is consistent with `generaldesign.md` §7's
-"constraints are soft and prioritised", and it should stay that way. The rename
-is recorded here because the old name was the thing worth fixing: it would have
-been read as a guarantee the solver does not make, and `DOMINANT` describes only
-how much weight the band carries. The header comment now says so explicitly.
+**There is no hard constraint, and that is why these are weights.** The top value
+was `OMNI_CONSTRAINT_PRIORITY_REQUIRED`, then
+`OMNI_CONSTRAINT_PRIORITY_DOMINANT`, then `OMNI_SOLVER_WEIGHT_DOMINANT`, and is
+now `OMNI_SOLVER_WEIGHT_PROGRAM`, because the constraint record it was a field of
+is gone, then the band it belonged to was gone, and what is left is a weight the
+solver applies to one family. At 60000 against the client family's 6000 it is one
+decade of weight and not a different kind of constraint. DuckWM does the same
+thing with `REQUIRED` special-cased to an effective weight of `1e8`, and its own
+note is that this is a weight large enough for the fit to honour it rather than
+a separate code path, so a program with two of them that cannot both hold still
+produces a compromise. This is consistent with `generaldesign.md` §7's
+"constraints are soft and prioritised", and it should stay that way. The
+renames are recorded here because the names were the thing worth fixing:
+`REQUIRED` would have been read as a guarantee the solver does not make, and
+`DOMINANT` described a band that no longer exists.
 
 Still open:
 
-- Whether priority is a strict order, whether equal priorities are allowed, and
-  what a user writes to set it. `helpers.md` §11 has an unrelated priority
-  concept for components, so the word is overloaded in this repository and the
-  two must not collide in a config key or in a struct. The header's answer so far
-  is that the bands are separated by a decade each so that one band dominates the
-  compromise, which means the bands are ordinal and the values inside a band are
-  not, and the config surface has to say which.
+- ~~Whether priority is a strict order, whether equal priorities are allowed, and
+  what a user writes to set it.~~ **Closed, by removal.** There is no priority in
+  the layout language at all, so there is no order to be strict, no equal case to
+  allow, and nothing for a user to write. Rules are tried in list order and the
+  first that fits wins (`layoutlanguage.md` §3), which is a total order already.
+  The header's four weight bands are gone, leaving one weight per solved family,
+  and `helpers.md` §11's component priority is a separate concept that no longer
+  risks colliding with a layout band because there is no layout band to collide
+  with.
 - Whether the solve is deterministic given the same input set, and this is now a
   requirement rather than a question. Weighting makes it load-bearing in a way
   dropping did not: the solve is iterative and warm-started, so its output depends
@@ -847,12 +881,13 @@ depth is what multiplies the number of solvers the arrange pass has to run.
 No built-in nests doubly, so 5 is not reachable from the shipped layouts alone
 and a user has to build all of it.
 
-Both bounds are checked when a program is loaded, not when it is solved, and they
-belong in the semantic guard of `configstorage.md` §12 next to the check that a
-name is in the closed letter set. Rejecting the program at load means the user is
-told which layout is at fault and the running layout is untouched, whereas
-checking during an arrange pass means the pass has to unwind a partial cascade
-before it can report anything.
+Both bounds are checked when a program is loaded, not when it is solved, and the
+checks are the engine's own rather than the store's: `configstorage.md` §12 has no
+semantic tier, so a program that is well formed as a value but nests too deeply is
+a decodable value that this consumer refuses, which is exactly the split §12 now
+states. Rejecting the program at load means the user is told which layout is at
+fault and the running layout is untouched, whereas checking during an arrange pass
+means the pass has to unwind a partial cascade before it can report anything.
 
 Still open in this section:
 
@@ -931,20 +966,35 @@ Still open in this section:
 The pipeline in §6 now fixes the shape of the pass, so what is left here is the
 part the pipeline does not answer.
 
-- **Where the produced geometry lives is settled, and the remaining half of the
-  question is not.** §6 establishes that a solved layout is a written value and
-  an arranged layout is a live one, which removes the choice between "geometry
-  in the block" and "geometry in memory" as a single question. The solved half is
-  answered: `OMNI_SECTION_SOLVED_LAYOUT` (§2.10) is a fixed, non-journalled
-  section, so produced geometry is in the block and any program that can map the
-  block can read a layout, diff it, and author against it, at the cost of one
-  bounded memcpy and a `generation` bump per solve rather than a commit. The
-  arranged half is still open: whether an *arranged* layout is also written, and
-  if so what distinguishes it from the solved one. Writing both would mean the
-  block carries both a plan and its execution, and the pair is what an animator
-  would need to interpolate; writing only the solved one means a script can
-  always compute the arrangement itself and the compositor holds no authority
-  over it.
+- **Where the produced geometry lives is settled, and so is how the two stages are
+  told apart.** §6 establishes that a solved layout is a written value and an
+  arranged layout is a live one, which removes the choice between "geometry in the
+  block" and "geometry in memory" as a single question. Produced geometry is in the
+  block: `OMNI_SECTION_SOLVED_LAYOUT` (§2.10) is a fixed, non-journalled section,
+  so any program that can map the block can read a layout, diff it, and author
+  against it, at the cost of one bounded memcpy and a `generation` bump per write
+  rather than a commit.
+
+  Both stages are written, and a `stage` byte in the section header distinguishes
+  them. The alternative of writing only the solved layout was rejected because the
+  animator is then the only component that knows where a window ended up: a script
+  reading the block would see the plan and have to re-derive the execution, and
+  "where is this window now" would have two answers that could disagree. The cost
+  of writing both is one extra bounded memcpy per pass and a second write of the
+  same array, and the benefit is that the block is the single authority on live
+  geometry for every reader including the compositor's own animator. The stage byte
+  is what makes this safe rather than ambiguous: a reader that sees
+  `OMNI_SOLVED_STAGE_SOLVED` is looking at a value the animator has not yet acted
+  on, and one that sees `OMNI_SOLVED_STAGE_ARRANGED` is looking at the endpoint.
+
+  Both stages share one buffer and are sequential rather than concurrent, so the
+  section is not doubled. Step 6 overwrites step 9's predecessor on the next pass,
+  and a reader sampling between the two writes sees a `generation` that no longer
+  matches the current `commit_id` and retries. The limit this shape has is real and
+  worth stating: the solved geometry does not survive the arrange that overwrites
+  it, so a reader wanting the solver's own answer must read before the animate
+  step. Nothing in the design needs to, because the animator is handed the endpoint
+  and a script asking where a window is wants the activated value.
 - **What triggers a pass.** `generaldesign.md` §7 says the solver produces
   geometry on each arrange pass, and §6 says a pass begins with a call to update
   the layout, but nothing says who makes that call. The candidates are a change
@@ -963,10 +1013,17 @@ part the pipeline does not answer.
   catches self re-entry; it says nothing about what a solve does when its own
   input set changes underneath it.
 - **What happens when a second update arrives while an animation from the first
-  is still running.** §6 fixes the pipeline for one update and says nothing
-  about two overlapping. Interruption, queueing and reversal are three different
-  answers with three different visual results, and this is the most likely place
-  for the pipeline to have an unstated hole in it.
+  is still running: deferred to `animate.md`, deliberately.** §6 fixes the
+  pipeline for one update and says nothing about two overlapping. Interruption,
+  queueing and reversal are three different answers with three different visual
+  results, and picking one here would be picking it in the wrong document, because
+  all three are statements about what a client shows while a transition is in
+  flight and this document only claims to be right about geometry. The one
+  constraint this document does impose is that step 9 runs unconditionally, so a
+  pass always reaches `OMNI_SOLVED_STAGE_ARRANGED` no matter what the animator
+  chose to do with the previous pass's transition. That is what keeps the
+  deferral safe: `animate.md` can choose any of the three answers without any of
+  them being able to leave the block without an endpoint.
 - **Where the engine sits in activation order.** §2.7 notes that `helpers.md` §11
   makes priority advisory, so a wrong band is an init failure rather than a
   detected violation, and a layout engine that activates before there are
@@ -1314,11 +1371,20 @@ The consequences this fixes, none of which any existing document had stated:
   disappearing is the normal path for a user who has turned animations off, so
   nothing may depend on an animation having run. The layout is arranged whether
   or not anything moved it there.
-- **Triggering is separate from animating.** Step 5 starting an animation and
-  step 8 running it are two events, so a layout that changes twice in quick
-  succession has a defined case that is not yet written: what happens to an
-  animation already in flight when a second update arrives. Interruption,
-  queueing, and reversal are all open, and the pipeline does not answer them.
+- **Triggering is separate from animating, and the overlap case belongs to
+  `animate.md`.** Step 5 starting an animation and step 8 running it are two
+  events, so a layout that changes twice in quick succession has a case this
+  pipeline does not answer: what happens to an animation already in flight when a
+  second update arrives. Interruption, queueing, and reversal are deliberately not
+  decided here. This document's job is to be right about the geometry, and an
+  animation that is interrupted is showing an intermediate that is by definition
+  not a layout, so a decision made here would be a decision about a value this
+  document does not own. `animate.md` owns what a client shows while a transition
+  is in flight, including whether a second update retargets the running animation,
+  queues behind it, or replaces it. What this document fixes is the constraint
+  that answer has to respect: step 9 always runs, whatever the animator does, so
+  the block reaches `OMNI_SOLVED_STAGE_ARRANGED` on every pass and no outcome in
+  `animate.md` may leave a pass without an endpoint.
 - **The write at step 6 is observable before the arrange at step 9.** Whatever
   a commit carries, the state a watcher sees at step 6 is not the state a user
   sees at step 9. This is the same shape as the readiness question in
@@ -1689,7 +1755,7 @@ and the requested layouts need both.
 | Mango | master and stack, deck, scrollers, dwindle, grid versus tile, monocle, groups |
 | newm | tiled infinite canvas, grid alignment, fractional sizing, zoom that snaps to client edges |
 | driftwm | floating infinite canvas, freehand pan and zoom |
-| havel | retracted, see below |
+| halley, cited as `havel` | retracted, see below |
 | wayfire | floating snap areas, drag and keybind snapping, client minimization |
 
 DuckWM is GPL (`~/repos/duckwm/LICENSE`), as is Mango
@@ -1732,7 +1798,7 @@ Blocked, meaning the other document cannot be finished first:
 | `animate.md` | §6 fixes the split, with the solver owning the endpoint and the animator owning the transition, and §6 fixes what the animator needs to diff against |
 | `draw.md` | a fake client is a layout participant (`generaldesign.md` §13), so the scene's own surfaces are arranged by this solver |
 | `decorate.md` | a border or overlay is a scene node around a placed client, so placement precedes decoration; and §7.1 makes a group's titlebar a decoration toggle, which is `decorate.md`'s to own |
-| ~~`input.md`~~ | **no longer blocked.** §7.6's snap needs a pointer position and a keybind with a direction argument converted into a chosen area, which was the whole dependency. `generaldesign.md` §14 now decides that input is MangoWM's implementation ported wholesale, and Mango's keybind path already carries an `Arg`, so the direction argument arrives with the port rather than waiting on this document. Nothing in §7.6 needs a solver concept to be written first |
+| ~~`input.md`~~ | **no longer blocked.** §7.6's snap needs a pointer position and a keybind with a direction argument converted into a chosen area, which was the whole dependency. `generaldesign.md` §14 now decides that we use Mango's code where we can and change what we need, and Mango's keybind path already carries an `Arg`, so the direction argument arrives with Mango's path rather than waiting on this document. Nothing in §7.6 needs a solver concept to be written first |
 | ~~`tomlparser.md`~~ | **no longer blocked.** §3.3's syntax question is settled by `layoutlanguage.md`, and `tomlparser.md` is conformed to it |
 
 Blocking, meaning this document cannot be finished first:
@@ -1740,7 +1806,7 @@ Blocking, meaning this document cannot be finished first:
 | blocker | what is missing |
 |---|---|
 | `windows.md` | client identity, and the representation of the per-client override, which is the only per-client state the solver reads. **Closed.** `missing-devnotes-topics.md` gives the document the client lifecycle, focus and stacking policy, floating, and window rules besides, and none of those were waiting on anything here. What the solver could not finish without was the override's representation, because §3.1 makes it an input to every solve. The document exists as a prototype and now closes the blocker entirely: client identity is settled by `configstorage.md` §0.1 and needs nothing from here, the override's storage is settled in §2, the rule that *reaches* a client is settled in `windows.md` §9, which gives the matcher a home in a block-structured if/then and keeps `0x33` a pure solve-time constraint, and the order in which several bound sets resolve is `windows.md` §9.7, which is the rule list's name order rather than a field |
-| ~~`helpers.md` §11~~ | **no longer blocking.** The key-to-action binding path was recorded here as not yet designed, and it was the item making stage 3 wait on stage 4. `generaldesign.md` §14 now decides input is MangoWM's ported wholesale, so the path arrives with the port and `helpers.md` §11 closes the item. What remains on the helpers side is not a blocker on this document |
+| ~~`helpers.md` §11~~ | **no longer blocking.** The key-to-action binding path was recorded here as not yet designed, and it was the item making stage 3 wait on stage 4. `generaldesign.md` §14 now decides we use Mango's code where we can and change what we need, so the binding path arrives with Mango's `KeyBinding` and `helpers.md` §11 closes the item. What remains on the helpers side is not a blocker on this document |
 | ~~`build.md`~~ | **resolved, and it was never a design blocker.** Nothing in the nine-step pipeline, the language or the ABI depends on the solver's arithmetic width or on CPU versus GPU; the answer changes the numeric type of a solve rather than its shape. The decision is to replicate MangoWM's build system, which `architecture-audit.md` §5 already located at `mango-dev/meson.build`, on the grounds that the project structure is similar. A `flake.nix` is wanted as well, with `cache.nixos.org` set explicitly as the substituter rather than left to inherit whatever the ambient config has, so a build is reproducible from a clean machine |
 | ~~`licence.md`~~ | **resolved.** The project is GPL-3.0 (`architecture-audit.md` §5, from `mango-dev/LICENSE`), so DuckWM's and MangoWM's licences are not an obstacle, nor are most other window managers'. The provenance record is what remains, and it is a small chore at the moment something is copied rather than a design question: the trigger is the first copied line, not a decision about the engine |
 
@@ -1805,24 +1871,32 @@ mapping phase later made it eight rather than seven.
 - *Closed.* Whether the solver's output is in canvas or monitor coordinates
   (§7.5). Canvas, with the viewport as the transform from canvas space to an
   output. §7.5 settles this and §11 was contradicting it.
-- *Closed.* Whether client-set membership is a first-class object the engine can
-  query (§7.7). It is, and §8's table assigns its ownership to `windows.md` and
-  `tags.md` rather than to this document, so the stored-versus-derived fork is
-  not this document's to close. It belongs in a `tags.md` open item, and §3.2's
-  determinism requirement now constrains whatever that answer is.
-- The priority bands are ordinal and the values inside a band are not (§3.2).
-  `omni_layout.h` separates them by a decade so a band dominates the compromise,
-  which makes `OMNI_SOLVER_WEIGHT_DOMINANT` a weight and not a guarantee.
+- *Closed, and the fork is now closed too.* Whether client-set membership is a
+  first-class object the engine can query (§7.7). It is, and §8's table assigns its
+  ownership to `windows.md` and `tags.md` rather than to this document, which is
+  why the stored-versus-derived fork was correctly left to `tags.md`. It has since
+  been decided there, against derivation, and this document should not reopen it:
+  `tags.md` §5 stores membership and `windows.md` §4 fixes the walk at ascending
+  `entry_id`. §3.2's determinism requirement is what the answer was waiting on, and
+  it is satisfied.
+- ~~The priority bands are ordinal and the values inside a band are not (§3.2).~~
+  **Closed, by removal.** `omni_layout.h` now carries one weight per solved
+  family, `OMNI_SOLVER_WEIGHT_PROGRAM` and `OMNI_SOLVER_WEIGHT_CLIENT_RULE`, a
+  decade apart so one dominates the compromise. The four named decades
+  (`DOMINANT`, `STRONG`, `MEDIUM`, `WEAK`) are deleted, and the header comment
+  records why: nothing designated them, because the "positional versus
+  structural" distinction they were assigned by no longer exists in the language.
   Nothing is hard, `generaldesign.md` §7's "soft and prioritised" is right, and
-  the constant is now named `DOMINANT` rather than `REQUIRED` so that it cannot
-  be read as a promise.
-- Whether an *arranged* layout is written alongside the solved one (§3.7). The
-  solved half is settled by `OMNI_SECTION_SOLVED_LAYOUT`, so a script can already
-  read a layout; what is left is whether the block also carries the execution of
-  one, which decides whether an external animator needs to be told where windows
-  are going or can work it out. §5's step 6 sharpens this, because the value
-  written is the solver's output after relaxation rather than the solver's output
-  alone, and an external animator has to be told which of the two it is reading.
+  no name in the header can be read as a promise because none of them claims to
+  be a band.
+- ~~Whether an *arranged* layout is written alongside the solved one (§3.7).~~
+  **Closed.** Both are written, sequentially into one buffer, and a `stage` byte in
+  the section header says which is currently there: `OMNI_SOLVED_STAGE_SOLVED` at
+  step 6, `OMNI_SOLVED_STAGE_ARRANGED` at step 9. The block is therefore the single
+  authority on live geometry, and an external animator does not have to be told
+  where windows are going because it can read the endpoint and the intermediate
+  from the same place. §3.7 records why the buffer is not doubled and what the
+  single-buffer shape costs.
 - *Closed.* Whether a constraint record is per client, per tag, or per
   client-per-tag (§3.1). The question dissolved: a layout program names no
   window, so there is no record to scope. Mango was the answer all along, since a
@@ -1881,13 +1955,18 @@ mapping phase later made it eight rather than seven.
   membership children need a subtree delete and a generation-correct delete,
   which `tags.md` §7 records as store requirements that do not exist yet, and
   that is now the only way tags block the store rather than the other way round.
-- Client-set membership is now answerable and `tags.md` has answered half of it.
-  Tag membership is stored on the tag as one `WINDOW_DEPENDENT` child per member
-  (`tags.md` §5), chosen over derivation on access-pattern grounds: the solver
-  needs the union of a monitor's displayed tags on every solve, and that must not
-  be a scan of every client. The remaining half is client-side and belongs to
-  `windows.md`, and §3.2's determinism requirement is what forces the answer,
-  because a `HashSet`-shaped derivation is a non-reproducible iteration order.
+- *Closed, and both halves are now closed.* Client-set membership is stored, and
+  §3.2's determinism requirement is what forces the answer, because a
+  `HashSet`-shaped derivation is a non-reproducible iteration order. The tag half is
+  `tags.md` §5: one `WINDOW_DEPENDENT` child per member on the tag itself, chosen
+  over derivation on access-pattern grounds, since the solver needs the union of a
+  monitor's displayed tags on every solve and that must not be a scan of every
+  client. The client half is `windows.md` §4, which fixes the walk at ascending
+  `entry_id`, so a solve reads the stored list in a total order that is stable
+  across restarts. `tags.md` §9 previously carried this as an open question of its
+  own; both documents now cite the same decision rather than asking it twice, which
+  is the part that mattered, since two documents asking one question is how they
+  come to answer it two ways.
 - The pan and zoom space is confirmed twice, by driftwm and newm (§7.5), and it
   is a transform above the solver rather than a constraint inside it. A third
   confirmation was claimed from halley and is retracted; §7.5 says why.
@@ -1901,16 +1980,26 @@ mapping phase later made it eight rather than seven.
   concept. The correct citations for the two mechanisms that do not exist yet are
   §7.1 and §7.2, not §7.1 and §7.4: §7.4 says grid and tile are the same
   constraints with a different leftover-space policy.
-- What happens when a second update arrives mid-animation (§3.7). The pipeline
-  in §5 describes one update and is silent about overlap.
-- Whether the engine is a component or a borrowed service. `generaldesign.md` §5
-  says every user-facing capability is a component and `generaldesign.md` §7 says
-  the engine is a general service, so this was not unstated, it was stated twice
-  inconsistently. The live question is narrower: whether "user-facing capability"
-  covers an engine no user configures, which decides whether it appears in the
-  `helpers.md` registration table with a band and an `enable_key`, or is wired
-  into `core/server.c` like the store. §3.7 needs it because a wrong band is an
-  init failure rather than a detected violation.
+- ~~What happens when a second update arrives mid-animation (§3.7).~~ **Deferred,
+  not open.** The pipeline in §5 describes one update and is silent about overlap.
+  The silence is now deliberate and the ownership is named: `animate.md` decides
+  whether a second update retargets, queues behind, or replaces a running
+  animation, and §5's step 9 is unconditional so none of those answers can leave a
+  pass without an endpoint. Listed here rather than dropped because the pipeline
+  genuinely does not answer it, and a reader who wants the answer should be sent
+  to the document that owns it rather than left to infer one.
+- ~~Whether the engine is a component or a borrowed service.~~ **Closed: a core
+  service, not a component.** `generaldesign.md` §5 said every user-facing
+  capability is a component and §7 said the engine is a general service, which
+  looked like two documents disagreeing and was really one rule stated only
+  halfway. §5.1 now states the test that resolves it, and the test is necessity
+  rather than user-facingness: the compositor cannot manage windows without a
+  layout, so the engine is core, is wired into `core/server.c` like the store, and
+  gets no band and no `enable_key`. A *built-in layout* is the opposite case and
+  is a component, because the core needs the mechanism to place a window and does
+  not need any particular layout compiled in. So the engine is not in the
+  `helpers.md` registration table, and the activation-order worry in §3.7 dissolves
+  with it: there is no band to get wrong.
 - *Closed, and the conflict was between two halves of this bullet rather than
   between documents.* The built-in programs need somewhere to live, and this bullet
   used to say `devnotes/layoutsystem.md` should be recreated to hold them, which
@@ -1947,7 +2036,7 @@ built-ins document.
 |---|---|---|---|
 | `include/shared/omni_layout.h` | §7 tag constants | the new tag constants, and `OMNI_TAG_MAX_KNOWN` moves | done, 0x32, 0x33 and 0x34 |
 | `configstorage.md` | §4 type tags | rows for the new tags, framed, with their payload shapes | done |
-| `configstorage.md` | §12 guards | a semantic guard per record, and a key-path rule that an `omniwm.layouts.<name>` component is checked against the closed set | partial, the tag-range guard is done, the record guards are not |
+| ~~`configstorage.md` | §12 guards |~~ a semantic guard per record, and a key-path rule that an `omniwm.layouts.<name>` component is checked against the closed set | **superseded, and the supersession is the answer.** This row asked the store to validate layout programs, which put a question about layout meaning in a document that owns bytes. `configstorage.md` §12 now has no semantic tier and says so, the store's four structural tiers produce named codes, and the nineteen program and client validations are the engine's own at load time (`layoutlanguage.md` §8, which now says where they live). The tag-range guard survives as a structural tier because it really is one. Nothing is deferred any more; the work moved rather than waited |
 | `ipc.md` | §3 type encodings | a wire encoding, which has to be the same shape the file encoding uses | done |
 | `tomlparser.md` | §2 | the TOML binding for the same encoding | done |
 | `configstorage.md` | §13 | `save` gains a scope, at least a single catalog subtree | done, an optional key-path pattern, defaulting to the whole block |
@@ -1955,4 +2044,4 @@ built-ins document.
 | `generaldesign.md` | §7 | the degradation wording, which said the solver drops the lowest-priority constraint | done, now weighted minimisation |
 | `generaldesign.md` | §7 | the built-in wording, which said a built-in is a preset constraint program and adding one is a config change | done, now compiled in with no new solver mechanism |
 | built-in programs | new | the compiled-in built-ins needed a document to live in; `layoutsystem.md` was deleted as scaffolding, and the programs are specified by `layout-test-examples.md` and transcribed from it instead | done, see §3.4 |
-| `include/shared/omni_layout.h` | the solver weight bands, `OMNI_SOLVER_WEIGHT_*` | rename `OMNI_CONSTRAINT_PRIORITY_REQUIRED`, which is a weight and not a guarantee | done, now `OMNI_SOLVER_WEIGHT_DOMINANT`, with the header comment stating that no band is hard |
+| `include/shared/omni_layout.h` | the solver weight bands, `OMNI_SOLVER_WEIGHT_*` | rename `OMNI_CONSTRAINT_PRIORITY_REQUIRED`, which is a weight and not a guarantee | done twice over. First renamed to `OMNI_SOLVER_WEIGHT_DOMINANT`. Then, on checking whether the bands were still needed at all, three of the four were found to have no caller, because the "positional versus structural" distinction they were assigned by is not in the current language. Collapsed to one weight per solved family: `OMNI_SOLVER_WEIGHT_PROGRAM` and `OMNI_SOLVER_WEIGHT_CLIENT_RULE`, with the header comment stating that no weight is hard and none is writable |

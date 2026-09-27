@@ -260,15 +260,23 @@ about what the mode means.
 
 ### 7.2 Smaller open items
 
-- **Device rules have no tag.** §5.1 places them as a match-and-apply record and
-  leaves the tag and namespace open. The `client_rule` tag at `0x33` is a layout
-  constraint and its fields are layout vocabulary, so reusing the tag number
-  would be wrong; a new tag is needed and it is not yet chosen.
-- **`isallowconflict` interacts with the index and needs a test.** Under
-  `generaldesign.md` §14.4 config order is load-bearing inside a bucket, and
-  Mango's `isallowconflict` means the scan continues past a match so the first
-  match in document order wins. The index preserves that, and the only way to be
-  sure is a test that has two conflicting bindings in one bucket.
+- **Device rules have no type tag. Owned by phase 02, and it is the one item on
+  this list with no decision behind it yet.** §5.1 places a device rule as a
+  match-and-apply record, and the `client_rule` tag at `0x33` cannot be reused
+  because its fields are layout vocabulary, so a new tag is needed. The number
+  itself is trivial; what is not trivial is that it is an ABI addition to the
+  block, which makes it substrate rather than input. It belongs in
+  `configstorage.md` §4's vocabulary with a static assert in
+  `include/shared/omni_layout.h`, and **phase 01 item 2** is where that assert is
+  specified, so the two phases have to agree on the number. The namespace is a
+  separate and easier question, since a device rule is keyed by device and
+  `wm.input.device.<n>.*` follows from the same convention as the other options.
+- **`isallowconflict` interacts with the index and needs a test. Owned by phase 01
+  item 5**, which is the binding match test and already names two conflicting
+  bindings in one bucket as the case that matters. Under `generaldesign.md` §14.4
+  config order is load-bearing inside a bucket, and Mango's `isallowconflict` means
+  the scan continues past a match so the first match in document order wins. The
+  index preserves that, and the only way to be sure is that test.
 - **The `spec` field.** Mango keeps `char *spec`, the config line a user would
   edit, on every binding. `generaldesign.md` §14.1 keeps it as a field. Where it
   is *rendered* is a question for `ipc.md`'s `get binds` equivalent, which does
@@ -278,7 +286,7 @@ about what the mode means.
 
 | reference | use |
 |---|---|
-| `generaldesign.md` §14 | the wholesale-port decision, the three seams, and §14.1 to §14.4 the field map, the block/index split, the measured scan cost, and the index |
+| `generaldesign.md` §14 | the use-Mango's-code-where-we-can decision, the three seams, and §14.1 to §14.4 the field map, the block/index split, the measured scan cost, and the index |
 | `helpers.md` §3, §9 | the component descriptor, the `wm.<component>.enabled` convention, suspension, and input's priority of `100` |
 | `helpers.md` §6, §6.1, §6.2 | the action registry, the argument schema, and `action_ref` as a name resolved on use |
 | `helpers.md` §7.2 | `omni_regex_match` as the single PCRE2 engine, which gesture patterns would reach for |

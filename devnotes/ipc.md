@@ -228,15 +228,38 @@ the server closes that connection.
 every malformed case. A client that needs correlation across a malformed
 message must treat `id: null` as a permanent failure of that message.
 
-Error codes (fixed set):
+Error codes (fixed set, two prefixes):
 
 ```
-INVALID_JSON    UNKNOWN_CMD     PARAM_INVALID   NAME_TOO_LONG
-KEY_NOT_FOUND   BAD_TYPE        BAD_VALUE       CATALOG_FULL
-BLOCK_EXHAUSTED ACTION_NOT_FOUND ARGS_INVALID  ACTION_FAILED
-WATCH_INVALID NOT_READY       STORE_BROKEN    WATCH_GAP
-WATCH_EPOCH_CHANGED           REQUEST_EXPIRED CONFIG_TOO_LARGE
+OMNI_ERR_*       NONE PARAM_INVALID NAME_TOO_LONG BAD_TARGET
+                 KEY_NOT_FOUND ENTRY_FREE GENERATION_MISMATCH
+                 VALUE_UNREADABLE CATALOG_FULL ARENA_FULL
+                 REGION_FULL REGION_TOO_LARGE
+                 BLOCK_EXHAUSTED BLOCK_TRUNCATED BLOCK_UNSUPPORTED
+                 STORE_BROKEN NOT_READY REQUEST_EXPIRED
+
+OMNI_SOCK_ERR_*  NONE INVALID_JSON UNKNOWN_CMD BAD_TYPE BAD_VALUE
+                 ARGS_INVALID ACTION_NOT_FOUND ACTION_FAILED
+                 WATCH_INVALID WATCH_GAP WATCH_EPOCH_CHANGED
+                 CONFIG_TOO_LARGE
 ```
+
+The wire name of a code is the constant's name with its prefix removed,
+verbatim: `OMNI_ERR_NOT_READY` is the string `NOT_READY`,
+`OMNI_SOCK_ERR_WATCH_GAP` is the string `WATCH_GAP`. A response therefore carries
+either an `OMNI_ERR_*` name or an `OMNI_SOCK_ERR_*` name and never a third
+spelling, and a client maps any string it sees to a constant with a prefix it
+already knows. `omni_layout.h` §12 is the single definition point for both sets,
+and `configstorelayout.md` §14 records why the split is by producer rather than
+by surface: a socket response and a direct memory read report the same store
+facts with the same names, so a client that learned a code from one path is not
+reading a different code on the other.
+
+The split is by who can produce a code, not by which surface reports it.
+`OMNI_ERR_*` names a fact about the block, so the store produces it and a direct
+reader with no socket and no request slot can still return one. `OMNI_SOCK_ERR_*`
+names a fact about a message or a facade limit, so only this protocol produces
+one. A code is in exactly one of the two sets.
 
 The set is closed. Every failure this protocol can report a client maps to one
 of these, and a failure with no code is a bug rather than a new condition. Two
@@ -249,6 +272,13 @@ classes deliberately have no code because they are not reportable to a client:
   mid-write, is likewise a close. Reporting an error into a socket that has
   already failed is meaningless.
 
+`BAD_TYPE` and `BAD_VALUE` are socket-only because they are questions about what
+a client asked for, not about the block. The store holds a value of whatever tag
+names it, which is the open-catalog rule, so it has no opinion on whether a u32
+is a sensible setting for something. A value the *store* cannot decode is a
+structural fact about the block and takes a core code instead; a value a
+*consumer* dislikes is that consumer's own business and is never reported through
+a store code at all. `configstorage.md` §12 owns the boundary.
 `NOT_READY` means the header `ready` field is not `READY`: either the
 compositor is still activating components or activation failed. Which one is
 distinguishable from the same field, and the per-command table is in §5.2.
@@ -256,12 +286,24 @@ distinguishable from the same field, and the per-command table is in §5.2.
 an interrupted commit; the request is refused without inspecting the block, and
 the client must rediscover the instance after the compositor recreates it. The
 two are not interchangeable: `NOT_READY` is a valid block with an unready
-compositor, `STORE_BROKEN` is an invalid block.
+compositor, `STORE_BROKEN` is an invalid block. `BLOCK_UNSUPPORTED` is the third
+of the three block-level refusals and is a different thing again: the block is
+well formed, but this build cannot read it, either because a version does not
+match or because a mandatory section is absent or malformed. `BLOCK_TRUNCATED`
+is the fourth: the block is smaller than the layout, so a section the client needs
+is not there yet, and the block can grow. `VALUE_UNREADABLE` is the fifth: this
+build understands the block, but one slot or frame is corrupt, free-listed while
+still held, or its declared length contradicts its tag, so that key alone cannot
+be decoded.
 `WATCH_GAP` and `WATCH_EPOCH_CHANGED` are watch-specific discontinuities and are
 never collapsed into a generic failure; see §watch. `REQUEST_EXPIRED` means the
 compositor reclaimed the request slot before the client read its result, so no
 result is available and the request must be re-issued. It is not a failure of
 the request itself and is never reported in place of another request's result.
+`ENTRY_FREE` and `GENERATION_MISMATCH` are answers to a lookup that used a held
+`(entry_id, entry_generation)` reference rather than a name: the slot was
+recycled, or the entry moved under the reference. A lookup by name cannot return
+either, because a name lookup resolves to whatever is live now.
 
 ## 3. JSON value encoding (type tags from configstorage.md §4)
 
@@ -466,9 +508,18 @@ Read the current value of one key from the catalog.
      "value": "#3d6bff", "length": 4 }, "epoch": 7, "commit_id": 43, "id": 1 }
 ```
 
-Unknown key: `KEY_NOT_FOUND`. `get` uses the open-catalog rule; extension keys
-are returned without interpretation beyond typing. A structurally invalid
-entry is reported as `BAD_VALUE` once a `configstorage.md` §12 guard has refused it.
+Unknown key: `KEY_NOT_FOUND`, which is an absence and not a failure: the
+open-catalog rule means `get` answers for any name the store holds, and this is
+what it answers for a name it does not hold. Extension keys are returned without
+interpretation beyond typing, so a key the core does not understand is *not* a
+`KEY_NOT_FOUND` and not an error.
+
+A value this build cannot decode is a different failure from a value it can decode
+and does not like. A `configstorage.md` §12 guard refusing the value is a fact
+about the block and takes the core code `VALUE_UNREADABLE`, which says this key
+cannot be decoded and leaves the rest of the instance readable; it is never
+`BAD_VALUE`, which is reserved for a client message carrying the wrong shape or
+contents for the tag it names.
 
 ### set
 
@@ -765,6 +816,55 @@ configuration state.
   `delete`; the flags govern `save` and `reset`, not this command.
 - Unknown key: `KEY_NOT_FOUND`.
 
+### swap_tags
+
+Exchange the contents of two tags. This is the command behind what a user thinks
+of as "move this tag to that monitor", and it is named for what it does rather
+than for what it is called, because `tags.md` §3 makes the two different things.
+
+```
+{ "cmd": "swap_tags", "a": "wm.monitor.1.tag.3", "b": "wm.monitor.2.tag.7", "id": 10 }
+-> { "ok": true, "commit_id": 44, "epoch": 7, "id": 10 }
+```
+
+- The two arguments are tag container prefixes, spelled as full keypaths because
+  the monitor is half of a tag's identity and there is no other way to name one.
+  They must be on **different monitors**: the same monitor's two tags have nothing
+  to swap between them, since they already share a monitor. A singleton tag
+  (`tags.md` §3.1), which is what a shared scratchpad is, has no monitor in its
+  path and may be either side of the swap — that is how a user moves a whole
+  scratchpad's contents to an ordinary tag, or an ordinary tag's contents into the
+  scratchpad, in one operation without naming a single client.
+- **What moves:** the member children, the layout name, and the viewport.
+  **What does not:** the two tag entries themselves, so every
+  `(monitor, number)` reference in the system stays valid and nothing has to be
+  re-resolved. `entry_ref`s are monitor-independent, which is why a member can be
+  written into the other monitor's tag with no conversion.
+- **One grouped commit, always.** A swap published as two writes is observable
+  halfway, and a solve, a `save`, or a client reading membership in that window sees
+  two tags that never existed. Both halves go in one commit, so the journal carries
+  them in one group and a replaying subscriber applies both or neither
+  (`configstorage.md` §8).
+- It requires a store operation that does not exist yet: a subtree **exchange**,
+  which is not a special case of a subtree delete, because no value can be freed
+  when every child of one tag is still live in the other. `tags.md` §7 and
+  `configstorage.md` §14.1.
+- Refusals, each naming which half of the request was wrong: a keypath that is not
+  a tag container is `BAD_VALUE`; two keys on the same monitor is `BAD_TARGET`; a
+  tag that does not exist is `KEY_NOT_FOUND`; a child naming a destroyed client is
+  a refusal rather than a carry, because a swap with a dead member in it is a
+  request the caller got wrong.
+- A swap between two tags on two monitors does not move anything between the
+  monitors' *lists*; the lists still hold the same tags in the same order, and the
+  primary does not change. This surprises people who expect a move to reorder, and
+  it is the same consequence as §4's rule that the primary is derived from list
+  order: the swap changes contents, not membership of the list.
+- The shared scratchpad's "open on at most one monitor" rule (`tags.md` §8.2) is
+  **not** enforced here. A swap moves contents and does not open anything, so it
+  cannot violate the rule; a command that puts a tag on a monitor does, and that is
+  where the check belongs. This is worth stating because it is the kind of
+  invariant a reader will look for in the swap and not find.
+
 ### reset
 
 Re-establish a configuration state. Two modes, and the mode is always explicit
@@ -971,8 +1071,11 @@ necessarily already seen the new field value.
 
 - `OMNI_SOCK_MAX_LINE` (1 MiB) and the send-buffer size are v1 guesses; enlarge
   if the 4K-region/state endpoints ever need more.
-- The `modmask` text grammar (`"ctrl+alt"`) and keysym string names need a
-  canonical table; deferred until bindings exist (layout/bindings work).
+- The `modmask` text grammar (`"ctrl+alt"`) and keysym string names do not need a
+  table written for them here. `generaldesign.md` §14 decides that input is
+  MangoWM's implementation ported, and Mango ships `parse_bind_flags` and the XKB
+  keysym table, so the grammar and the names arrive with the code and
+  `helpers.md` §11 records the same closure.
 - The `watch` pattern grammar is single-`*` with backslash escaping, fixed in
   §watch. Richer matching, if reload ever needs it, would be a new grammar
   rather than an extension of this one, because a client already relying on `\*`
@@ -983,10 +1086,11 @@ necessarily already seen the new field value.
 - The `binding` and `client_rule` wire encodings are settled, in `helpers.md`
   §6.2, and this list used to record them as unfinished by design along with the
   `exec` argument schema, action result typing, and the runtime failure code for
-  an action that fails during execution. All five are now defined there, so this
-  bullet has nothing left in it. What is genuinely still open is the `action_ref`
-  field, where `configstorage.md` §4 says arena frame offset and `helpers.md`
-  §6.2 says registry handle; that one is a decision, not a gap.
+  an action that fails during execution.   All five are now defined there, so this
+  bullet has nothing left in it. The `action_ref` contradiction this bullet used
+  to report as open is closed too: `helpers.md` §6.2 and `configstorage.md` §4
+  agree, and it is a frame offset holding the action's name rather than a
+  registry handle, because a binding lives in the user's editable block.
 - The value limits in §3.3 are derived from the 4 MiB initial block. A larger
   block would raise `OMNI_VALUE_MAX_FRAMED` and `OMNI_VALUE_MAX_ARRAY_ELEMS`
   proportionally; the ratio, not the absolute numbers, is the contract.

@@ -27,11 +27,37 @@ phase has to produce half of it and coordinate the other half. `input.md` §7.1'
 scoping question is entangled: if a binding is scoped to a tag, then the syntax
 for setting a tag is what a binding most often needs.
 
-**5. The two open questions `tags.md` §9 already carries.** Stored versus derived
+**5. The two open questions `tags.md` §9 still carries.** Stored versus derived
 membership, where the recommendation is stored on access-pattern grounds and
 `layoutengine.md` §7.7 has to agree because §3.2 makes the solve deterministic.
-And the tag-move operation, which `generaldesign.md` §19 explicitly hands to this
-document.
+And the surface form of the swap's keypath arguments, which is small: the operation
+itself is settled as a content swap in one grouped commit, and `ipc.md` §4 writes
+the two arguments as full `wm.monitor.<m>.tag.<n>` keypaths, so what is left is
+whether to keep that or take a pair of monitor/number fields.
+
+**6. The three store operations `configstorage.md` §14.1 now owes tags.** These are
+not design questions for this phase to answer, because `tags.md` §5 and §7 have
+already answered them: a tag is a container, so the store needs a subtree delete, a
+subtree exchange, and generation-correct deletion. They are listed here because this
+is the phase that makes them concrete, and the **subtree exchange is the one to
+think about first** — it is not a special case of the delete, because a delete may
+free each frame as it goes while an exchange frees nothing at all, since every
+child of one tag is still live in the other. An implementation that has a subtree
+delete and assumes the swap can be built from it finds this out at the point where
+it cannot free.
+
+**7. Whether the tag model this phase is completing is still the one that was
+written down.** `tags.md` §3 was reversed in the reconciliation pass: a tag was
+documented as belonging to no particular monitor and is now identified by the pair
+(monitor, number), mirroring was reframed from a given-up feature into the protocol
+violation the per-monitor identity makes unrepresentable, and the scratchpad
+became configurable between one shared tag and one per monitor (`wm.scratchpad.
+shared`, default `true`) with a layout of its own. Phase 05 should not re-derive
+those; it should check that the document is internally consistent with them, and
+the specific things worth re-reading are `tags.md` §3.1 (the invariant is *at most*
+one monitor, not exactly one, which is what lets the shared scratchpad exist) and
+`§8.2` (the scratchpad takes no part in §4's union rule, which is the one place
+§8 contradicts the pattern §8.1 sets).
 
 ## What it resolves
 
@@ -41,6 +67,8 @@ document.
   phase 07 as well, and the answer has to be the same in both.
 - The user-facing half of the tag-setting syntax, which phase 03 and
   `helpers.md` §11 both reference.
+- The three store operations of item 6, so `configstorage.md` §14.1 has
+  specifications behind it rather than only a list of names.
 
 ## Why it is here
 
@@ -48,7 +76,10 @@ document.
 start before phase 04 because per-output defaults need the matching vocabulary,
 and it cannot finish before phase 03 because the setting syntax is entangled with
 binding scope. It gates phase 06, because `windows.md` §9's window rules reference
-tags.
+tags. The dependency with phase 04 now runs the other way from the one this stub
+used to state: `tags.md` §9 used to leave the storage of a monitor's tag list to
+`monitor.md`, and it no longer does, so phase 04 reads this phase and the two must
+agree on the `wm.monitor.<id>.tags` shape.
 
 ## Done when
 
@@ -56,3 +87,8 @@ tags.
 - `layoutengine.md` §7.7 is closed with a pointer to a decision made here.
 - `input.md` §7.1 and `tags.md` §9 agree on which document owns the setting
   syntax, and neither says "and `helpers.md` §11" without saying which half.
+- A tag is named with a monitor in every user-facing surface, including the filter
+  and seed forms, so there is no surviving spelling that takes a bare number.
+- The scratchpad's shared and per-monitor configurations are both described in
+  terms that the same code can implement, with no branch outside `§3.1`'s
+  at-most-one-monitor invariant.

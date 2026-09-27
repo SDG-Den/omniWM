@@ -52,8 +52,12 @@ follow, and most of the design is these three ideas applied.
   `filestructure.md` treats `include/shared/` as a header-only ABI surface that
   must compile without the compositor, without wlroots, and without a C
   toolchain that knows this project.
-- **A user-facing feature is a component, not a branch.** If a feature is a
-  component exposing options, actions, and triggers, then it can be enabled,
+- **A user-facing *optional* feature is a component, not a branch.** What makes it
+  optional rather than user-facing is necessity, not taste: if the compositor
+  cannot manage windows without it, it is a core service rather than a component,
+  which is the rule §5.1 states and which is why the layout engine is not an
+  exception to this one. If a feature is a component exposing options, actions,
+  and triggers, then it can be enabled,
   disabled, and reconfigured at runtime without a restart, and a user who does
   not want it pays nothing. This is `helpers.md`'s component model.
 - **The layout engine is a solver, not a set of layouts.** If layout is a
@@ -144,8 +148,40 @@ scene, a renderer, the store, and a component registry, per `server.md` §1. Boo
 order, readiness, dispatch, and shutdown belong to `server.md` and are not
 restated here.
 
-Every user-facing capability is a component, and every component exposes the
-same three universals, per `helpers.md`:
+### 5.1 What is a component and what is core
+
+"Every user-facing capability is a component" is only half the rule, and the half
+that is missing is what made `layoutengine.md` §2.7 ask whether the layout engine
+is a component at all. The test is not whether a capability is user-facing but
+whether the compositor can run without it:
+
+- **Core service**: anything the compositor needs in order to be a compositor.
+  The layout engine is one, because without a layout there is nowhere to put a
+  window and `server.md`'s boot sequence has nothing to lay out during activation.
+  So are the store, the input router, the output and surface management, and the
+  component registry itself. These are not components, are not registered in
+  `helpers.md` §9's table, are not toggleable, and are not in the activation
+  order: they are the thing the activation order runs inside.
+- **Component**: an optional capability layered on that core, which a user turns
+  on because they want its behaviour and pays nothing for it when they do not.
+  Visuals belong here, so decoration, effects, and the optional visual parts of
+  theming are components. Optional layout features belong here too: an extra
+  built-in layout is a component, because the core needs the *mechanism* to place
+  a window and does not need any particular layout to be compiled in.
+
+The distinction is what keeps the two sentences consistent. A capability can be
+optional and still not be a component, and the case that proves it is the layout
+engine: it is a general service that no user configures, so under "every
+user-facing capability is a component" it looked like an exception, and the
+exception invited the wrong fix, which was to make it a component. It is not an
+exception, it is a core service, and the rule above says so.
+
+The test is deliberately about necessity rather than about taste, because taste
+is not checkable and necessity is: ask whether disabling this capability leaves
+the compositor able to manage windows, and the answer decides. A visual effect
+fails the test and is a component. The layout engine passes it and is core.
+
+Every component exposes the same three universals, per `helpers.md`:
 
 - **options** are the values a component reads to decide how to behave;
 - **actions** are the things a client, a binding, or a rule can invoke;
@@ -163,57 +199,113 @@ and a user's custom component-level behaviour is the same mechanism.
 
 ## 6. Tags
 
-Tags are the project's model of "where a window is", and they are the one place
-where omniWM deliberately departs from MangoWM.
+Tags are the project's model of "where a window is", and the one place where
+omniWM makes a deliberate, and now differently-shaped, break with MangoWM.
 
-Mango's tags are not objects. A tag is a bit position in a 32-bit mask, a
-client holds a mask of tag numbers, and each tag's per-tag layout state lives in
-a fixed per-monitor array indexed by tag number. That structure is fast and has
-no allocation, and it is why Mango can mirror a tag onto several monitors. It
-also cannot express a tag that carries its own state from one monitor to another,
-because the state does not belong to the tag.
+Mango's tags are bit positions in a 32-bit mask. A client holds a mask of tag
+numbers, and each tag's per-tag layout state lives in a fixed per-monitor array
+indexed by tag number. That structure is fast and has no allocation, and it is
+why Mango can mirror a tag onto several monitors: one bit, set on three monitors
+at once, over three separate state arrays.
 
-omniWM makes a tag a first-class entity:
+omniWM keeps Mango's per-monitor array and drops everything built on top of it.
+A tag is identified by the pair (monitor, tag number), and the pair is the whole
+of the identity: monitor 1's tag 3 and monitor 2's tag 3 are unrelated tags.
 
-- A tag owns its client set, its own layout state, and the other data needed to
-  view it. It does not own floating state: which windows float is a fact about a
-  client and is carried by the client, so a client on three tags floats on all
-  three or on none. `tags.md` §6 owns the argument.
-- A monitor displays an *ordered list* of tags rather than a set, and the first
-  tag in that list which is still set is the monitor's primary, which supplies
-  the layout and everything else the arrangement needs. A secondary tag
-  contributes its clients and nothing more. Mirroring a tag onto several monitors
-  still works, exactly as in Mango and dwl, and each monitor orders the list
-  independently. This is `tags.md` §4, and the ordering is what makes a primary
-  derivable rather than a second stored fact that could disagree with the list.
-- A tag can be moved to another monitor, carrying its clients and its state with
-  it, which is Hyprland's workspace behaviour.
+- **A tag is displayed on at most one monitor at a time, and a per-monitor tag's
+  monitor is part of its identity.** A tag owns its client set, its own layout
+  state, and the other data needed to view it, and a per-monitor tag lives under
+  its monitor's entry in the store, so the monitor half of its identity is
+  structural rather than a value somebody has to keep consistent. It does not own
+  floating
+  state: which windows float is a fact about a client and is carried by the
+  client, so a client on three tags floats on all three or on none. `tags.md` §6
+  owns the argument. The rule is "at most one" and not "exactly one" because a tag
+  that nothing is displaying is a tag holding windows the user stepped away from,
+  and because the scratchpad below is a singleton with no monitor in its identity.
+- **A monitor displays an *ordered list* of its own tags rather than a set**, and
+  the first tag in that list which is still set is the monitor's primary, which
+  supplies the layout and everything else the arrangement needs. A secondary tag
+  contributes its clients and nothing more. This is `tags.md` §4, and the ordering
+  is what makes a primary derivable rather than a second stored fact that could
+  disagree with the list. Several of a monitor's own tags displayed at once is a
+  multi-tag view and is just a list with more than one entry.
+- **Mirroring is not a feature this design gives up; it is the bug the per-monitor
+  identity makes unrepresentable.** A client expects exactly one surface on exactly
+  one output at a time. Mirroring asks a client to present on two, which nothing in
+  the protocol lets it honour: one `wl_surface`, one set of buffer bounds, one
+  enter/leave history per output. Under this identity there is no state that can
+  express it, which is a stronger position than declining to implement it. The
+  previous version of this section listed mirroring as a *benefit* of a shared tag
+  entity and used it to reject per-monitor state, and that argument ran backwards.
+- **There is no move, and what people call one is a content swap.** Because a
+  per-monitor tag's monitor is part of its identity, no operation carries a tag to
+  another monitor. The user-facing operation is an exchange of two tags' contents,
+  which is Hyprland's and i3's move, and it is one IPC command publishing one
+  grouped commit so no reader sees a half-finished swap. `tags.md` §7.
 
-A monitor's view is therefore a set of tags rather than a single index, and a
-window's visibility is whether it is in any tag the monitor displays. Because
-the tag owns the state, moving a tag is a move of the entity, and the state
-follows by construction. This is the design's one clean break with the
-reference implementation, and it is the break that delivers the promise in
-`README.md` about tags behaving like both Mango's and Hyprland's.
+A monitor's view is therefore a set of that monitor's own tags rather than a
+single index, and a window's visibility is whether it is in any of the tags that
+monitor displays.
 
-Two tags are special, and both are special because they are tags underneath:
+This gets the benefits of both references without the parts of either that do not
+work here. From Mango: per-monitor tags numbered from 1 on each output, and
+multi-tag views, which fall out of a monitor's list having more than one entry.
+From Hyprland and i3: "get this over there", as a content swap. What is rejected:
+Mango's bitmask and client-held mask, because the mask is the mechanism that makes
+a tag number global; and Hyprland's single shared workspace set, because a
+three-monitor user who wants three monitors to look like one workspace ends up
+treating workspaces 1, 11 and 21 as a single combined workspace, which is a janky
+model that per-monitor numbering removes.
 
-- **Overview** is a special tag that displays every tag's windows at once, laid
-  out as a grid of cards rather than by the active layout, so the user can see
-  and jump to anything. It is not a separate view mode with its own state
-  machine; it is a tag whose contents are the union of the others.
-- **Scratchpad** is a special tag whose windows are hidden until summoned, so a
-  window can be parked out of every layout and recalled on demand.
+Two tags are special, and they are special in different ways, so they are not a
+matched pair:
 
-Because both are tags, both can hold clients that are also on ordinary tags, and
-both animate, decorate, and bind like any other tag.
+- **Overview** is a special tag that displays its monitor's tags' windows at once,
+  laid out as a grid of cards rather than by the active layout, so the user can
+  see and jump to anything. It is not a separate view mode with its own state
+  machine; it is a tag whose contents are the union of the others, which makes it
+  the degenerate case of the list rule above. One per monitor.
+- **Scratchpad** is a special tag, exclusive to itself, which no other tag
+  interacts with. It holds a **layout of its own** and is an **overlay workspace**:
+  summoning it places its clients by that layout over the top of the monitor's
+  existing view rather than replacing it. It can be **one shared tag across all
+  monitors, in which case it is openable on at most one monitor at a time**, or
+  **one per monitor**, and which of those is in effect is a config key a TOML user
+  sets once and never thinks about again; a user driving the compositor over SHM
+  can arrange it by hand, because a scratchpad is an ordinary tag entry. Because it
+  is a tag, `swap_tags` moves a whole tag's worth of clients in or out of it in one
+  operation. `tags.md` §8.
 
-The alternative designs were considered and rejected. Keeping bitmask tags and
-migrating the state arrays was rejected because the state then has to live
-somewhere other than the tag's owner, which is the part Mango never had to
-solve. A tag entity with per-monitor-tag layout state was rejected because
-showing the same tag on two monitors would then lay out differently on each,
-which loses Mango's mirroring behaviour.
+The scratchpad is the one case where the shared option is right, and it is right
+for the same reason mirroring is wrong: a shared scratchpad is one tag that is
+open on one monitor at a time, which is exactly the "at most one monitor" invariant
+applied to a tag that is not pinned to a monitor. Making it per-monitor is not a
+different feature, it is the same code with N tags.
+
+Both special tags hold clients that are also on ordinary tags, and both animate,
+decorate, and bind like any other tag. The two differ in what that overlap means:
+overview is a *union*, so an ordinary member appears in it and appears twice, and
+the scratchpad is *outside* the union, so an ordinary member is skipped by its
+ordinary tag's layout and placed only by the scratchpad's own. Membership is
+retained in both cases, which is what makes dismissal work without a stored copy of
+where the client came from. `tags.md` §8.2.
+
+The alternative designs were considered and rejected, each for a reason that has
+since changed and is worth restating so the rejection is not held for the wrong
+one. **Keeping Mango's bitmask** is rejected because the mask is not merely a
+compact membership set: it is the mechanism that makes a tag number global, and a
+global tag number is the only thing that makes mirroring expressible, and mirroring
+is the unsafe case. **A shared tag entity shown on several monitors** is rejected
+because two monitors laying out one tag need either one arrangement they both share
+or two state copies kept in step, and both are worse than two tags; the shared
+entity was previously kept for its mirroring, so this rejection is the same one
+with the reason corrected. **Hyprland's single shared workspace set** is rejected
+not on correctness grounds but on the numbering: it forces a multi-monitor user who
+wants one big workspace to combine workspace numbers, which is the jank per-monitor
+numbering exists to remove. None of the three is rejected for being untidy; each is
+rejected for preventing the one property the design needs, which is that a tag is
+on one monitor or none.
 
 ## 7. Layout
 
@@ -254,12 +346,21 @@ mechanism behind Any Layout.
 
 Layout state is per tag, because a tag is the unit of "where windows are" and
 owns its own layout, its own client set, and the rest of the data needed to view
-it. It is not per tag per monitor: a monitor does not hold layout state, it
-displays an ordered list of tags of which the first still-set tag is the primary,
+it. Under §6's decision a *per-monitor* tag belongs to exactly one monitor, so
+"per tag" and "per monitor" name the same storage for it and the old distinction
+is spent: there is no per-monitor state to hold and no pairing to enumerate. The
+qualifier is load-bearing rather than pedantic, because §6's rule is *at most* one
+monitor and a singleton — the shared scratchpad — belongs to none, so it holds
+layout state with no monitor to be per. It is displayed on one monitor or on none,
+and that is a fact about where it is shown rather than about where it lives. A monitor does not hold
+layout state, it displays an ordered list of its own tags of which the first
+still-set tag is the primary,
 and the primary's layout arranges the union of every displayed tag's clients. A
-secondary tag contributes clients and nothing else. That is `tags.md` §4, and it
-is why a tag moved to another monitor carries its arrangement with it for free
-rather than through a per-monitor state that has to be migrated.
+secondary tag contributes clients and nothing else. That is `tags.md` §4. What
+replaced the old "a moved tag carries its arrangement for free" claim is narrower:
+a tag's arrangement goes where its contents go, which is what makes the §6 content
+swap carry a tag's layout and viewport along with its clients, and nothing more
+than that.
 
 Floating is not part of that. Which windows float is window state, so the client
 carries it, and `tags.md` §6 owns the argument.
@@ -388,8 +489,8 @@ This is a large part of how the project reaches the level of custom UI the
 
 ## 14. Input
 
-**Decided: port MangoWM's input implementation wholesale and adapt it.** The
-port covers the keyboard, mouse buttons, the wheel, touchpad gestures, the
+**Decided: we use MangoWM's code where we can, and change what we need.** The
+reuse covers the keyboard, mouse buttons, the wheel, touchpad gestures, the
 switch (lid) bindings, and per-device rules, which is Mango's
 `include/mango/input/` and `src/input/` at `d5a0e1e`: `device.c`, `keyboard.c`,
 `pointer.c`, `switch.c`, `tablet.c`, `touch.c`, `trackpad.c`, and the five
@@ -398,6 +499,15 @@ binding structs behind them (`KeyBinding`, `MouseBinding`, `AxisBinding`,
 Mango has `tablet.c` for device plumbing but no stylus binding type, so pressure,
 tilt, absolute pointing and annotation mode are the extension work, and stage 10
 rather than stage 4.
+
+"Use where we can, change what we need" is the whole of the policy and it is
+stated as a policy rather than a summary, because the word that used to stand in
+for it was doing more damage than the decision. Calling the port "wholesale"
+asserted a completeness nobody had checked and nobody could check without reading
+both trees line by line, so a reader who took it at face value would look for a
+place to check the port and find only the word. The three seams below are the
+actual extent of the changes, and they are what a reader should audit against
+instead.
 
 This inverts the earlier position. The design had input as omniWM's own matching
 work on top of wlroots, and that is now a rewrite of code that already exists
@@ -434,7 +544,7 @@ What Mango's `KeyBinding` carries, and where each field goes:
 | `keysymcode.keysym`, `.keycode1..3`, `.type` | fields in the header, all four of them, because Mango matches either a keysym or up to three keycodes and the type says which |
 | `func` | `action_ref`, a frame offset holding the action's name |
 | `arg` | `args_ref` and the inline positional array, already in the header |
-| `mode`, `iscommonmode`, `isdefaultmode` | fields in the header, subject to §14.2's namespace mapping |
+| `mode`, `iscommonmode`, `isdefaultmode` | fields in the header, subject to §14.4's namespace mapping, which `input.md` §7.1 records as still open |
 | `islockapply`, `isreleaseapply`, `ispassapply`, `isallowconflict` | flag bits in the header's flags word |
 | `spec` | a field in the header, the config line a user would edit to change this binding |
 | `line_number`, `file_index` | **dropped.** They are TOML parse diagnostics, they describe where a binding was written rather than what it does, and no reader of the block has a use for them |
@@ -563,9 +673,12 @@ Xwayland.
 
 ## 16. Protocols and external rendering
 
-The protocol surface follows MangoWM's, brought in wholesale rather than
-curated, so that an existing Mango-compatible client or config works unchanged.
-The compositor instantiates the wlroots protocol managers it needs and adds the
+The protocol surface follows MangoWM's: we use Mango's code where we can, and
+change what we need. We do not curate the set, so that an existing Mango-compatible
+client or config works unchanged; the things we change are the ones this document
+lists below, and a protocol is on that list only when a Mango-compatible client
+would otherwise stop working. The compositor instantiates the wlroots protocol
+managers it needs and adds the
 Mango set on top.
 
 External rendering is supported in two stages:
@@ -588,7 +701,19 @@ external program's business.
 
 The endgame of Any Language is that a first-class library in another language
 requires no change to the compositor. That is only true because the interface is
-the block, and it is demonstrated by shipping reference implementations:
+the block.
+
+**None of the implementations that demonstrate this is a deliverable of the window
+manager, and all of them come after the project is otherwise complete.** This is
+the one place where the obvious reading of "Any Language" is wrong, so it is worth
+being exact about why. The claim being demonstrated is that the surface is generic
+and language-neutral, and **a language-specific component inside the compositor
+would falsify the claim it is meant to support**: if the WM carried a Lua
+component in order to serve a Lua library, then the surface is not generic, it is
+Lua with a C wrapper, and the client-library story only holds for languages someone
+remembered to add. So the compositor stays generic and knows nothing about any
+language, and the demonstration programs are consumers of that surface rather than
+parts of it:
 
 - a C reference client library that maps the block using `include/shared/`
   alone;
@@ -596,14 +721,34 @@ the block, and it is demonstrated by shipping reference implementations:
 - an interpreter for Mango configs;
 - an interpreter for Hyprland configs.
 
-These prove the interface is sufficient. A library in a language nobody has
-written is then just another client of the same block.
+**These are separate programs with no cross-dependency in either direction.** They
+share exactly one thing with the compositor: they expect the SHM block to exist,
+and that is a runtime expectation rather than a build or design dependency. Nothing
+in the compositor knows they exist, nothing in them is required for it to run, and
+no part of the block's shape is decided by what they need — a library in a language
+nobody has written is then just another client of the same block, which is the
+entire content of the claim.
+
+Their purpose is to **prove the claims and inspire users**, which is a different
+kind of work from building the thing and is worth naming as such. They are the
+"check out what my WM can do" pieces, and that is precisely why they are last on the
+roadmap in §18: an interpreter written against a finished design is a test of the
+design, while one written against a design still moving is just a second thing that
+has to change when the design does.
 
 ## 18. Roadmap
 
 The stages are the `README.md` roadmap. The mapping is what shows the shape of
-the build: the compositor core first, then layout, then looks, then the
-languages.
+the build: the compositor core first, then layout, then looks, and only then the
+languages and interpreters.
+
+**The last four stages are not stages of the window manager.** They are the example
+implementations of §17, they come after the project is otherwise complete, and they
+are separate programs rather than parts of the compositor. They are last because
+they are the proof rather than the thing, and a proof written against a design
+still moving only tests the half that has been written. Nothing in stages 1 to 14
+depends on them, and they depend on nothing in stages 1 to 14 except that the SHM
+block exists.
 
 | stage | work | subsystem documents |
 |---|---|---|
@@ -628,15 +773,38 @@ languages.
 
 ## 19. Open items
 
-- The exact set of scenefx extensions, and whether they are a maintained patch
-  or a fork, is unresolved. It is the largest risk to Any Look and is scoped in
-  `build.md`.
-- Which wlroots release the build tracks is unresolved; scenefx 0.5 requires
-  wlroots 0.20.
-- Whether a Lua library is still an initial deliverable, given the reference
-  libraries are C and Python, is unresolved.
-- The concrete tag-move operation, and how a tag's state migrates, is owned by
-  `tags.md`; this document fixes only that a tag is an entity and a monitor
-  displays a set of tags.
-- The background and infinite-canvas options are explicitly deferred to stage
-  13 and `draw.md`.
+None of these is a document-reconciliation question, which is why phase 00 closed
+it without answering any of them: each is either owned by a named phase or is an
+external fact this design cannot decide. They are listed with their owner rather
+than as open work because an item with no owner is what turns into a forgotten
+question three phases later.
+
+- **The scenefx extension set, and patch versus fork.** Unresolved, and the largest
+  external risk in the project. Owned by **phase 02 items B2 and B3**, which is
+  the only phase that can answer it, because the answer is a version and a
+  packaging decision rather than a design one. It gates `draw.md` and `animate.md`,
+  both of which inherit whatever it settles.
+- **Which wlroots release the build tracks.** Unresolved; scenefx 0.5 requires
+  wlroots 0.20, so the two answers are not independent and must be taken together.
+  Owned by **phase 02 item B2**, same reason.
+- **Whether a Lua library is a deliverable. Closed: no, and the same answer covers
+  every interpreter and library in the project.** They are example implementations
+  made *after* the project is otherwise complete, to prove the claims and inspire
+  users, and they are their own separate deliverables rather than part of the
+  window manager. §17 states why, and the reason is the substantive one: the
+  compositor stays generic, and a language-specific component inside it in order to
+  serve a language-specific library would be counter to the entire point, since it
+  would make the surface Lua-with-a-wrapper rather than language-neutral. They are
+  separate programs with no cross-dependency in either direction; the only thing
+  they share with the compositor is that both expect the SHM to exist. That is also
+  why they are last on the roadmap — they are the "check out what my WM can do"
+  pieces, and an interpreter written against a finished design is a test of the
+  design rather than a second thing that has to move when the design does. Nothing
+  in the phase plan may assume a scripting surface exists inside the compositor.
+- **The tag-move operation and how a tag's state migrates.** Closed by phase 00
+  and owned by `tags.md` §7, which defines it as a content swap in one grouped
+  commit rather than a move, with the store obligations in `configstorage.md`
+  §14.1. This document fixes only that a tag is an entity and a monitor displays an
+  ordered list of its own tags.
+- **The background and infinite-canvas options.** Explicitly deferred to stage 13
+  and `draw.md`, which is an owner.

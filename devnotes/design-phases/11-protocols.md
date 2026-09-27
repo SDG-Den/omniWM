@@ -8,11 +8,12 @@ written.
 
 ## What it should contain
 
-**1. The Mango protocol set, brought in wholesale.** The same decision
-`generaldesign.md` §14 made for input, and the same wording problem: "wholesale" is
-the phrase in `missing-devnotes-topics.md` and the policy is now reference-and-
-adapt. Which Mango protocols come across, and which are Mango-specific and have no
-omniWM equivalent, is the first question.
+**1. The Mango protocol set, reused where we can and changed where we must.** The
+same decision `generaldesign.md` §14 makes for input, and the same wording problem
+this heading used to have: it said the set was brought in "wholesale", and the
+policy is now that Mango is a reference and we change what we need. Which Mango
+protocols come across unchanged, and which are Mango-specific with no omniWM
+equivalent, is the first question.
 
 **2. Which wlroots managers the compositor instantiates.** A concrete list, and it
 is a list rather than a principle because each manager is a dependency with a

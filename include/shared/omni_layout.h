@@ -159,7 +159,22 @@
 
 #define OMNI_CATALOG_INDEX_HDR_OFF_LIVE UINT32_C(0)     /* u32 */
 #define OMNI_CATALOG_INDEX_HDR_OFF_USED UINT32_C(4)     /* u32, live + tombstones */
-#define OMNI_CATALOG_INDEX_HDR_OFF_RESERVED_0 UINT32_C(8)
+#define OMNI_CATALOG_INDEX_HDR_OFF_VERSION UINT32_C(8)  /* u32, see below */
+#define OMNI_CATALOG_INDEX_HDR_OFF_RESERVED_0 UINT32_C(12) /* u32, zero */
+
+/* Layout version of the index itself, stored at +8. This is a second version
+ * from OMNI_FORMAT_VERSION on purpose: the index is the one section whose shape
+ * a reader cannot infer. The other sections are located by constants in this
+ * header, so a reader that has a different constant for one already refuses the
+ * block. The index has no such anchor: an index written by a build that added,
+ * dropped, or re-ordered a slot field still has a valid 32-byte header and a
+ * valid sorted array, so a reader would binary-search it happily and get wrong
+ * answers rather than an error. The version is what turns that into a refusal.
+ * It is bumped only for a change to the header or slot layout above, never for a
+ * change to the algorithm that maintains them; a reader that sees a mismatch
+ * returns OMNI_ERR_BLOCK_UNSUPPORTED and does not fall back to a catalog scan,
+ * because a scan is exactly the cost the index exists to avoid. */
+#define OMNI_CATALOG_INDEX_VERSION UINT32_C(1)
 
 #define OMNI_JOURNAL_OFF UINT32_C(0xC2000)
 #define OMNI_JOURNAL_HEADER_SIZE UINT32_C(32)
@@ -392,8 +407,11 @@ OMNI_STATIC_ASSERT(OMNI_MAX_POOL > OMNI_INITIAL_POOL, "pool headroom");
  * neither appended to the journal nor included by a save. That is the
  * solved layout section's whole reason for existing.
  *
- * A reader that cannot validate the CATALOG_INDEX row degrades `get` to a
- * catalog walk. A slow answer is recoverable; a wrong one is not. */
+ * A reader that cannot validate the CATALOG_INDEX row refuses `get`. There is
+ * no catalog scan behind it, because a walk's cost scales with how many keys
+ * the user has configured, and a cost that depends on unrelated configuration
+ * is one nobody profiles. The refusal's result code is not defined yet and is
+ * an open item in `configstorelayout.md` §14. */
 #define OMNI_SECTION_FLAG_PRESENT_0 (UINT32_C(1) << 0)
 #define OMNI_SECTION_FLAG_JOURNALLED_1 (UINT32_C(1) << 1)
 #define OMNI_SECTION_FLAG_RESERVED_MASK UINT32_C(0xFFFFFFFC)
@@ -555,23 +573,49 @@ OMNI_STATIC_ASSERT(OMNI_TAG_UNASSIGNED_LO == OMNI_TAG_MAX_KNOWN + 1, "tag gap");
  * The record also had a priority, and its absence below is not an oversight.
  * There is no priority in the language: rules are tried in order and the first
  * that fits wins, so order in the array is the whole of it and a weight field
- * would have been a second, conflicting statement of the same thing. The bands
- * below are the solver's internal weights and are not part of the format. */
+ * would have been a second, conflicting statement of the same thing. */
 
-/* DuckWM reaches the same conclusion with 1e8/1e4/1e2/1; see
- * research/duckwm.md. No band is a hard constraint. The solver minimises
- * weighted violation, so two equations in the same band that cannot both hold
- * still produce a compromise, and DOMINANT is named for how much weight it
- * carries rather than for a guarantee it does not make. DuckWM's REQUIRED is
- * the same shape: a large weight the fit honours, not a separate code path.
- * generaldesign.md section 7 makes every constraint soft, and a program that
- * cannot be satisfied degrades rather than fails. The bands are separated by an
- * order of magnitude each so that a band dominates the compromise. */
-#define OMNI_SOLVER_WEIGHT_DOMINANT UINT16_C(60000)
-#define OMNI_SOLVER_WEIGHT_STRONG UINT16_C(6000)
-#define OMNI_SOLVER_WEIGHT_MEDIUM UINT16_C(600)
-#define OMNI_SOLVER_WEIGHT_WEAK UINT16_C(60)
-#define OMNI_SOLVER_WEIGHT_BAND_COUNT UINT32_C(4)
+/* Two weights, one per solved family, and that is the whole of it. The four
+ * named decades this replaces (DOMINANT 60000, STRONG 6000, MEDIUM 600, WEAK
+ * 60) were a leftover from the constraint-record era, and the check that
+ * retired them is worth recording: nothing designated them. They were assigned
+ * by mapping "positional constraints" to STRONG and "structural constraints" to
+ * DOMINANT, but the current language has no positional or structural
+ * constraint, because a program rule is decided by its position in the list and
+ * never reaches the solver at all. Three of the four had no caller even then.
+ * A band with no caller is not a weight, it is a number that looks like a
+ * policy.
+ *
+ * A weight is still needed, and it is needed for exactly one thing: breaking a
+ * tie inside the solve. Two relations that cannot both hold need a defined
+ * winner, or the solver's output depends on visit order and §3.2's determinism
+ * requirement is unsatisfiable. So the mechanism stays and the hierarchy goes.
+ *
+ * Neither weight is a hard constraint. The solver minimises weighted violation,
+ * so two relations at the same weight that cannot both hold still produce a
+ * compromise. DuckWM reaches the same conclusion with 1e8/1e4/1e2/1 and treats
+ * its own REQUIRED as a large weight the fit honours rather than a separate
+ * code path; generaldesign.md section 7 makes every constraint soft, and a
+ * program that cannot be satisfied degrades rather than fails. The two values
+ * are a decade apart, and that gap separates the two families from each other
+ * and nothing finer: when a program relation and a client relation collide, the
+ * program's wins the compromise, because the program is the arrangement the
+ * client is being placed into rather than a claim competing with it.
+ *
+ * The weight does not reach inside a family. A snap against a named neighbour and
+ * a snap against an output edge are both client-family relations, so they carry
+ * the same 6000 and neither beats the other; the solve splits the disagreement
+ * between them. An earlier version of this comment claimed the decade separated
+ * those two cases, which is not something one number per family can do. Making
+ * one win is the user's job rather than the solver's, and it is done by writing
+ * the rule the user meant: a client carrying both a neighbour snap and an output
+ * snap is asking for two incompatible positions, and the compromise is the
+ * honest answer to that rather than a silently discarded half.
+ *
+ * Not part of the format. No program can write either value, and neither is a
+ * name a config file may use. */
+#define OMNI_SOLVER_WEIGHT_PROGRAM UINT16_C(60000)
+#define OMNI_SOLVER_WEIGHT_CLIENT_RULE UINT16_C(6000)
 
 /* --- client_rule (0x33) ---------------------------------------------- *
  *
@@ -679,12 +723,39 @@ OMNI_STATIC_ASSERT(OMNI_BINDING_HEADER_SIZE % 4 == 0, "binding header aligned");
  * One record per placed node. The identity is entry id plus entry generation,
  * with the epoch implied, because a solve only concerns the current epoch.
  * The four extents are the solve output and nothing else: a node is placed,
- * and what it is placed against is in the program, not here. */
+ * and what it is placed against is in the program, not here.
+ *
+ * The stage byte is what tells a reader whether the extents it is reading are the
+ * solver's answer or the activated one. The pipeline in layoutengine.md 3.7
+ * writes twice per pass, once solved and once arranged, and the two are
+ * different values rather than two names for one: relaxation runs between the
+ * solve and the write, so the solved write is the solver's output plus
+ * magnetisation, and the arranged write is that same value once the animate
+ * step has completed. A reader that cannot tell them apart cannot tell whether
+ * it is looking at the endpoint of the current pass or at an intermediate that
+ * the animator is about to move away from, which is the difference between
+ * "apply this now" and "wait".
+ *
+ * One buffer serves both stages rather than two buffers, and the reason is that
+ * the two are not concurrent. Step 6 writes SOLVED and step 9 overwrites it with
+ * ARRANGED, and a reader that samples between them gets SOLVED with a generation
+ * that no longer matches the block's current commit, which is the same
+ * revalidation every other section already does. Two buffers would cost a second
+ * 32KB section and a second capability bit to answer a question that the stage
+ * byte plus the existing generation check already answers. What a reader cannot
+ * do is retain the solved geometry after the arrange has overwritten it, and
+ * nothing needs to: the animator is handed the endpoint, not the intermediate. */
 
-#define OMNI_SOLVED_OFF_GENERATION UINT32_C(0) /* u64, bumped once per solve */
+#define OMNI_SOLVED_OFF_GENERATION UINT32_C(0) /* u64, bumped once per write */
 #define OMNI_SOLVED_OFF_NODE_COUNT UINT32_C(8) /* u32 */
-#define OMNI_SOLVED_OFF_RESERVED UINT32_C(12)  /* u32, zero */
+#define OMNI_SOLVED_OFF_STAGE UINT32_C(12)     /* u8 */
+#define OMNI_SOLVED_OFF_RESERVED UINT32_C(13)  /* u8 x 3, zero */
 #define OMNI_SOLVED_OFF_NODES UINT32_C(16)
+
+/* Stage of the extents currently in the section. */
+#define OMNI_SOLVED_STAGE_SOLVED UINT8_C(0)   /* solver output, post-relaxation */
+#define OMNI_SOLVED_STAGE_ARRANGED UINT8_C(1) /* activated; the animate step is done */
+#define OMNI_SOLVED_STAGE_COUNT UINT8_C(2)
 #define OMNI_SOLVED_NODE_OFF_REF_ID UINT32_C(0)
 #define OMNI_SOLVED_NODE_OFF_REF_GEN UINT32_C(4)
 #define OMNI_SOLVED_NODE_OFF_X UINT32_C(8)  /* i32, canvas coordinates */
@@ -692,7 +763,7 @@ OMNI_STATIC_ASSERT(OMNI_BINDING_HEADER_SIZE % 4 == 0, "binding header aligned");
 #define OMNI_SOLVED_NODE_OFF_W UINT32_C(16) /* i32 */
 #define OMNI_SOLVED_NODE_OFF_H UINT32_C(20) /* i32 */
 
-OMNI_STATIC_ASSERT(OMNI_SOLVED_OFF_RESERVED + 4 == OMNI_SOLVED_OFF_NODES,
+OMNI_STATIC_ASSERT(OMNI_SOLVED_OFF_RESERVED + 3 == OMNI_SOLVED_OFF_NODES,
 	"solved header");
 OMNI_STATIC_ASSERT(OMNI_SOLVED_NODE_OFF_H + 4 == OMNI_SOLVED_NODE_SIZE,
 	"solved node record");
@@ -834,19 +905,12 @@ OMNI_STATIC_ASSERT(OMNI_JOURNAL_SLOT_OFF_COMMIT_ID % 8 == 0, "slot commit aligne
 #define OMNI_REQ_TYPE_DESTROY_ENTRY UINT8_C(3)
 #define OMNI_REQ_TYPE_DESTROY_REGION UINT8_C(4)
 
-/* Request result codes, stored in the slot and echoed by the socket. */
-#define OMNI_REQ_OK UINT8_C(0)
-#define OMNI_REQ_ERR_PARAM_INVALID UINT8_C(1)
-#define OMNI_REQ_ERR_NAME_TOO_LONG UINT8_C(2)
-#define OMNI_REQ_ERR_CATALOG_FULL UINT8_C(3)
-#define OMNI_REQ_ERR_ARENA_FULL UINT8_C(4)
-#define OMNI_REQ_ERR_REGION_FULL UINT8_C(5)
-#define OMNI_REQ_ERR_REGION_TOO_LARGE UINT8_C(6)
-#define OMNI_REQ_ERR_BLOCK_EXHAUSTED UINT8_C(7)
-#define OMNI_REQ_ERR_BAD_TARGET UINT8_C(8)
-#define OMNI_REQ_ERR_STORE_BROKEN UINT8_C(9)
-#define OMNI_REQ_ERR_NOT_READY UINT8_C(10)
-#define OMNI_REQ_ERR_REQUEST_EXPIRED UINT8_C(11)
+/* OMNI_REQ_OFF_RESULT_CODE holds an OMNI_ERR_* value from section 12. There is
+ * no separate success constant: OMNI_ERR_NONE is the success value, so a slot
+ * carries exactly one vocabulary and there is no second "OK" that can disagree
+ * with it. Status and result cannot contradict each other, because DONE is
+ * defined as status DONE with OMNI_ERR_NONE and ERROR as status ERROR with any
+ * other code. */
 
 OMNI_STATIC_ASSERT(OMNI_REQ_OFF_NAME_REF + 4 == OMNI_REQ_OFF_RESERVED_NAME_PAD,
 	"name ref field");
@@ -952,5 +1016,134 @@ OMNI_STATIC_ASSERT(OMNI_VALUE_MAX_NAME == OMNI_REQUEST_NAME_MAX, "name bound");
 OMNI_STATIC_ASSERT(OMNI_VALUE_MAX_GROUPED_KEYS == OMNI_JOURNAL_CAPACITY,
 	"one journal ring of entries per grouped commit");
 OMNI_STATIC_ASSERT(OMNI_SOCK_SUN_PATH_MAX <= OMNI_SOCK_MAX_LINE, "path fits a line");
+
+/* ------------------------------------------------------------------ */
+/* 12. Error vocabulary (configstorelayout.md 6.1, 9, 14; ipc.md 2)    */
+/* ------------------------------------------------------------------ */
+
+/* One vocabulary, three surfaces. A direct read, a queued request, and a socket
+ * request all return an OMNI_ERR_* value, because all three are answers to the
+ * same two questions: did the store do what was asked, and if not, which fact
+ * stopped it. Three surfaces used three vocabularies before this section, which
+ * made every caller translate and left "the catalog index is unreadable"
+ * expressible in a form that looked like "you passed a bad argument".
+ *
+ * The split inside this section is by *who can produce the code*, not by which
+ * surface reports it. OMNI_ERR_* names a fact about the block, so the store
+ * produces it and a direct reader can hit it without a request ever existing.
+ * OMNI_SOCK_ERR_* names a fact about a message or a facade limit, so only the
+ * socket can produce it and no direct read can ever return one. A code is in
+ * exactly one of the two sets, which is what makes the split checkable. */
+#define OMNI_ERR_NONE UINT8_C(0)
+#define OMNI_ERR_PARAM_INVALID UINT8_C(1)
+#define OMNI_ERR_NAME_TOO_LONG UINT8_C(2)
+#define OMNI_ERR_BAD_TARGET UINT8_C(3)
+#define OMNI_ERR_KEY_NOT_FOUND UINT8_C(4)
+#define OMNI_ERR_ENTRY_FREE UINT8_C(5)
+#define OMNI_ERR_GENERATION_MISMATCH UINT8_C(6)
+#define OMNI_ERR_CATALOG_FULL UINT8_C(7)
+#define OMNI_ERR_ARENA_FULL UINT8_C(8)
+#define OMNI_ERR_REGION_FULL UINT8_C(9)
+#define OMNI_ERR_REGION_TOO_LARGE UINT8_C(10)
+#define OMNI_ERR_BLOCK_EXHAUSTED UINT8_C(11)
+#define OMNI_ERR_BLOCK_TRUNCATED UINT8_C(12)
+#define OMNI_ERR_BLOCK_UNSUPPORTED UINT8_C(13)
+#define OMNI_ERR_STORE_BROKEN UINT8_C(14)
+#define OMNI_ERR_NOT_READY UINT8_C(15)
+#define OMNI_ERR_REQUEST_EXPIRED UINT8_C(16)
+#define OMNI_ERR_VALUE_UNREADABLE UINT8_C(17)
+
+/* The four read codes exist because a read is a plain memory access with no slot
+ * to hold a result, and this set is what it returns instead:
+ *
+ *   KEY_NOT_FOUND        the name is not in the index. An absence, and a normal
+ *                        one: the open catalog accepts writes of names nobody
+ *                        has heard of, so this is how a read of such a name ends.
+ *   BLOCK_UNSUPPORTED    the block is well formed and this build cannot read
+ *                        it: a format or index version it does not implement, or
+ *                        a mandatory section that is absent or malformed. A
+ *                        reader never answers these slowly instead.
+ *   BLOCK_TRUNCATED      the block is shorter than the layout, so a section the
+ *                        reader needs is not there yet. Distinct from
+ *                        UNSUPPORTED because it is a smaller block rather than
+ *                        a different one, and it can grow.
+ *   GENERATION_MISMATCH  the name resolved, but the entry moved under a held
+ *                        (entry_id, entry_generation) reference. The reader may
+ *                        retry by name; a caller holding the reference does not
+ *                        get a torn value.
+ *   ENTRY_FREE           the slot behind a held reference is on the freelist.
+ *                        Reported rather than skipped, because a held reference
+ *                        is not the open-catalog lookup case that skipping
+ *                        serves.
+ *
+ * VALUE_UNREADABLE is the one code a guard refusal produces, and keeping it
+ * separate from BLOCK_UNSUPPORTED is what makes the two failure scales legible.
+ * BLOCK_* is about the block: a build that cannot read this shape, or a block
+ * too small to hold it. VALUE_UNREADABLE is about one reference inside a block
+ * this build understands perfectly: the slot index is out of range, the entry
+ * moved under a held generation, the frame is on the free list, the declared
+ * length disagrees with the frame header, or the value's shape contradicts the
+ * tag. A reader that gets it has learned that this key cannot be decoded and that
+ * the other keys in the same block are still worth reading, which is a different
+ * decision from refusing the block. Collapsing the two would force a client to
+ * rediscover the whole instance over one stale key reference.
+ */
+
+#define OMNI_SOCK_ERR_NONE UINT8_C(0)
+#define OMNI_SOCK_ERR_INVALID_JSON UINT8_C(1)
+#define OMNI_SOCK_ERR_UNKNOWN_CMD UINT8_C(2)
+#define OMNI_SOCK_ERR_BAD_TYPE UINT8_C(3)
+#define OMNI_SOCK_ERR_BAD_VALUE UINT8_C(4)
+#define OMNI_SOCK_ERR_ARGS_INVALID UINT8_C(5)
+#define OMNI_SOCK_ERR_ACTION_NOT_FOUND UINT8_C(6)
+#define OMNI_SOCK_ERR_ACTION_FAILED UINT8_C(7)
+#define OMNI_SOCK_ERR_WATCH_INVALID UINT8_C(8)
+#define OMNI_SOCK_ERR_WATCH_GAP UINT8_C(9)
+#define OMNI_SOCK_ERR_WATCH_EPOCH_CHANGED UINT8_C(10)
+#define OMNI_SOCK_ERR_CONFIG_TOO_LARGE UINT8_C(11)
+
+/* BAD_TYPE and BAD_VALUE are here and not in OMNI_ERR_* because they are
+ * questions about what a client asked for, not about the block. The store
+ * stores a value of whatever tag names it, which is the open-catalog rule, so
+ * it has no opinion on whether a u32 is a sensible setting for something.
+ * BAD_TYPE is a JSON shape that does not match the tag; BAD_VALUE is a matching
+ * shape whose contents the consumer rejects. The store never produces either,
+ * and a direct read never returns either, because a direct read has no client
+ * message to be wrong about. A consumer that validates a value on read reports
+ * its own failure in its own terms, and the guards in configstorelayout 12 are
+ * deliberately not able to produce these two.
+ *
+ * WATCH_* are also not collapsible into a generic failure. WATCH_GAP is "you
+ * missed events, resynchronise", WATCH_EPOCH_CHANGED is "the block you were
+ * watching is a different block", and a client that cannot tell them apart
+ * cannot decide whether to re-read one key or re-discover the instance.
+ * CONFIG_TOO_LARGE is a facade limit: a staged config file exceeded
+ * OMNI_CONFIG_MAX_OPS, which is a socket input bound and not a store capacity. */
+
+/* The wire name of a code is the constant's name with the OMNI_ERR_ or
+ * OMNI_SOCK_ERR_ prefix removed, verbatim: OMNI_ERR_NOT_READY is the string
+ * NOT_READY, OMNI_SOCK_ERR_WATCH_GAP is WATCH_GAP. A socket response therefore
+ * carries either an OMNI_ERR_* name or an OMNI_SOCK_ERR_* name and never a
+ * third spelling, and a client can map any string it sees to a constant with a
+ * prefix it already knows. ipc.md section 2 lists the resulting closed set.
+ *
+ * TOML has no codes and is not a surface here. A config file is parsed before
+ * anything is published, so its failures are parse diagnostics carrying a line
+ * and a column, reported to whoever loaded the file, and they never reach a
+ * client that would have to interpret a code. tomlparser.md section 9 lists the
+ * diagnostics instead. */
+
+/* Both sets are u8 because the request slot stores a result code in one byte, so
+ * the vocabulary is bounded by the slot and not by a wider type a future caller
+ * might assume. Adding a code past 255 means widening the slot, which changes
+ * the section size and every offset after it. */
+OMNI_STATIC_ASSERT(OMNI_ERR_VALUE_UNREADABLE <= UINT8_MAX &&
+                   OMNI_ERR_VALUE_UNREADABLE == UINT8_C(17),
+	"core code count is the highest core code, and both fit the result byte");
+OMNI_STATIC_ASSERT(OMNI_SOCK_ERR_CONFIG_TOO_LARGE <= UINT8_MAX &&
+                   OMNI_SOCK_ERR_CONFIG_TOO_LARGE == UINT8_C(11),
+	"socket code count is the highest socket code, and both fit the result byte");
+OMNI_STATIC_ASSERT(OMNI_REQ_OFF_RESULT_CODE + 1 == OMNI_REQ_OFF_FLAGS,
+	"the result code byte is followed by the flags byte");
 
 #endif /* OMNIWM_SHARED_OMNI_LAYOUT_H */

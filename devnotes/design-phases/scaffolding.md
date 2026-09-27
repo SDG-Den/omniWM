@@ -60,10 +60,11 @@ but four.
 | journal read and change detection | `configstorage.md` §9 | specified |
 | writer transaction and futex-based commit | `configstorage.md` §10, `ipc.md` | specified |
 | get/put/take/claim/list request surface | `configstorage.md` §8, `configstorelayout.md` §13 | specified |
-| validation guard tiers, six of them | `configstorage.md` §6 | partial; tier ownership is phase 00 |
-| process-private derived cache and its invalidation | `input.md` §14.2 is the worked example | partial; the general form is phase 02 item D3 |
-| `OMNI_GET_*` result codes | `configstorelayout.md` §14 records the gap | undetermined; phase 00 |
-| fresh-block header initialization, including the arena free head | `configstorelayout.md` §2 | undetermined; phase 00 |
+| validation guard tiers, four of them | `configstorage.md` §12 | specified; phase 00 split the flat bundle into L1-L4 and `01-testing.md` item 7 has a case per tier |
+| subtree delete, subtree exchange, generation-correct deletion | `configstorage.md` §14.1, `tags.md` §5 and §7 | specified as an obligation; the mechanism is phase 02 item D9 |
+| process-private derived cache and its invalidation | `configstorage.md` §3.1 and `helpers.md` §5, between them | partial; **the worked example this row used to cite does not exist.** `input.md` has no §14.2 and describes no cache, so the two halves of the pattern are specified and no component yet instantiates them. Phase 02 item D3 |
+| `get` result codes | `omni_layout.h` §12, one `OMNI_ERR_*` set plus `OMNI_SOCK_ERR_*` | specified; phase 00, and `configstorelayout.md` §14's bullet is struck |
+| fresh-block header initialization, including the arena free head | `configstorelayout.md` §2, §6.1 | specified; phase 00 fixed the creator's low run, the `name_ref` chain for the remainder, a nonzero `catalog_free_count`, and clearing a `DESTROYED` name |
 | the rule for which component fields live in the block | `configstorage.md` §1 has the scope taxonomy | undetermined; phase 02 item D2 |
 | per-component store handle, so a component does not re-derive any of the above | none | undetermined; phase 02 item D2 |
 
@@ -81,10 +82,10 @@ call instead of a sequence.
 | option registration and typed read/write | `helpers.md` §7 | specified |
 | trigger registration and dispatch | `helpers.md` §5 | specified |
 | in-process event dispatch | `helpers.md` §5 | specified |
-| a richer in-process payload than a journal entry | `helpers.md` §11 records that the field set is fixed | undetermined; phase 02 item D4 |
+| a richer in-process payload than a journal entry | none, deliberately | **closed as not required**; phase 00: the field set is final and is not extended, a component reads the block, and a synthetic event is not expressible. Phase 02 item D4 is the subscription pattern, not a payload schema |
 | new TOML key registration | `tomlparser.md` | specified |
-| device rule matching, four matchers | `input.md` §10 | specified |
-| client kind set, which the solver partitions on | `windows.md` §10 leaves it open | undetermined; phase 06 |
+| device rule matching | `input.md` §4 and §5, Mango's `find_device_rule` kept as-is | specified; the matchers are Mango's name or `vendor:product:name`, not four, and the four-matcher vocabulary belongs to `04-monitor.md` item 2 |
+| client kind set, which the solver partitions on | `windows.md` §10 | specified; phase 00 closed it at seven, so phase 07 has a fixed partition input |
 | error and diagnostic reporting outside the store | `configstorage.md` §12.6 covers the store only | undetermined; phase 02 item D5 |
 
 ## Dependencies and backends
@@ -96,7 +97,7 @@ call instead of a sequence.
 | PCRE2 in the util layer | `helpers.md` §7 | specified |
 | scenefx, for user GLSL, blur, glow and shader animation | `generaldesign.md` §19 calls it the largest risk | undetermined; phase 02, requirement list from phase 08 |
 | protocol set, and the buffer-injection protocol | `configstorelayout.md` §10 defines the region descriptor | partial; phase 11 |
-| a test seam for a component that needs an event loop | none | undetermined; phase 02 item D8 |
+| a test seam for a component that needs an event loop | none | undetermined; phase 02 item D8, and note this row sits in a section the stage-3 paragraph does not name |
 
 ## Conventions
 
@@ -134,5 +135,42 @@ the reason stage 3 is the hard stage. A stage 3 that implements only the
 specified rows has shipped a core library and none of the substrate, and every
 stage after it re-discovers the same gaps.
 
-The last section is a checklist, not stage 3 work. It exists so that a reader can
-tell at a glance which rows stage 3 still owes.
+The checklist below is not stage 3 work. It exists so that a reader can tell at a
+glance which rows stage 3 still owes.
+
+## What stage 3 still owes
+
+Phase 02's design items, in the order `02-substrate.md` presents them, against the
+row each one closes. A row with no item here and no specification is a genuine gap
+in the plan rather than an unstarted phase.
+
+| row | closed by |
+|---|---|
+| component activation order (`Registration`) | D1 |
+| which component fields live in the block (`SHM and store handling`) | D2 |
+| per-component store handle (`SHM and store handling`) | D2 |
+| process-private derived cache and its invalidation (`SHM and store handling`) | D3, the worked example already being `input.md` §14.2 |
+| the event and subscription pattern (`Registration`, the in-process row) | D4 |
+| error and diagnostic reporting outside the store (`Registration`) | D5 |
+| what belongs in a public header versus a private one (`Conventions`) | D6 |
+| a symbol two components need (`Conventions`) | D6 |
+| naming for file-local symbols (`Conventions`) | D7 |
+| a test seam for a component that needs an event loop (`Dependencies and backends`) | D8 |
+| subtree delete, exchange, generation-correct deletion (`SHM and store handling`) | D9 |
+| how a failed option validation is reported (`Conventions`) | D5 |
+
+**Three rows in that list are not where the text above says they are**, and saying
+so is the point of writing the list down. D8's row is in *Dependencies and backends*,
+which the paragraph above does not name among the three stage-3 sections, and D9's
+row is new and is in *SHM and store handling* for the first time. And **D5 owns two
+rows that are not the same question**: *how a failed option validation is reported*
+is about the return path a caller sees, while *error and diagnostic reporting
+outside the store* is about where a log line goes and what it names. They share an
+owner by convenience of ordering, not by subject, and D5 should say which it is
+addressing first.
+
+The two rows above that are **not** stage 3's are the `partial` ones naming phase 11,
+which is correct: a wlroots server backend and a protocol set are substrate
+consumed by a later phase, and calling them stage-3 work would make stage 3 wait on
+phase 11. The scenefx row is genuinely stage 3's, and is the one row in this list
+that cannot be closed by writing a document, since the answer is a version.

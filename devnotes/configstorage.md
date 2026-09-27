@@ -331,7 +331,7 @@ naming the same instant from different offsets compare equal. Unknown extension
 tags use a framed payload and are not semantically interpreted by the core.
 The exact frame header and bounds are in `configstorelayout.md` §5.
 
-Three payloads are shaped rather than scalar, so their fields are named here and
+Four payloads are shaped rather than scalar, so their fields are named here and
 numbered in `omni_layout.h`. Each is a framed value; the numbers are not repeated
 in this table on purpose, because `filestructure.md` "The rule" makes
 `include/shared` the ABI surface and a number stated in two places is a number
@@ -685,34 +685,83 @@ be evaluated as written.
 
 ```
 L1  header    failure: refuse the whole block, no per-entry logging
-L2  section   failure: skip that section, continue with the others
+L2  section   failure: drop that section; refusing the block or not is
+               decided by PRESENT and by commit_state, not by the check
 L3  slot      failure: skip that slot, continue with the others
 L4  value     failure: skip that entry, continue with the others
 ```
 
+All four tiers are structural. Every check in them answers one question: can
+these bytes be read as what they claim to be? None of them asks whether the value
+is *sensible*, because that is not a question about bytes and the answer belongs
+to whoever uses the value.
+
 - **L1 header.** `magic`, `format_version`, `header_size`, section constants,
   `state` in {CREATING, READY}, and `commit_state` readable. A CREATING block
-  is `NOT_READY`; a BROKEN block is `STORE_BROKEN`. Both are refusals, not
-  corruption, and neither is logged per entry because there is no consumer
-  state to log into yet.
+  is `OMNI_ERR_NOT_READY`; a BROKEN block is `OMNI_ERR_STORE_BROKEN`. Both are
+  refusals, not corruption, and neither is logged per entry because there is no
+  consumer state to log into yet.
 - **L2 section.** Each section row has `id == row`, a 16-aligned `offset`, a
   `size` that does not wrap, and a range contained in `[0, block_size)`. A
-  section outside the mapping is skipped, never clamped to it.
+  section outside the mapping is dropped, never clamped to it. What dropping a
+  section means is read off two facts the block already carries, so the tier does
+  not need a required/optional list of its own:
+  - `flags & PRESENT` clear means the section is **absent by design**. The reader
+    skips it, reports nothing, and continues; there is no failure here at all,
+    because a section nobody promised cannot be a broken promise.
+  - `PRESENT` set means the block promised that section, and a promised section
+    whose framing is invalid, or whose version word this build does not
+    implement, is `OMNI_ERR_BLOCK_UNSUPPORTED` and refuses the block. Creation
+    sets `PRESENT` on every section (`configstorelayout.md` §4, `id == row`,
+    eight rows), so a PRESENT section that cannot be read is a block breaking its
+    own stated shape, and there is nothing to degrade to.
+  - The one PRESENT section a reader may legitimately drop is one whose range
+    extends past `block_size` **while a growth commit is in flight**, which is
+    `OMNI_ERR_BLOCK_TRUNCATED` and is a temporary skip, §12.5. The commit state
+    is what tells the two apart, and that is why a short block at rest refuses
+    while a short block mid-growth does not.
 - **L3 slot.** Slot index inside the section's declared capacity, the slot's
   identity fields non-zero where required, generation matching for a live
   reference, and 16-byte alignment before any dereference.
 - **L4 value.** The tag decision, flag state, and length rules below.
 
-Two further tiers are applied at their own sites:
+The failure action names the scale of the failure, which is what lets a reader
+decide whether to keep reading. A failure at L1 is about the block and is
+`OMNI_ERR_NOT_READY`, `OMNI_ERR_STORE_BROKEN` or `OMNI_ERR_BLOCK_UNSUPPORTED`
+according to which L1 check it was. At L2 the scale is decided by PRESENT as
+above: a promised section that cannot be read is `OMNI_ERR_BLOCK_UNSUPPORTED`
+and refuses, because a build that cannot find its own catalog index or journal
+has nothing to offer a client. A failure at L3 or L4 is about one reference
+inside a block this build understands, so it is `OMNI_ERR_VALUE_UNREADABLE`, or
+`OMNI_ERR_ENTRY_FREE` / `OMNI_ERR_GENERATION_MISMATCH` when a held reference is
+what led there. A reader that hits the second kind still has a usable block and
+should keep using it; one that hits the first does not, and collapsing the two
+would make a client rediscover a whole instance over one stale key.
 
-- Replay (mandatory, on every journal entry): apply only entries whose
-  `commit_id` has its `COMMIT_END` in the ring, only entries whose
-  `entry_generation` matches the live catalog entry, and only after the §5.1 gap
-  check. Failure is skip-and-continue or a policy-driven resync, never a partial
-  application.
-- Semantic (the consumer of the value decides): numeric ranges, enum name
-  recognition, action-name registration, sanity relative to the key's meaning.
-  Invalid semantic data is refused and skipped, never fatal.
+Replay is a fifth tier, applied at its own site rather than in the read path:
+apply only entries whose `commit_id` has its `COMMIT_END` in the ring, only
+entries whose `entry_generation` matches the live catalog entry, and only after
+the §5.1 gap check. Failure is skip-and-continue or a policy-driven resync, never
+a partial application.
+
+Semantic validation is not a tier here, and its absence is the decision rather
+than an omission. Numeric ranges, enum name recognition, action-name
+registration, and sanity relative to a key's meaning are all checks on meaning,
+and the store has no standing to make them: it holds a value of whatever tag names
+it under the open-catalog rule, so a `u8` of 200 is a perfectly well-formed value
+of an unknown key and a `string` of `"purple"` is a well-formed value of a colour
+key whose consumer is entitled to its own opinion. Putting these checks in the
+store would also put them in the wrong place to be useful, because the store
+answers one question per read while meaning is per consumer and often per use.
+
+So the boundary is this: the store guarantees a reader can *decode* a value or
+gets a named failure saying it cannot, and every consumer independently decides
+whether to *accept* one. A consumer that rejects a value does not corrupt anything
+by refusing it, because nothing in the block asserted that the value was
+acceptable in the first place. This is also why `OMNI_SOCK_ERR_BAD_VALUE` and
+`OMNI_SOCK_ERR_BAD_TYPE` are socket-only codes (`ipc.md` §2): they report what a
+client sent, never what a block contains, so a direct reader can neither produce
+nor need them.
 
 ### 12.1 Tag decision
 
@@ -793,11 +842,12 @@ the two cannot be confused: `next_free == 0` is allocated, and any non-zero
 `next_free` is on the free list. The free-list head itself
 (`OMNI_HDR_OFF_ARENA_FREE_HEAD`) and a free list's tail both use
 `OMNI_REF_NONE`, so the end of a list is not a usable offset either. A
-`body_ref` that resolves to a free frame is therefore `PARAM_INVALID` or
-`CATALOG_GENERATION` invalid, never a read of recycled bytes as a value. The
-check is two loads and a compare, and it must be applied on every `body_ref`
-dereference, not only on the path that wrote it, because the free list is what
-makes offsets reusable in the first place.
+`body_ref` that resolves to a free frame is therefore a guard failure and
+nothing else: `OMNI_ERR_VALUE_UNREADABLE`, or
+`OMNI_ERR_GENERATION_MISMATCH` when a held reference is what led here. It is never
+a read of recycled bytes as a value. The check is two loads and a compare, and it
+must be applied on every `body_ref` dereference, not only on the path that wrote
+it, because the free list is what makes offsets reusable in the first place.
 
 ### 12.4 Overflow-safe arithmetic
 
@@ -817,9 +867,26 @@ non-wrapping and directly assertable by the fuzz target.
 `block_size` smaller than a fixed section means that section is unusable, not
 partially usable. A reader uses only the sections fully contained in the
 mapping and treats the rest as absent. A section whose declared range extends
-past `block_size` is skipped. Truncating a live block therefore degrades the
-reader to fewer sections; it never produces a header claiming more than the
+past `block_size` is dropped, never clamped to it, and whether that is a
+temporary skip or a refusal is the L2 rule above: a drop during a growth commit
+is a temporary skip, and the reader can come back to the section after the
+commit without having lost anything, while a drop of a PRESENT section on a
+block at rest is a block that broke its stated shape. Truncating a live block
+therefore either degrades the reader to fewer sections for the duration of one
+commit or refuses it outright; it never produces a header claiming more than the
 mapping holds.
+
+The two degradation paths are different codes and stay different codes.
+`BLOCK_TRUNCATED` is a size fact: the block is a prefix of the layout, so the
+section is genuinely not written yet, and the reader can come back to it after a
+growth commit without having lost anything. `BLOCK_UNSUPPORTED` is a shape fact:
+the bytes are there and the build cannot interpret them, either a version it does
+not implement or a mandatory section that is absent or malformed. A promised
+section lands in `BLOCK_UNSUPPORTED` rather than in the skip-and-continue path
+above precisely because there is no honest degradation available: the catalog
+index in particular has no fallback, since scanning the catalog is the O(n) cost it
+exists to remove, and a reader that degraded to a scan would turn a configuration
+file's key count into every socket client's latency (`configstorelayout.md` §6.1).
 
 ### 12.6 Diagnostic policy
 
@@ -832,11 +899,115 @@ logged entry and a silently skipped entry are the same outcome.
 
 Every read treats the whole block as hostile input, because every mapping process can write every byte of it; page-level write protection cannot work inside one RW mapping.
 
-Free win: because bad data is a designed-for state, hardening is fuzzable. Garbage the block (mutate random bytes, truncate, clobber lengths/refs), run the WM, assert it never crashes and only skips-and-continues. This is a first-class test target. Because each invariant in `configstorelayout.md` §11 names exactly one tier, the corpus is organised per tier: a mutation that should trip L3 is asserted to skip one slot and leave every other slot readable, and a mutation that should trip L1 is asserted to refuse the block rather than degrade any single entry.
+Free win: because bad data is a designed-for state, hardening is fuzzable. Garbage the block (mutate random bytes, truncate, clobber lengths/refs), run the WM, assert it never crashes and only skips-and-continues. This is a first-class test target. Because each invariant in `configstorelayout.md` §12 names exactly one tier, the corpus is organised per tier: a mutation that should trip L3 is asserted to skip one slot and leave every other slot readable, and a mutation that should trip L1 is asserted to refuse the block rather than degrade any single entry.
 
 ## 13. Startup, config-as-saved-state, and save-file semantics
 
-- Startup: create block, seed core `wm.*` keys, set `OMNI_INSTANCE_SIGNATURE`, serve.
+- Startup: create block, initialise the header, seed core `wm.*` keys, set
+  `OMNI_INSTANCE_SIGNATURE`, serve. The header initial values are not left to
+  "whatever the allocator handed back", because a field whose initial value is
+  implied rather than written is a field whose meaning differs between the creator
+  and a reader that never checked; §13.1 is the table and it is derived from
+  `configstorelayout.md` §3 and the recovery rules in §10.
+
+### 13.1 Block creation, field by field
+
+A creator has exactly two jobs that can be got wrong: the block must be
+*unambiguously* a fresh block, and it must be *incomplete* in a way readers
+already know how to refuse. Both come from the same decision, which is that a
+block in this state is not an error condition and does not need a separate
+"creating" flag beyond the one the header already has.
+
+The sequence is: `ftruncate` the file to `OMNI_BLOCK_INITIAL_SIZE`, `mmap` it
+`PROT_READ|PROT_WRITE` with `MAP_SHARED`, and **zero the whole mapping** before
+writing any field. Zeroing first is what makes the whole table below correct at
+once: a reserved field is zero because nothing wrote it, a pointer is `NULL`
+because nothing wrote it, and a sentinel field that has to be non-zero for an
+empty structure is the only kind of field needing an explicit write. It also
+removes a class of bug where a field is correct in a fresh block and garbage in
+a recycled file, which is otherwise indistinguishable until it matters.
+
+| field | initial value | why that value |
+|---|---|---|
+| `magic` | `OMNI_MAGIC` | written first, before anything else is meaningful |
+| `format_version` | `OMNI_FORMAT_VERSION` | 1; the field exists so a later build can refuse this one |
+| `block_size` | `OMNI_BLOCK_INITIAL_SIZE` | matches the `ftruncate`, so §12.5's containment test passes |
+| `header_size` | `OMNI_HEADER_SIZE` | ditto, for the header row itself |
+| `futex` | zero | an unlocked futex is 0; the creator never holds it here |
+| `state` | `OMNI_STATE_CREATING` | **not** READY. A reader that mapped the file before this line ran sees CREATING and gets `NOT_READY`, which is a refusal it already knows how to make |
+| `commit_id` | 1 | the seeding commit is the first published state, so the first `commit_id` a reader can see is 1 and never 0 |
+| `epoch` | fresh, never reused | one per compositor instance; zero is not a legal epoch because a zeroed block must never look like a live one |
+| `boot_time_ns` | `CLOCK_BOOTTIME` at creation | the compositor's start, not the block's, so a recreate after a crash does not move it backwards |
+| `capabilities` | `OMNI_CAP_DEFAULT` | all eight bits; the sections are all created empty rather than absent, so presence is stated once and up front |
+| `wm_pid` | creator's pid | recovery evidence, cleared on clean shutdown |
+| `pool_base`, `pool_size` | `OMNI_POOL_OFF`, `OMNI_INITIAL_POOL` | from §2's derivation; asserted against `OMNI_POOL_OFF` at build time |
+| `arena_end` | `pool_base` | an empty arena. The end is the bump cursor, so an empty arena is where they meet |
+| `arena_free_head` | `OMNI_REF_NONE` | an empty free list terminates on the sentinel rather than on 0, because 0 is not a valid frame offset: the pool starts at `OMNI_POOL_OFF` |
+| `region_head` | `OMNI_REF_NONE` | same reason, same sentinel |
+| `catalog_free_head` | the first unseeded slot, or `OMNI_REF_NONE` only if seeding consumed every slot | a fresh block is not short of free slots, it is *entirely* free slots, so the freelist is a chain over the unseeded tail of the array rather than the sentinel. The creator seeds a low run of slots for the core `wm.*` keys and links the whole remainder, which is why the head is usually a real index and the sentinel is the rare case it was designed for |
+| `catalog_free_count` | `OMNI_CATALOG_SLOTS` minus the number of slots seeding consumed | the honest count for the same reason. Zero is correct only for a block whose catalog is full, and a fresh block is the opposite of full, so a creator that wrote zero here would have its first `omni_set` walk an empty freelist while sixteen thousand FREE slots sat in the array looking unavailable |
+| `request_ticket_next` | 1 | 0 is reserved as "no ticket ever issued", so the first real ticket is 1. A u32 wraps in practice, so §0.1's no-wrap rule holds within an epoch and a wrapped ticket is rejected against the live one rather than trusted |
+| `catalog` slots, the 16,384 not handed to a seeded entry | `entry_generation` = 0, `FREE` set, `DESTROYED` clear, `name_ref` = the next unseeded slot, `0xFFFFFFFF` on the last one | these are the empty slots, and generation 0 is what distinguishes "never allocated" from "allocated and later freed" (`configstorelayout.md` §6 gives 1 to the first allocation of a slot). `name_ref` carries the freelist link that §6 reserves for a FREE entry, which is what makes them allocatable rather than merely present. `DESTROYED` is deliberately clear, and it stays clear on a chain of never-allocated slots rather than being set to match the generic FREE rule in `configstorelayout.md` §6: that rule describes a slot freed from a live entry, where `DESTROYED` is a statement about a name that existed and was deleted, and a slot that was never named has nothing to have destroyed |
+| `catalog` slots handed to a seeded entry | `entry_generation` = 1, both lifecycle bits clear | the first allocation of a slot is generation 1. The creator takes these from the low end of the array directly rather than from the freelist, so seeding never has to distinguish a fresh slot from a recycled one, and the chain of unseeded slots above stays intact for the first real `omni_set` |
+| `region_desc_count` | 0 | no descriptors; §7 allocates them |
+| `section_table_offset`, `section_table_size`, `first_section_offset` | the §2 constants | these three are geometry, not state, and a reader checks them rather than trusting them |
+| `region_desc_base` | `OMNI_REGION_DESC_OFF` | geometry, same reasoning |
+| `writer_pid`, `writer_token` | 0 | the creator is not holding the futex |
+| `commit_state` | `OMNI_COMMIT_IDLE` | a reader must not be made to retry by the act of creating the block |
+| `active_commit_id` | 0 | no commit in flight; the field is meaningful only while `commit_state != IDLE` |
+| `ready` | `OMNI_READY_NOT_READY` | `state` is CREATING and `ready` is NOT_READY at the same time on purpose: they answer different questions and a fresh block is legitimately both |
+| reserved tail, offsets 168..255 | zero | and now zero *because* of the `memset`, not by omission |
+
+Two of these are worth defending, because they are the ones a "just memset it and
+fill in the obvious fields" implementation gets wrong.
+
+`state` starts at CREATING rather than READY even though the creator is about to
+publish. The window between the `ftruncate` and the seeding commit is real: a
+client polling for an instance can find the file in that window, and CREATING is
+what tells it to come back rather than to treat an empty catalog as a
+misconfiguration. The alternative, publishing READY with an empty catalog, is a
+block that a reader will accept and conclude from.
+
+`catalog_free_head` does **not** start at `OMNI_REF_NONE`, and this is the one
+row in the table where the obvious answer is wrong. An empty free list is the
+shape that makes the sentinel easy to read, and `arena_free_head` and
+`region_head` both get it, which is exactly why the catalog looks like it should
+too. But a fresh catalog is not an empty freelist, it is a full one: 16,384 slots
+of which seeding has taken a low run, and every one of the rest is FREE and
+waiting. Writing the sentinel would claim the block had no free slots, and
+`catalog_free_count` of zero would agree with that claim, so the first
+`omni_set` after startup would find no slot to allocate and fail on a block with
+sixteen thousand of them sitting in the array. Linking the unseeded tail through
+each slot's `name_ref` is the same mechanism `configstorelayout.md` §6 defines for
+a freed entry, which is the point: a slot that was never allocated and a slot that
+was freed are in the same state and belong on the same list, and the only
+difference between them is the retained generation, which is why that field is
+0 here and not 1.
+
+`arena_free_head` and `region_head` keep their sentinels, and the asymmetry is
+not an inconsistency. Both of those are genuinely empty at creation: there is an
+arena with no frames in it and a region table with no descriptors, and nothing
+exists to put on either list. The catalog is the one list in the block that is
+non-empty before a single user operation, because the slots are allocated by the
+array existing rather than by anything being stored in them.
+
+Two details in that table are about the *sections* rather than the header, and both
+exist so that a reader of an empty block gets a refusal rather than a plausible
+wrong answer. An empty catalog index would have `live_count` and `used_count` both
+zero, which a binary search handles correctly and which tells a reader nothing
+about whether the section is populated; so the creator writes
+`OMNI_CATALOG_INDEX_VERSION` at the index header's version word from
+`configstorelayout.md` §6.1, and a reader that finds it absent or different
+refuses with `OMNI_ERR_BLOCK_UNSUPPORTED` instead. An empty request ring and an
+empty journal ring are both genuinely empty and need no such word: their slot
+counts are zero, their heads are `OMNI_REF_NONE`, and there is nothing for a
+reader to misinterpret.
+
+Growth reuses §9 exactly: a block that grows is updated in place by the existing
+growth path, and every field in this table is already correct, so growth touches
+only `block_size` and `pool_size` plus the journal event. A recreate is the only
+path that reruns creation, and it is a new `epoch` on a new file, never an
+in-place reset of the old one.
 - A config file is a sequence of `set`/`exec` replayed into the block.
 - `OMNI_CONFIG_MAX_OPS` is 4096, the number of operations one config may contain,
   and it is a global limit rather than a per-command one. It equals the journal
@@ -849,7 +1020,7 @@ Free win: because bad data is a designed-for state, hardening is fuzzable. Garba
   the observability consequences of doing so.
 - Partial-invalid config: the whole file still loads. Line-level failures are logged and that line is not applied, but never abort the file. Whatever reached the block stays; consumers refuse invalid keys when they parse them. The config fails per line, never as a whole. A line-level failure is distinct from exceeding `OMNI_CONFIG_MAX_OPS`, which aborts the file rather than skipping the excess.
 - Save: every live entry with `WINDOW_DEPENDENT` clear and `EPHEMERAL` clear is written out, so a config file replayed from the server's own `save` reproduces configuration rather than geometry or bookkeeping. Window-dependent state (per-client geometry, focus, per-window overrides) is excluded, as is anything a facade marked `EPHEMERAL`.
-- `save` takes an optional key-path pattern that narrows the scope, and with no argument it writes the whole block under that same test, so the argument is purely additive. The pattern is a dotted prefix with a single trailing `*` meaning the subtree below it, which is what makes a layout slot extractable: a layout authored over IPC under `omniwm.layouts.delta` is written by `save omniwm.layouts.delta.*` and nothing else is in the file. A layout is three keys, so the trailing wildcard is load-bearing here rather than a convenience: without it `delta.rules` would be written and `delta.spaces` would not. The exclusion test is identical inside a narrowed scope, so narrowing cannot leak window-dependent or ephemeral state, and it is the same test the soft reset uses, so `save`, a narrowed `save` and a soft reset can never disagree about which entries are configuration. A general glob is deliberately not supported; one trailing wildcard is enough to name a namespace, and a full pattern language would make the interaction between a pattern and the exclusion test harder to reason about than the feature is worth.
+- `save` takes an optional key-path pattern that narrows the scope, and with no argument it writes the whole block under that same test, so the argument is purely additive. The pattern is a dotted prefix with a single trailing `*` meaning the subtree below it, which is what makes a layout slot extractable: a layout authored over IPC under `omniwm.layouts.delta` is written by `save omniwm.layouts.delta.*` and nothing else is in the file. A layout is four keys, so the trailing wildcard is load-bearing here rather than a convenience: without it `delta.rules` would be written and `delta.spaces` would not. The exclusion test is identical inside a narrowed scope, so narrowing cannot leak window-dependent or ephemeral state, and it is the same test the soft reset uses, so `save`, a narrowed `save` and a soft reset can never disagree about which entries are configuration. A general glob is deliberately not supported; one trailing wildcard is enough to name a namespace, and a full pattern language would make the interaction between a pattern and the exclusion test harder to reason about than the feature is worth.
 - A soft reset uses the identical test as `save` (`WINDOW_DEPENDENT` clear and `EPHEMERAL` clear), so the two operations can never disagree about which entries are configuration.
 - Export policy for bad data: entries that fail any structural tier (L1-L4) are skipped with a warning; entries on the extension branch of the tag decision that are structurally valid are preserved as-is so their owning extensions can re-import them on the next boot. An unassigned low tag is a structural failure, not an extension, and is never exported.
 
@@ -868,7 +1039,40 @@ Still deferred:
 
 - Multi-painter arbitration on a single region (out of scope: one painter per region).
 - Value transactions beyond grouped commits (no CAS at v1).
-- Mixed-endianness hosts (native, tied to format_version).
+- Mixed-endianness hosts (native, tied to `format_version`).
 - Extension-specific semantic validation beyond structural framing checks.
 - Compile-time ABI tests asserting the header's values against this document.
+
+### 14.1 Three operations the store owes tags, and they are not one operation
+
+These are not on the list above and are recorded separately because they are
+**required** rather than deferred, and because they are the only reason the store
+needs a subtree concept at all. `tags.md` §5 makes a tag a catalog entry with
+children, and that one decision obliges the store for three distinct operations.
+They are listed separately rather than as "add subtree support" because an
+implementation that treats the third as a special case of the first will find the
+problem too late.
+
+- **Subtree delete.** Destroying a client removes its membership children from
+  every tag naming it. §8's `save` and soft-reset classification sidesteps this
+  entirely by flag, but teardown cannot: it is a delete of everything beneath a
+  prefix. Without it, a destroyed client leaves membership children naming a
+  recycled `entry_id`, and the next client to land in that slot appears on the old
+  client's tags.
+- **Subtree exchange.** `ipc.md` §4's `swap_tags` exchanges two tags' contents in
+  one grouped commit. This is **not** a special case of the delete, and the reason
+  is allocation rather than iteration: a delete may free each frame as it goes,
+  because nothing else references it, while an exchange frees nothing at all,
+  because every child of one tag is still live in the other. It has to move values
+  between two existing subtrees with no intermediate state in which either is short
+  a member, and that is a different code path rather than a flag.
+- **Generation-correct deletion.** Applies to both of the above: a membership
+  operation must compare the `entry_id` *and* `entry_generation` it was given
+  against the live slot, or it will cheerfully delete a new client's membership
+  after a slot is recycled. This is §0.1's rule applied to operations that do not
+  exist yet, and it is why the membership child stores an `entry_ref` rather than a
+  bare `entry_id`. For the exchange the same care lands in a different place: a
+  child naming a destroyed-and-recycled client must not carry the stale half
+  across, so the exchange validates both sides or refuses, and refusing is correct
+  because a swap with a dead member in it is already a bad request.
 

@@ -32,8 +32,8 @@ instead.
 | animate | `animate.md` | animatable properties on nodes; timelines declared in config; curves; stagger; 2D versus 3D; shader-driven animation; how a live gesture keeps animation live; the interaction with the solver's geometry | 9 | P1 |
 | input | `input.md` | the mapping from Mango's modes and tags onto this project's namespaces, which `input.md` §7.1 sets out as four candidates with their costs and does not choose between. Stage 10 owes the stylus binding type, which Mango has no struct to copy: pressure, tilt, absolute pointing and annotation mode | 4, 10 | P0 |
 | monitor | `monitor.md` | output hotplug and how it reconfigures layout; per-output configuration matched by name, make, model and serial; virtual monitors; Xwayland integration and its tag, layout and decoration parity | 5 | P1 |
-| protocols | `protocols.md` | the Mango protocol set brought in wholesale; which wlroots managers the compositor instantiates; the region-based external rendering path; the later Wayland buffer-injection protocol for GPU-path external renderers | 16, 18 | P2 |
-| languages | `languages.md` | the C reference client library over `include/shared/`; the Python reference scripting library; the Mango and Hyprland interpreters; why a first-class library in another language needs no compositor change; whether Lua remains an initial deliverable | 15, 16, 17, 18 | P2 |
+| protocols | `protocols.md` | the Mango protocol set, reused where we can and changed where we must; which wlroots managers the compositor instantiates; the region-based external rendering path; the later Wayland buffer-injection protocol for GPU-path external renderers | 16, 18 | P2 |
+| languages | `languages.md` | the C reference client library over `include/shared/`; the Python reference scripting library; the Mango and Hyprland interpreters; why a first-class library in another language needs no compositor change. All four are **separate example programs written after the project is complete**, not deliverables of the window manager, and no interpreter or library is in scope at all — see `generaldesign.md` §17 | 15, 16, 17, 18 | P2 |
 | build | `build.md` | the document itself. The dependency set and the wlroots and scenefx version coupling; the exact scenefx extensions needed for user GLSL shaders and 3D transforms, and whether it is a maintained patch or a fork; the solver's arithmetic width and whether a solve runs on CPU or GPU, which the layout engine does not depend on. A `flake.nix` is wanted, with **`cache.nixos.org` set explicitly as the substituter** rather than inheriting the ambient config, so a build is reproducible from a clean machine | 3 | P0 |
 | testing | `testing.md` | **stage 1's one missing document.** The store write and read test, the ABI static-assert header, the store fuzz target and its corruption corpora, a layout and constraint solver test, a gesture and binding match test. The write and read test needs only `configstorelayout.md` §3, §5, §6, §6.1, §7, §8, §9, §10 and §13, all of which are byte-exact and internally consistent, plus the invariants in §12 as the assertion set. The fuzz target `configstorage.md` names has no implementation, and `configstorage.md` §14 defers compile-time ABI tests that the `OMNI_STATIC_ASSERT`s in `omni_layout.h` partly cover | 1 | P0 |
 | licence | `licence.md` | the licence file itself, and a provenance record for anything actually copied, which is a chore at the moment of the first copy rather than a design question | 3 | P3 |
@@ -98,14 +98,16 @@ Fixed in place since the audit, with no decision needed:
 
 Settled by decision since the audit, recorded in the documents that own them:
 
-- **A layout program is three keys.** `layoutlanguage.md` and
+- **A layout program is four keys.** `layoutlanguage.md` and
   `layout-test-examples.md` are the authority on keys, so
-  `omniwm.layouts.<name>` is `.rules`, `.spaces` and an optional `.viewport`,
-  which is the form all 1,138 lines of the test suite already use.
-  `layoutlanguage.md` §1, `layoutengine.md` §4.4 and `configstorage.md` §4 and
+  `omniwm.layouts.<name>` is `.rules`, `.spaces`, an optional `.viewport`, and an
+  optional `.rearrange_on_focus`; the first three are the form all 1,138 lines of
+  the test suite already use, and the fourth was added because a focus change is an
+  arrange trigger whose answer differs per layout. `layoutlanguage.md` §1 and
+  §3.0, `layoutengine.md` §4.4 and `configstorage.md` §4 and
   §13 now say so, and the `save omniwm.layouts.delta.*` scope in §13 records
   that the trailing wildcard is load-bearing rather than a convenience.
-- **Input is MangoWM's implementation, ported wholesale** (`generaldesign.md`
+- **Input reuses MangoWM's implementation, changing what we need** (`generaldesign.md`
   §14). This closes the modmask grammar, the keysym name table, the key-to-action
   path, and the roadmap inversion between stages 4 and 6, since Mango's
   `KeyBinding` already carries a mod, a keysym and an `Arg`. `layoutengine.md`

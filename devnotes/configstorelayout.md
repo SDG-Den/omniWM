@@ -43,8 +43,8 @@ Mixed-endianness remains out of scope.
   platform.
 - An "arena value frame" is the storage unit of every named and payload value
   in the pool (see §5). Region payloads are raw pixels, unframed.
-- Every structural invariant has a numbered entry in §12; the future fuzz
-  target asserts that list (`configstorage.md` §12).
+- Every structural invariant has a row in §12, keyed by the one guard tier that
+  enforces it; the future fuzz target asserts that list (`configstorage.md` §12).
 
 ## 2. Constants (single definition point)
 
@@ -238,7 +238,8 @@ the alternative is a read path whose cost depends on how many unrelated keys the
 user has configured, which is how a configuration file turns into a latency
 problem for every client on the socket. So a block whose index row is absent or
 malformed, or whose `OMNI_CATALOG_INDEX_VERSION` does not match, is one this
-build cannot read: `get` returns `BLOCK_UNSUPPORTED` rather than scanning.
+build cannot read: `get` returns `OMNI_ERR_BLOCK_UNSUPPORTED` rather than
+scanning.
 A consumer that sees `0x7F` is looking at a block written
 before the solved layout section existed, and it must not read section 7; a
 consumer that sees bit 7 clear must not read section 7 either. Either way the
@@ -355,7 +356,7 @@ The live layout is byte-identical to what it was before the free list existed;
 only the meaning of the reserved bytes for a *free* frame is new. `length` is
 therefore the discriminator's companion: a reader following a `body_ref` must
 reject a frame whose `next_free` is non-zero, because that frame has been
-recycled and its contents are a free-list link rather than a value. §6's guard
+recycled and its contents are a free-list link rather than a value. §12's guard
 tiers apply this at L4.
 
 `name_ref` and framed `body_ref` point at the frame start (offset +0). A name
@@ -363,13 +364,19 @@ is a UTF-8 string frame: `length = strlen + 1` including the NUL. Names are
 immutable for the lifetime of the catalog entry; replacing a name creates a
 new entry identity. A frame is not used for an inline value.
 
-### Composite payload records (tags with a fixed-shape header)
+### Composite payload records
 
-Not every payload is a tree. Four tags carry a fixed-size record, and this
-document owns their bytes, so they are tabulated here rather than only in
-`configstorage.md` §4, which owns what each field *means*. The constants are
-`OMNI_BINDING_OFF_*` and `OMNI_CLIENT_RULE_OFF_*`, both in `omni_layout.h`
-section 7, and each record has a static assert on its tail.
+Not every payload is a tree. Four tags carry a composite record: a framed value
+whose fields are named rather than positional. The word for all four is
+*composite*, not *fixed-shape*, and the distinction is not cosmetic: one of the
+four is fixed-size with no payload, one has a fixed header with a variable tail,
+and two are variable-length with no fixed part at all. Only the first two can be
+tabulated, and this document owns the bytes of the two it can, so they are
+tabulated here rather than only in `configstorage.md` §4, which owns what each
+field *means*. The constants are `OMNI_BINDING_OFF_*` and `OMNI_CLIENT_RULE_OFF_*`,
+both in `omni_layout.h` section 7, and each tabulated record has a static assert
+on its tail. The two that are not tabulated, and why, are at the end of this
+section.
 
 `binding` is `0x2B`, a fixed header with the argument array inline after it, so
 the whole payload is one frame of `header_bytes + array_bytes`:
@@ -488,6 +495,20 @@ Freelist: a FREE entry keeps its last `entry_generation`, uses `name_ref` as
 retained generation (with zero treated as the first generation). Entries never
 move while live; `entry_id` plus `entry_generation` is the complete reference.
 
+A slot that was **never allocated** is on that same list and differs in two
+fields, both of which are consequences of it never having held an entry rather
+than of it having lost one. Its `entry_generation` is 0, because there is no
+earlier generation to retain, and its `DESTROYED` is clear, because `DESTROYED`
+asserts that a name existed here and was deleted, which is a claim about history
+that an untouched slot cannot make. Everything else matches, including the
+`name_ref` link, and it is not a special case in allocation: the code that takes
+`catalog_free_head` cannot tell the two apart and does not need to, because
+"increment the retained generation, treating zero as the first" already produces
+generation 1 for a never-allocated slot. Creation links the unseeded tail of the
+array through these links before the block is published, so `catalog_free_head`
+on a fresh block is a real slot index and `catalog_free_count` is the size of
+that tail rather than zero (`configstorage.md` §13.1).
+
 Value read path, by guard tier (`configstorage.md` §12): L3 verifies the slot
 index, a non-zero `entry_generation`, `FREE` and `DESTROYED` both clear, the
 matching generation for a live reference, and 16-byte alignment. L4 applies the
@@ -531,21 +552,41 @@ socket. Freeing the frames closes it. Two properties make it safe:
 
 ## 6.1 Catalog name index (section base 0x81000, 16,384 x 16 B)
 
+Guard tiers for this section: **L2 only, plus the header's own version word.**
+That is narrower than every other section and the narrowness is the design. The
+catalog, the index header, and each index slot are all fully specified by
+constants in `omni_layout.h`, so a reader holding different constants has already
+refused the block before it looks here; the L3 slot checks that remain are the
+sortedness the binary search depends on, which is a property of the section as a
+whole rather than of any one slot. There is no L4 value tier because the index
+holds no values, only `(hash, entry_id, generation_lo)`.
+
 The index exists so that `get` never walks the catalog. It is a second, sorted
 view of the same entries, not a second source of truth: the catalog slot is still
 the entry, and `entry_id` is still the slot index.
 
 ```
 header, 32 bytes
-+0  u32 live_count     non-tombstone slots
-+4  u32 used_count     live + tombstones; slots past this are unused
-+8..31 reserved, zero
++0   u32 live_count     non-tombstone slots
++4   u32 used_count     live + tombstones; slots past this are unused
++8   u32 version        OMNI_CATALOG_INDEX_VERSION, written by the creator
++12..31 reserved, zero
 
 slot, 16 bytes, sorted ascending by (name_hash, entry_id)
 +0  u64 name_hash      FNV-1a 64 then splitmix64, over the name bytes
 +8  u32 entry_id       0xFFFFFFFF when the slot is a tombstone or unused
 +12 u32 generation_lo  low half of the entry generation when inserted
 ```
+
+The `version` word exists because this section is the one place a reader cannot
+infer the shape it is looking at. Every other section is located by a constant in
+`omni_layout.h`, so a reader holding a different constant for a section size has
+already refused the block before it reads a byte. The index has no such anchor: an
+index written by a build that added, dropped, or re-ordered a slot field still has
+a valid 32-byte header and a valid sorted array, so a reader would binary-search
+it happily and return wrong answers rather than an error. The version is what
+turns that into a refusal, and it is bumped only for a change to the header or
+slot layout above, never for a change to the algorithm that maintains them.
 
 - **The catalog itself is not sorted**, and this is the one place the design
   departs from the obvious implementation. `entry_id` is the slot index, live
@@ -588,14 +629,18 @@ slot, 16 bytes, sorted ascending by (name_hash, entry_id)
   cannot lose a fixed section it once had; an index that is gone or short is a
   block this build does not support, which is a different condition and gets a
   different answer.
-- The result code for that refusal is **not yet decided**, and it is a real gap
-  rather than an oversight: `omni_layout.h` enumerates request results
-  (`OMNI_REQ_ERR_*`) for the queue, but a direct `get` has no read-result
-  vocabulary at all, so there is nothing today to return. One is needed before
-  this is implementable. It should be a separate `OMNI_GET_*` set rather than a
-  reuse of `OMNI_REQ_ERR_*`, because a read has no slot to hold a `ticket` and a
-  reused code would imply a request lifecycle that does not happen. This is
-  recorded in §14.
+- The result code for that refusal is `OMNI_ERR_BLOCK_UNSUPPORTED`, and it is not
+  a decision left open any more. The read path, the request queue, and the socket
+  share one vocabulary rather than one per surface: `omni_layout.h` §12 defines
+  `OMNI_ERR_*` for facts about the block, which the store can produce whether or
+  not a request or a socket exists, and `OMNI_SOCK_ERR_*` for facts about a
+  message or a facade limit, which only the socket can produce. A direct `get`
+  returns the same `OMNI_ERR_*` value a queued request would have put in its slot
+  and a socket response would have put in its `error` field, so the three paths
+  cannot drift apart and a client that learned a name on one path already knows it
+  on the other. The reason a read needs no ticket and no slot is that it returns
+  the code directly, which is what a separate `OMNI_GET_*` set would have been
+  for; unifying instead of splitting keeps one name per fact.
 
 ## 7. Growth
 
@@ -917,11 +962,31 @@ never appended, and carries no `JOURNALLED` flag (§4).
 
 ```
 off  size  field
-0    8     generation      u64, bumped once per completed solve
+0    8     generation      u64, bumped once per completed write
 8    4     node_count      u32, records actually written
-12   4     reserved        zero
+12   1     stage           u8, OMNI_SOLVED_STAGE_SOLVED or _ARRANGED
+13   3     reserved        zero
 16   ...   nodes           node_count x 24 B, ascending node index
 ```
+
+`stage` is what separates a solved layout from an arranged one, and the two are
+different values rather than two names for the same value.
+`layoutengine.md` §3.7's pipeline writes twice per pass: step 6 writes the
+solver's output after relaxation and marks it `SOLVED`, step 9 overwrites it once
+the animate step has completed and marks it `ARRANGED`. A reader that cannot tell
+them apart cannot tell whether it holds the endpoint of the current pass or an
+intermediate the animator is about to move away from, which is the difference
+between acting on the geometry now and waiting for it.
+
+One buffer serves both, rather than a second 32KB section per stage, because the
+two are sequential and not concurrent. A reader sampling between step 6 and step 9
+gets `SOLVED` with a `generation` that no longer matches the block's current
+`commit_id`, which is the same revalidation the `generation` field already
+requires. The consequence is that the solved geometry does not survive the arrange
+that overwrites it, and nothing needs it to: an animator is handed the endpoint,
+and a script asking where a window is wants the activated value. A reader that
+wants the solver's own answer has to read it before the arrange, and that is a
+real limit of this shape rather than an accident.
 
 One node is 24 bytes:
 
@@ -944,9 +1009,15 @@ here, which is the difference between this section and a second copy of the
 layout: geometry is a fact, relationships are configuration.
 
 `generation` is bumped only after a complete node array is in place, so a reader
-that samples it before and after a copy either sees one solve or retries. A
-`node_count` below `OMNI_SOLVED_SLOT_COUNT_MAX` is normal and means the solve
-placed fewer windows than the section can hold; a count above it is malformed,
+that samples it before and after a copy either sees one write or retries. It is
+bumped on both writes, because a reader needs to notice the stage change as well
+as the geometry change: a bumped generation with an unchanged `stage` is a new
+solve, and a bumped generation with a changed `stage` is the arrange activating
+what the solve produced. A `stage` value outside the two defined ones is
+malformed, because a reader that guessed would act on an endpoint it has not
+confirmed exists. A `node_count` below `OMNI_SOLVED_SLOT_COUNT_MAX` is normal and
+means the solve placed fewer windows than the section can hold; a count above it
+is malformed,
 because the array would run past `0x1DA800` and into the pool.
 
 The whole occupied range is `16 + node_count * 24` bytes, so the section is
@@ -969,16 +1040,23 @@ L1    while futex == 1, writer_pid and writer_token identify the current holder
 L1    commit_state is IDLE whenever no writer holds the futex
 L1    readers never accept a snapshot taken while commit_state is not IDLE
 L1    a BROKEN block is never mutated, and no recovery path reuses its epoch
+L1    ready is one of NOT_READY, READY, DEGRADED or FAILED, and a value outside that set is refused
+L1    ready reaches READY only in a commit that sets state to READY, and DEGRADED only in a commit that sets it to DEGRADED
 L2    OMNI_POOL_OFF <= arena_end <= region_head <= pool_base + pool_size
 L2    every offset/length dereferenced lies in [0, block_size)
 L2    every section row has id == row, a 16-aligned offset, and a non-overlapping range
 L2    fixed catalog, journal, request, descriptor, and solved ranges fit before OMNI_POOL_OFF
 L2    solved node_count <= OMNI_SOLVED_SLOT_COUNT_MAX and 16 + count * 24 <= section size
 L2    a solved layout read samples generation before and after, and retries on change
+L2    a solved layout's stage is SOLVED or ARRANGED, never another value
 L2    journal count <= OMNI_JOURNAL_CAPACITY
 L2    journal publish_seq is even outside a writer's metadata update
 L2    a section extending past block_size is skipped, never clamped
 L3    catalog freelist is an acyclic index chain, head/count consistent
+L3    arena freelist is an acyclic frame chain from arena_free_head, terminating on OMNI_REF_NONE
+L3    every frame on the arena freelist lies in [OMNI_POOL_OFF, arena_end) and is unreachable from any live body_ref
+L3    the catalog name index is sorted ascending by its 64-bit hash, and its entry_count equals the number of live catalog slots
+L3    every name-index row resolves to a live catalog slot whose name hashes to the row's value
 L3    every arena allocation base and every region payload base is 16-aligned
 L3    no live reader result depends on stale bytes of a recycled slot
 L3    every journal entry has the current epoch, its commit_id, and a unique journal_seq
@@ -1087,16 +1165,17 @@ is required, so `commit_state` goes straight from `IDLE` to `ACTIVE`, and the
 
 ## 14. Open items
 
-- **A direct `get` has no result vocabulary.** `omni_layout.h` enumerates
-  `OMNI_REQ_ERR_*` for the request queue, but `get` is a plain memory read and
-  has nothing to return. §6.1 needs one, because an absent or malformed
-  catalog index is now a refusal rather than a slow answer, and refusal needs a
-  code. It should be a separate `OMNI_GET_*` set: a read has no slot, no ticket
-  and no lifecycle, so reusing `OMNI_REQ_ERR_*` would imply machinery that does
-  not exist. Deciding it is a prerequisite for implementing §3.1, and it also
-  forces the other `get` failures to be named at the same time: name not found,
-  free slot, entry generation mismatch, block broken, block truncated, and block
-  unsupported.
+- ~~**A direct `get` has no result vocabulary.**~~ **Closed.** `omni_layout.h`
+  §12 defines one `OMNI_ERR_*` set shared by the read path, the request queue, and
+  the socket, with `OMNI_SOCK_ERR_*` beside it for facts only the facade can
+  produce. A direct `get` returns the code in the caller's out-parameter, so it
+  needs no slot, no ticket, and no lifecycle, and the queue stores the same value
+  it would have returned. Every failure §6.1 and §12 can produce now has a name:
+  `KEY_NOT_FOUND` for an absent name, `ENTRY_FREE` for a held reference whose slot
+  was recycled, `GENERATION_MISMATCH` for one the entry moved out from under,
+  `BLOCK_TRUNCATED` for a block smaller than the layout, and
+  `BLOCK_UNSUPPORTED` for one this build cannot read. The `get` signature is
+  `OMNI_ERR_* omni_get(omni_block *, const char *name, omni_value *out)`.
 - `OMNI_CATALOG_SLOT_COUNT = 16384` and `OMNI_ENTRY_NAME_MAX = 4095` are v1
   limits; changing either changes a fixed section size and every derived
   offset.
