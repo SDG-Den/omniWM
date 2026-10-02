@@ -91,17 +91,20 @@ made anyway.
 
 The default is a default, not a prohibition, and the record has already exercised
 it once. On 2026-09-27 the third audit raised findings against two stubs at the
-same time. `01-testing.md` attributes the fuzz target to `configstorage.md` §14
+same time. `01-testing.md` attributed the fuzz target to `configstorage.md` §14
 when §12.6 names it, and that was **deferred to phase 01**, on the reasoning that
-phase 01 begins by reading its stub against the documents as they are then.
-`07-layoutengine.md` was **corrected in the same pass** — its table, its counts and
-its idempotence note were all wrong about `layoutengine.md`, and the first two were
-accuracy repairs rather than scope, so the tidy distinction in the paragraph above
-is not what actually happened. The rule to follow is therefore the narrower one:
-**do not repair drift in a stub you were not asked about, and when you are asked,
-repair what was asked and record which kind of edit it was.** Both stubs carry a
-line under their title saying they are not expected to be accurate about other
-documents until their phase starts.
+phase 01 begins by reading its stub against the documents as they are then. It was
+**repaired when phase 01 began**, together with four other pieces of drift the same
+re-evaluation found, and the repair is recorded in the stub's own preamble rather
+than here, so this paragraph stays a record of the rule and not of what each stub
+happened to say. `07-layoutengine.md` was **corrected in the same pass** — its
+table, its counts and its idempotence note were all wrong about `layoutengine.md`,
+and the first two were accuracy repairs rather than scope, so the tidy distinction
+in the paragraph above is not what actually happened. The rule to follow is
+therefore the narrower one: **do not repair drift in a stub you were not asked
+about, and when you are asked, repair what was asked and record which kind of edit
+it was.** Both stubs carry a line under their title saying they are not expected to
+be accurate about other documents until their phase starts.
 
 ## What the design work is actually for
 
@@ -219,7 +222,7 @@ scene graph is written before decorations or after.
 
 ## Design Phase Tracking
 - [x] Phase 00
-- [ ] Phase 01
+- [x] Phase 01 (`testing.md` exists and is complete: the seam, the framework, the per-tier store tests, the fuzz corpus and the deliberate absences. The stub's checklist was the working document; see `01-testing.md`)
 - [ ] Phase 02
 - [ ] Phase 03
 - [ ] Phase 04

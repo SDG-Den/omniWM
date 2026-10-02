@@ -55,10 +55,18 @@ other way, from our group plus chrome to a Mango-style group (`layoutengine.md`
 §7.1). *§7.7's membership determinism question* is closed as **stored**, by the same
 decision `tags.md` §9 records, and §7.7 now points there rather than asking.
 
-**8. The roadmap inversion.** Phase 08's first item is whether the scene graph has
-to exist before decorations, and the answer changes what this phase owes
+**8. The roadmap inversion.** Phase 08's first item is whether the scene graph
+has to exist before decorations, and the answer changes what this phase owes
 `decorate.md`. If the node model is written first, this phase has to state what a
 node is, because that is the solver's output shape.
+
+**Decided 2026-09-29: nodes come first.** The solver derives nodes before
+anything is rendered, and an animation is a transition from the "active" state to
+the "new" state. So the solver's output shape is the node shape, `decorate.md`
+renders nodes, and phase 08's question is answered at its root: what a node is is
+what this phase's output is. `draw.md` and `animate.md` must be consistent with
+that ordering — the node model is not derived from what decorations happened to
+need.
 
 ## The twelve questions in the body
 

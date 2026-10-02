@@ -18,6 +18,28 @@ items, and one of them is the largest remaining question in the input subsystem.
 - scope to a client
 - keep a mode string, renamed
 
+**Decided 2026-09-29: keymodes, Mango-shaped for the user, different
+underneath.** A binding *optionally* carries a `keymode` field, which may be a
+list of several keymodes (or a repeatable config key), and a binding with no
+`keymode` is in the implied `default` mode. For an end user this works like
+Mango's mode (`common`/`default` semantics preserved as the list/absence
+handling); the parsing and storage differ because `generaldesign.md` §14.4 puts
+`mode_id` in the index key, so the storage is the u32 after all and the list of
+mode strings is resolved at parse time, exactly as Mango resolves a single mode
+string at parse time.
+
+Latency rule, agreed as the matching rule: by default only keys that have a
+binding with no modifier in the current mode are listened for; once modifiers are
+held, keys from bindings carrying those modifiers in the current mode are also
+listened for. A key with no binding passes through immediately, without the
+match machinery. That is the §14.4 hot-path budget stated as a rule.
+
+Client targeting is **not** a binding scope question. It is independent of mode:
+the action receives the focused client, and targeting a specific window is an
+action argument, not a key entry. This matches `input.md` §7.1's own note that
+"scope to a client" is a new feature wearing an old name — it still is a feature,
+it is just not one that belongs in `mode_id`.
+
 Mango's `mode` is a 28-byte string with two sentinels, `common` and `default`,
 switched at runtime by an action. omniWM has no global mode, so the question is
 what a binding is *scoped to*. What is already settled and constrains the answer:
@@ -39,6 +61,15 @@ options and is not waiting on the number.
 protocol, and no binding struct to copy, so this is fresh work rather than a
 port. It needs pressure and tilt thresholds, absolute versus relative pointing,
 and an annotation mode.
+
+**Decided 2026-09-29: full pen support, as a distinct trigger kind.** Not
+"input" in the three headline promises, but in-line with the omni-configurable
+premise and worth doing. The trigger kind is for drawing tablets specifically.
+
+Open, and asked back of the design: whether the same binding mechanism can also
+cover the buttons on a drawing tablet and on gamepads, or whether those need
+separate implementations. That turns on whether a standard exists for them.
+Research was pending at decision time.
 
 **4. Whether `binds.c` is one component or five**, which §7 leaves open. Five
 trigger kinds with per-kind `enable_key` is a real option and nothing needs it at

@@ -43,32 +43,135 @@ the core library without settling these would push the same discovery into stage
 largest external risk, because the biggest open item in the whole design depends
 on a third-party project.
 
+**Build scaffolding already in the tree, 2026-09-27.** `flake.nix`, `meson.build`,
+`meson_options.txt`, `protocols/` and `nix/` exist and all four Nix entry points
+work. They were created in phase 01 rather than here, because a test document with
+no runner in the tree is a specification nothing checks, and the runner is a build
+system. This does not close the items below; it gives them a build to be decided
+against. What it did already settle is recorded against each item.
+
 **B1. The dependency set.** Which libraries, at which versions, and which are
 optional. `helpers.md` §7.2 already assumes PCRE2, and the container kit in §7.3
-assumes more.
+assumes more. **Mango's list is in the tree unchanged** and configures against
+nixpkgs-unstable: libinput 1.31.3, libxcb 1.17.0, libxkbcommon 1.13.2, PCRE2
+10.48, pango 1.57.1, cjson 1.7.19, pixman 0.46.4, wayland 1.26.0,
+wayland-protocols 1.49, wlroots 0.20.2, scenefx 0.5.0, libGL 1.7.0, libdrm
+2.4.134, with libxcb-wm 0.4.2 and xwayland 24.1.13 behind `meson_options.txt`'s
+`xwayland` feature. XWayland is the only optional one. Still open is whether we
+add anything on top, which is what the user described as likely.
+
+One sub-question inside B1 that the package split raised is settled: all five
+packages carry the whole Mango list while the sources are empty, and that is the
+correct long-term shape. `libomniwm` is the internal development library omniWM
+itself is built from — an internal library, not a hand-off surface. It links
+wlroots, scenefx, libinput, pango, GL, drm, xcb and xwayland directly, because
+the WM is built on them; the "part other projects link" is not it. The properly
+narrow surface is a separate SHM-client library that does not exist yet, whose
+only interface dependency is the block layout in `include/shared/`. `build.md`
+§2.1's phrase "the part other projects link" is corrected for that reason.
 
 **B2. The wlroots version, and the scenefx coupling.** `generaldesign.md` §19 says
 scenefx 0.5 requires wlroots 0.20 and that the tracked wlroots release is
 unresolved. This is a hard coupling, not a preference, and it constrains
-everything else in the document.
+everything else in the document. **Answered against nixpkgs-unstable**: wlroots
+0.20.2 and scenefx 0.5.0 are both released and both present, so the coupling
+resolves against a matched pair rather than against a fork. The flake pins
+`wlroots_0_20` rather than `wlroots` to say so explicitly, since they are the same
+version today and will not stay that way.
 
 **B3. The scenefx extension set.** `generaldesign.md` §19 calls this the largest
 risk to "Any Look". The specific need is user GLSL shaders and 3D transforms,
 which `draw.md` and `animate.md` both depend on. The open question is whether
 those extensions exist as a maintained patch or require a fork, and the answer
-changes the project's relationship to its own upstream.
+changes the project's relationship to its own upstream. **The scaffold takes
+scenefx from nixpkgs, not from Mango's `github:wlrfx/scenefx` flake input.** Mango
+pins that input precisely because it needs extensions nixpkgs does not carry, so
+this is a deliberate deferral of B3 rather than an endorsement of the released
+extension set. The comment in `meson.build` says so, because a reader finding
+nixpkgs scenefx and assuming the extension question was answered would be worse
+than not finding the question at all.
+
+**Decided 2026-09-29: no fork and no patch; the extensions are built into
+omniWM.** This is a deliberate decision to break ground rather than track
+upstream — scenefx has no extension point (its installed public pass API is a
+closed set of draw calls, and its shader/compile helpers live in an uninstalled
+header), so extending it means owning the render layer that uses it, not patching
+it. The list below is the agreed feature list, and the target is a rendering
+**toolkit**, not a fixed effect library: each item is built from a small set of
+simple, generic, flexible primitives that can produce any desired effect, and a
+preset is a mapping of several of those primitives onto one config key. The core
+does not implement super specific, complex effects; it ships the toolkit, so any
+looks-based feature can be implemented rapidly on top of it later. The specific
+items below are what the toolkit has to be able to express, not a list of
+one-off code paths.
+
+- 3d transform windows
+- 2d transform windows
+- above-background and above-windows full-size custom-render buffer support
+- multi-layer borders
+- textured borders (tile and stretch-to-fit)
+- nine-patch support
+- shadered border support (gradients and similar)
+- custom shader effects
+- custom shader animations
+- animated shaders on borders
+- glow and shadows (one feature underneath, exposed two ways)
+- window opacity
+- custom GLSL shader support
+- all buffers available in SHM for direct modification
+
+All of it in-GPU, which accepts that a different higher-level rendering library
+may have to be integrated into the WM to support and extend scenefx. A proposed
+integration is not yet chosen; that is a consequence of this decision, not a
+second deferral. This affects the dependency set (B1): the render layer is a
+core service with its own dependency set, and `libomniwm` being internal means
+carrying scenefx and whatever the renderer needs is normal for it.
 
 **B4. The solver's arithmetic width, and CPU versus GPU.** `missing-devnotes-topics.md`
 notes the layout engine does not depend on the answer. It still has to be in the
 document because it decides what the solver links against.
 
+**Decided 2026-09-29: fixed-point internally, integer at commit, CPU.** Every
+reference WM (Mango, Hyprland, wayfire, Halley, ShojiWM) is CPU with floating
+point internally and integer at the commit boundary, so CPU was never in doubt.
+Fixed-point over float is a deliberate divergence, chosen for cross-architecture
+bit reproducibility: a deterministic golden-file solver cannot rest on float, and
+determinism outranks aarch64 (which is only a Nix default; it is still wanted,
+just not at the cost of determinism). The user-facing cost is absorbed in the
+parser, not the block: `tomlparser.md`'s float handling interprets literals into
+fixed-point so TOML stays easy to write, while a SHM client reads the stored
+representation directly — the trade for much lower-level access, with the
+documentation that goes with it.
+
 **B5. `flake.nix`, with `cache.nixos.org` set explicitly as the substituter**
 rather than inheriting the ambient config, so a build is reproducible from a
-clean machine. This is a stated requirement, not a preference.
+clean machine. This is a stated requirement, not a preference. **Done**:
+`nixConfig.extra-substituters` names `https://cache.nixos.org`. Note that Nix
+requires `--accept-flake-config` to honour it, so a clean-machine user gets it
+from the prompt rather than silently; that is Nix's behaviour and not something
+the flake can override.
 
 **B6. The Meson structure.** `missing-devnotes-topics.md` says Mango's `meson.build`
 is the model, from `architecture-audit.md` §5. What carries over and what does not
 is open, and the answer depends on how many components there are by stage 3.
+**Mango's structure is in the tree**, with `core_sources` naming all 62
+intended translation units and the `executable()` call commented out. The list is
+`filestructure.md`'s tree in build-system terms, so it is a second place that has
+to change when the tree does. Whether the list survives stage 3 is still open,
+and the package split has made the question sharper: `libomniwm` is the internal
+development library, so the 62 units are the WM's own build, and the unit split
+is about component boundaries rather than about shielding an external library
+from dependencies. Which units belong to the core and which to the compositor is
+a phase 03 decision, and B1 above records the dependency-set correction.
+
+A general principle governs that decision, stated 2026-09-29: the core lib is a
+simple, generic feature set that cannot do much by itself, but serves as a
+foundation to build new features extremely quickly, so omniWM can realistically
+support the massive feature set it wants. A unit that is a super specific,
+complex behaviour belongs in the compositor layer or in a component on top of the
+core, not inside it. This is a rule about what a *unit* implements, not about
+what `libomniwm` links — wlroots and scenefx are dependencies of the internal
+library, not features of it, and B1's correction stands independently.
 
 **B7. `licence.md`**, which is small: the licence file itself, and a provenance
 record for anything actually copied. GPL-3.0 is already decided by
@@ -143,12 +246,17 @@ dwms macros are renamed as a whole and nothing more. What is not settled is
 whether a file-local symbol is prefixed at all, which is the difference between a
 codebase where `grep` works and one where it half works.
 
-**D8. The test seam.** Phase 01 writes the store tests, which are the only tests
-with a fixed assertion set today. Every later stage needs to test a component, and
-nothing says what a component test looks like when the component needs a wlroots
-event loop. This is the gap that makes stages 5 onward either well tested or not
-tested, and it is much cheaper to close now than after four components have each
-solved it differently.
+**D8. The test seam.** *Owned by phase 01, decided 2026-09-29.* Phase 01 writes
+the store tests, which are the only tests with a fixed assertion set today. Every
+later stage needs to test a component, and nothing says what a component test
+looks like when the component drives wlroots objects. `libomniwm` is an internal
+library and links wlroots directly, so the answer is a wlroots test harness for
+the components that own wlroots objects and the plain unit runner for the pure
+ones — the seam decides which. This is the gap that makes stages 5 onward either
+well tested or not tested, and it is much cheaper to
+close now than after four components have each solved it differently. The decision
+is that `devnotes/testing.md` states the seam, and this item stays here as the
+record of what it was blocking.
 
 **D9. The three store operations a tag is a container for.** `configstorage.md`
 §14.1 now records these as *required* rather than deferred, because `tags.md` §5
@@ -204,5 +312,6 @@ that consumes them.
   it.
 - The block-versus-process-memory rule is written as a rule, and `configstorage.md`
   §1's scope taxonomy is referenced rather than paraphrased.
-- A component test exists that runs without a wlroots event loop, or the reason it
-  cannot is written down.
+- The seam is stated in `devnotes/testing.md` §2: which components run in the
+  plain unit runner and which under the wlroots test harness, with the line
+  between them defined.
