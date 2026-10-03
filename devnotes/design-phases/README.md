@@ -89,6 +89,31 @@ a stub until its phase runs, and repairing it in the meantime costs a pass over
 the same file twice and produces a record of edits the re-evaluation would have
 made anyway.
 
+**This covers a document written ahead of its phase, not only a stub.** The rule
+above is stated for the stubs because a stub is visibly provisional. Several
+documents are provisional in the same way and are not labelled: `build.md` is
+explicitly one (§ its own preamble calls itself a stub and says only §1 exists
+until phase 02 runs), and any document carrying a decision recorded in a
+`decisions-*.md` file or in another phase's stub is carrying it early. **No
+document is corrected against a source that has not had its turn.** Where a
+document written ahead of its phase disagrees with one whose phase has run, the
+provisional one is out of date and the correction belongs to its own phase; the
+document whose phase has run is not made wrong by the disagreement, and rewriting
+it to agree re-imports an error into the document that is actually being read.
+The practical form of the rule: a status line, a count, or an "is still open"
+claim in a document whose phase has run is checked against the documents that
+phase was written against, and a disagreement with a not-yet-run phase is
+recorded rather than fixed.
+
+**A design phase delivers design.** None of these phases implements anything. A
+phase completes when its documents carry the decisions and its assertion sets name
+what will later be asserted; the artifacts those decisions describe — a test
+runner, a `tests` option, a library with symbols in it — land in the phase that
+owns the substrate, and a phase that reports itself done over an artifact it was
+never going to build has set itself a criterion it cannot meet. Writing code in a
+design phase is a decision in its own right and needs the reason recorded, not the
+habit.
+
 The default is a default, not a prohibition, and the record has already exercised
 it once. On 2026-09-27 the third audit raised findings against two stubs at the
 same time. `01-testing.md` attributed the fuzz target to `configstorage.md` §14

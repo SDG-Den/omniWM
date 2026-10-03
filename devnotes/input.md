@@ -274,12 +274,30 @@ about what the mode means.
   `include/shared/omni_layout.h` are written when the number is. The namespace is a
   separate and easier question, since a device rule is keyed by device and
   `wm.input.device.<n>.*` follows from the same convention as the other options.
-- **`isallowconflict` interacts with the index and needs a test. Owned by phase 01
-  item 5**, which is the binding match test and already names two conflicting
-  bindings in one bucket as the case that matters. Under `generaldesign.md` §14.4
-  config order is load-bearing inside a bucket, and Mango's `isallowconflict` means
-  the scan continues past a match so the first match in document order wins. The
-  index preserves that, and the only way to be sure is that test.
+- **`isallowconflict` is not carried, and the binding match test belongs to phase
+  03.** The rule `generaldesign.md` §14.4 now states is that ordering inside an
+  index bucket is config order and the **last** match wins. That is not a
+  tie-break invented for the index: a binding is an ordinary catalog entry, so a
+  later `set` replaces an earlier one — over the socket and from the config
+  parser writing through the block on the backend alike — and last-wins is simply
+  that overwrite arriving at the index. It is also what lets a config file read as
+  a script, where an assignment overrides what came before it rather than
+  competing with it.
+  Mango's `isallowconflict` means the opposite thing, that the scan continues past
+  a match so an earlier binding defers to a later one, and it only has meaning
+  under first-match resolution. We do not carry it, and the reason is a policy
+  rather than a technicality: **we are not Mango-compatible out of the box and are
+  not trying to be.** The config format is ours and differs, so a Mango config is
+  a different document rather than a near-miss, and building compatibility into
+  the native format would mean carrying flags for a format we do not otherwise
+  match. `12-languages.md` owns a Mango interpreter for omniWM — a small program
+  over our own value types — and Mango's semantics are reproduced there, so a
+  Mango config behaves like Mango through that path and our format stays clean.
+  **Owner: `03-input.md`.** The index key, the bucket layout and the trigger
+  resolution walk are that phase's subject and are not designed yet, so the test
+  follows the design rather than preceding it. This bullet was previously owned by
+  phase 01 item 5, which was a misassignment: phase 01 owns the framework and the
+  seam, and a test of an undesigned index would have had to guess its shape.
 - ~~**The `spec` field.**~~ **Moot: the field is not carried.** Mango keeps
   `char *spec`, the config line a user would edit, on every binding, and it exists
   there as a workaround for a storage model that could not hand a binding back over

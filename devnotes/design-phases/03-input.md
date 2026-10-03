@@ -75,6 +75,18 @@ Research was pending at decision time.
 trigger kinds with per-kind `enable_key` is a real option and nothing needs it at
 stage 4.
 
+**5. The binding index and its resolution walk.** `generaldesign.md` §14.4 gives the
+key and the value shape; what it does not give is the walk. Bucket layout, what
+happens when several candidates match, and how common-mode bindings take their
+second walk are all undecided, and `input.md` §7.2's binding-match test cannot be
+written until they are. The *rule* is decided and is not this item's work:
+ordering inside a bucket is config order and the **last** match wins, because a
+binding is an ordinary catalog entry and a later `set` replaces an earlier one.
+`isallowconflict` is not carried, for the reason `input.md` §7.2 gives. What this
+item owes is the walk those two facts sit in, and the test that follows it. The
+test moves here from phase 01, which had claimed it and should not have: phase 01
+owns the framework and the seam, and this is a test of an undesigned component.
+
 Two smaller items ride along: whether key repeat should fire bindings at all, and
 the deferred `binding` header offsets. The `spec` field is not on this list and
 does not belong on it: `generaldesign.md` §14.1 drops it, because it is a shim over

@@ -272,6 +272,25 @@ the second tag. Generation-correct deletion is the third because the same recurs
 has to invalidate the names of everything it removed, and `catalog_free_count` is
 what tells a reader the chain is consistent.
 
+**D10. The server.** *Owned by phase 02, decided 2026-10-03.* `server.md` §9 defers
+three items to "the compositor subsystem work that follows", and until now no row
+of `README.md`'s inventory claimed the server, so that deferral had no landing
+place and `testing.md` §7 had to record the server's live tests as unassigned.
+Phase 02 is where stage 3's server backend lives — `scaffolding.md` marks the
+backend and the header split as this phase's deliverable — so the server is
+designed here, with the substrate it sits on, and the half of the IPC surface
+that needs a live compositor to answer comes with it.
+
+The reason this phase rather than one of its own is that the server has no
+decision of its own to make. Its open items are the wlroots surface it wraps
+(`wlr_output`, `wlr_seat`, the pointer and touch protocols) and the contents of
+the registration table, and both are answers to "what does the substrate expose",
+which is this phase's question. A phase of its own would have nothing to decide
+before this one runs. Its tests follow D8's line rather than a new one:
+`testing.md` §2 puts a component that drives wlroots objects under the wlroots
+harness, so the server's components and the live IPC dispatch are harness cases,
+and both land with the substrate that makes them linkable.
+
 ## What it resolves
 
 - Whether the design is buildable at all, which is the precondition for phase 01's
@@ -288,6 +307,8 @@ what tells a reader the chain is consistent.
 - The write pattern of D9, which phase 05's `configstorage.md` §14.1 rows are
   specifications for rather than only names, and which phase 01's store tests need
   in order to assert something more interesting than that a write took effect.
+- Where the server is designed, which `server.md` §9 deferred and no phase
+  claimed, and therefore where its live IPC tests are written.
 
 ## Why it is second
 
@@ -315,3 +336,6 @@ that consumes them.
 - The seam is stated in `devnotes/testing.md` §2: which components run in the
   plain unit runner and which under the wlroots test harness, with the line
   between them defined.
+- `server.md` §9's three deferred items have answers here, and the server's
+  components appear in `testing.md` §2's harness list rather than in its
+  unassigned row.

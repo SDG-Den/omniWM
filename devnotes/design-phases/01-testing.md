@@ -8,7 +8,29 @@ wrong citation, deferred to this phase by `00-reconciliation.md`'s resolution
 item 8. It is now repaired: item 3 cites `configstorage.md` §12.6, which is the
 section that names the fuzz target, rather than §14, which is the deferral list.
 
-Stub. Not started. Build scaffolding in the tree; the document is not.
+Stub, worked. Phase 01 has run: `devnotes/testing.md` is written, and this file's
+checklist was the working document that produced it, so the two are read together.
+Two items below carried no clause in the "Done when" list and were therefore never
+gated — item 2, the ABI static-assert header, and item 6, what `configstorage.md`
+§14 defers. Both are answered in the document rather than here: §5.2 states which
+constants the asserts cover, and which half of §14's deferral they do not.
+
+Three of this stub's items moved or changed hands after the phase, and the
+document now says so rather than the stub being rewritten to match:
+
+- **Item 5, the gesture and binding match test, is not here.** Its ordering rule
+  was decided as last-match-in-config-order-wins, and Mango's `isallowconflict`
+  is not carried; the test itself follows the resolution walk, which is
+  `03-input.md` item 5's subject and is not designed. `input.md` §7.2 records the
+  reassignment and the reason phase 01 should not have claimed it.
+- **The store fuzz target and the runner are specified, not built.** This phase
+  fixes what they are; the artifacts depend on a substrate that does not exist
+  yet, which is the rule the phase directory's README now states.
+- **`06-looks.md` and `05-server.md` never existed as phases.** The render work
+  belongs to phases 08 to 10. The server's tests were briefly unassigned too,
+  which was a gap rather than a decision, and `02-substrate.md` D10 closes it:
+  the server has no design decision of its own, so it belongs with the substrate
+  it wraps and with the wlroots harness its components run under.
 
 **Build scaffolding added 2026-09-27.** `flake.nix`, `meson.build`,
 `meson_options.txt`, `protocols/` and `nix/` are in the tree, and all four Nix

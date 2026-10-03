@@ -225,7 +225,7 @@ avoid sharing a prefix. Hotplug is therefore not the reverse of a tag move, whic
 sequence of swaps rather than a move.
 
 **9. The wholesale-port wording. Closed.** The owner supplied the replacement
-sentence and it is now the policy in `generaldesign.md` §14: **we use Mango's code
+sentence and it is now the policy in `generaldesign.md` §14: **we use MangoWM's code
 where we can, and change what we need.** The word "wholesale" is gone from every
 place that asserted a completeness nobody had checked. It survives in five places,
 all of which are about the word rather than the decision: this item, this
@@ -274,9 +274,13 @@ three were run after the final edit.
   or a named owner.** Met. The twelve are the eleven rows of
   `design-phases/README.md`'s inventory plus `audits/architecture-audit.md`. The
   two that were genuinely unowned at the end are `input.md` §7.2's device-rule
-  type tag and its `isallowconflict` test. Both are named, and the second is
-  unambiguous: **phase 01 item 5** is the binding match test and already names two
-  conflicting bindings in one bucket as the case that matters. The first was named
+  type tag and its `isallowconflict` test. Both are named, and the second has
+  since moved again: it was **phase 01 item 5**, and it is now `03-input.md`
+  item 5, because the ordering rule turned out to be last-match-in-config-order
+  -wins with `isallowconflict` not carried, and the test has to follow the
+  resolution walk that phase 03 designs rather than a framework phase guessing at
+  it. The criterion is met by a decision plus an owner either way; what changed
+  is which phase holds the test. The first was named
   twice and to two different phases, which was an ownership conflict rather than a
   gap, and it is now resolved rather than averaged: `input.md` §7.2 and
   `03-input.md` item 2 agree that **the number is chosen in phase 03, when the

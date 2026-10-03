@@ -195,7 +195,7 @@ place would move live entries, invalidate every held
 rather than of a derived index.
 
 The C signature of the read this section describes is not restated here.
-`configstorelayout.md` §14.1 owns it, as
+`configstorelayout.md` §14 owns it, as
 `OMNI_ERR_* omni_get(omni_block *, const char *name, omni_value *out)`, and it is
 stated there once rather than in both places.
 

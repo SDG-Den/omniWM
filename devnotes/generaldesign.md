@@ -547,7 +547,8 @@ What Mango's `KeyBinding` carries, and where each field goes:
 | `func` | `action_ref`, a frame offset holding the action's name |
 | `arg` | `args_ref` and the inline positional array, already in the header |
 | `mode`, `iscommonmode`, `isdefaultmode` | fields in the header, subject to §14.4's namespace mapping, which `input.md` §7.1 records as still open |
-| `islockapply`, `isreleaseapply`, `ispassapply`, `isallowconflict` | flag bits in the header's flags word |
+| `islockapply`, `isreleaseapply`, `ispassapply` | flag bits in the header's flags word |
+| `isallowconflict` | **dropped**, and the one flag in this table that is. It means that the scan continues past a match so an earlier binding defers to a later one, which is only meaningful under first-match resolution; §14.4 resolves a bucket by last-match-wins, where a later `set` has already replaced the earlier binding outright and there is nothing left to defer to. We are not Mango-compatible out of the box and do not intend to be, and a Mango config gets Mango's semantics through `12-languages.md`'s interpreter rather than through a flag our format carries for a format it does not otherwise match. |
 | `spec`, `line_number`, `file_index` | **dropped, all three, for one reason.** They describe where a binding was *written* rather than what it does, and none of them is a fact a reader of the block can use. `line_number` and `file_index` are plainly TOML parse diagnostics. `spec` is subtler and deserves the reasoning, because it looks load-bearing in Mango and is not load-bearing here: it is a shim over Mango's original storage, where a binding lived in process memory and could not be fetched over the IPC, so the only handle a human had on a binding was the config line the user had written. `spec` was how Mango echoed something recognizable back. In a block the binding *is* the record, it has a key, and `ipc.md` §4's `get` returns it verbatim, so the handle already exists and does not need a stored copy of the source text. Storing one would also be a second copy of the truth that only some bindings would have: a binding written by `set` over the socket never had a config line, and a value reconstructed from a record by running a parser backwards is lossy in a way the record itself is not. A redesign that allows scriptable configuration is exactly the case where a binding's origin text is the *least* interesting thing about it. |
 
 The header therefore grows past its current 24 bytes, which answers the question
@@ -620,10 +621,25 @@ value = candidate list of (entry_id, entry_generation), in config order,
   what keeps the candidate lists short.
 - **The trigger is in the key** for the same reason: a keysym match and a
   keycode match are both one hash lookup rather than a walk.
-- **Ordering inside a bucket is config order and is load-bearing.** Mango's
-  `isallowconflict` means the scan continues past a match, so the winner is the
-  first match in document order. An index that reorders by hash or by
-  registration time changes which binding fires.
+- **Ordering inside a bucket is config order and is load-bearing, and the last
+  match in that order wins.** A binding is an ordinary catalog entry, so a later
+  `set` replaces an earlier one: the same `set` over the socket, and the config
+  parser writing through the block on the backend, both land as an overwrite of
+  the key rather than as a second entry. Last-wins is therefore not a resolution
+  rule invented for the index — it is the block's own semantics arriving at the
+  index, and it is what lets a config file be read as a script, where each
+  assignment overrides what came before. An index that reordered by hash or by
+  registration time would break that, and would also make a binding's meaning
+  depend on something the user cannot see.
+- **`isallowconflict` is not carried.** Mango's flag lets one binding defer to a
+  later one, which is only meaningful under first-match resolution, so it has no
+  counterpart here. We are not Mango-compatible out of the box and do not intend
+  to be: the config format is ours, and a Mango config is a different document
+  than ours rather than a near-miss. `12-languages.md` owns a Mango interpreter
+  for omniWM, which is a small program over our own value types, and that is
+  where Mango's semantics live — so a Mango config gets Mango's behaviour through
+  that path instead of our native format carrying a flag for compatibility with a
+  format it does not otherwise match.
 - **Common-mode bindings get a short second walk.** Mango's
   `iscommonmode || isdefaultmode || strcmp(mode) == 0` means a common binding
   matches in every mode. Making it a wildcard in the hash key would mean either a

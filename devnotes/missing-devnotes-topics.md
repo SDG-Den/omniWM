@@ -35,7 +35,7 @@ instead.
 | protocols | `protocols.md` | the Mango protocol set, reused where we can and changed where we must; which wlroots managers the compositor instantiates; the region-based external rendering path; the later Wayland buffer-injection protocol for GPU-path external renderers | 16, 18 | P2 |
 | languages | `languages.md` | the C reference client library over `include/shared/`; the Python reference scripting library; the Mango and Hyprland interpreters; why a first-class library in another language needs no compositor change. All four are **separate example programs written after the project is complete**, not deliverables of the window manager, and no interpreter or library is in scope at all — see `generaldesign.md` §17 | 15, 16, 17, 18 | P2 |
 | build | `build.md` | a stub now exists, holding one thing: how the C in this repository is compiled, which was a fact no document recorded and which three verification paragraphs in `00-reconciliation.md` had already got wrong. §1 of it is cited by those paragraphs rather than their carrying their own invocation. What is still unanswered is everything else: the dependency set and the wlroots and scenefx version coupling; the exact scenefx extensions needed for user GLSL shaders and 3D transforms, and whether it is a maintained patch or a fork; the solver's arithmetic width and whether a solve runs on CPU or GPU, which the layout engine does not depend on. A `flake.nix` is wanted, with **`cache.nixos.org` set explicitly as the substituter** rather than inheriting the ambient config, so a build is reproducible from a clean machine. **Update 2026-09-27: the `flake.nix` exists and names `cache.nixos.org` in `nixConfig`, and the dependency set, the wlroots and scenefx coupling, and the Meson structure are Mango's and are in the tree and configure against nixpkgs-unstable.** The build exposes five packages — core library, IPC, debugger, WM, debug WM — separated by Meson `install_tag` rather than by copying dependencies between outputs; `build.md` §2.1 has the table and the closure check. Still unanswered: the exact scenefx extensions, which is why the build takes scenefx from nixpkgs rather than Mango's flake input, and the solver's arithmetic width. The Mango-dependency question itself is answered: `libomniwm` is the internal development library, so the whole list belongs to it, and the external SHM-client library is a separate future package with no wlroots dependency. Phase 02's build half owns the rest | 3 | P0 |
-| testing | `testing.md` | **stage 1's one missing document.** The store write and read test, the ABI static-assert header, the store fuzz target and its corruption corpora, a layout and constraint solver test, a gesture and binding match test. The write and read test needs only `configstorelayout.md` §2, §3, §4, §5, §6, §6.1, §7, §8, §9, §10, §11 and §13, all of which are byte-exact and internally consistent, plus the invariants in §12 as the assertion set. The fuzz target `configstorage.md` §12.6 names has no implementation, and `configstorage.md` §14 defers compile-time ABI tests that the `OMNI_STATIC_ASSERT`s in `omni_layout.h` partly cover | 1 | P0 |
+| testing | `testing.md` | **written by phase 01; the document is not a gap.** It carries the test seam, the framework, the per-tier store tests, the fuzz corpus and a table of deliberate absences. What it specifies has no runner in the tree: `meson.build` has no test registry and `meson_options.txt` has no `tests` option, so nothing executes the assertion set yet. The store write and read test needs only `configstorelayout.md` §2, §3, §4, §5, §6, §6.1, §7, §8, §9, §10, §11 and §13, all of which are byte-exact and internally consistent, plus the invariants in §12 as the assertion set. The fuzz target `configstorage.md` §12.6 names has no implementation, and `configstorage.md` §14 defers compile-time ABI tests that the `OMNI_STATIC_ASSERT`s in `omni_layout.h` partly cover | 1 | P0 |
 | licence | `licence.md` | the licence file itself, and a provenance record for anything actually copied, which is a chore at the moment of the first copy rather than a design question | 3 | P3 |
 
 Rows P0 and P1 are the compositor itself and are what stages 1 to 14 deliver.
@@ -47,8 +47,9 @@ and are what stages 15 to 18 and the early documentation deliver.
 Nothing above needs a decision. What stages 1 to 4 still need is **writing**,
 not deciding:
 
-- `testing.md`, which is stage 1's one missing document and the reason stage 1
-  cannot be called done.
+- `testing.md`, which **exists**: phase 01 wrote it, and it carries the seam, the
+  framework, the per-tier store tests, the fuzz corpus and the deliberate
+  absences. The runner it specifies is not in the tree yet.
 - `build.md`, whenever someone wants to build.
 - The `binding` record offsets, which wait on stage 10.
 
@@ -169,8 +170,10 @@ reasoning is the thing worth keeping:
    keep the block as the source of truth and put a hash index over it in
    `core/input`, keyed on `(normalized modmask, trigger, mode_id)`, with the
    resolved action handle cached in the index. Ordering within a bucket is config
-   order and is load-bearing, because Mango's `isallowconflict` means the first
-   match in document order wins.
+   order and is load-bearing, and the last match in that order wins: a binding is
+   an ordinary catalog entry, so a later `set` replaces an earlier one and
+   last-wins is that overwrite arriving at the index. Mango's `isallowconflict`
+   means the opposite and is not carried.
 7. **The store read path: optimized, and it changed the layout.** The reason it
    needed optimizing is that the storage model is not Mango's. Mango's read is a
    load from a struct the parser filled; a read here is a hash, an index probe, a

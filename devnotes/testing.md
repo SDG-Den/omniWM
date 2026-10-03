@@ -18,7 +18,7 @@ would not have to guess a shape.
 
 - The store (`configstorelayout.md`, `configstorage.md`) is designed. Its tests
   are here.
-- The TOML parser (`tomlparser.md`) is designed. Its tests are here.
+- The TOML parser (`tomlparser.md`) is designed. Its tests are here, §5.5.
 - The tags container (`tags.md` §5) is designed. Its container-op assertions are
   here, as `configstorage.md` §14.1's three required operations.
 - The layout solve (`layoutengine.md` §3.2) is designed for the *solve* half. Its
@@ -26,11 +26,14 @@ would not have to guess a shape.
 - The IPC surface (`ipc.md` §3, §4, §5.2) is designed for what is testable
   without a compositor. Those assertions are here, and the live-dispatch half is
   explicitly absent (§7).
-- The binding index (`input.md` §7.2, `generaldesign.md` §14.4) has one decided,
-  stable property: config order inside a bucket. That one test is here.
-- Everything else — keymodes, the device-rule record, the stylus trigger kind,
-  the render pipeline, the input pipeline, the server — is not designed, and its
-  tests are owned by `03-input.md`, `05-server.md`, and the phases that follow.
+- Everything else has no test here. The binding index is the clearest case: its
+  ordering *rule* is decided (§14.4 — last match in config order wins), but the
+  walk it sits in is not designed, so the match test belongs to `03-input.md`
+  item 5 rather than here. Keymodes, the device-rule record and the stylus trigger
+  kind are decided in `decisions-2026-09-29.md` (§2 and §4) and fleshed out by
+  `03-input.md`, which owns their tests. The render pipeline belongs to phases 08
+  to 10. The server is designed in `02-substrate.md` (D10), which also owns the
+  wlroots harness its components run under.
 
 The rule is enforced by the phase boundary rather than by an editor. When
 `03-input.md` decides its open items, the tests it owes appear in that phase's
@@ -107,11 +110,12 @@ authoritative mapping, and this section lists where each tier's rows are asserte
 rather than repeating all 51 rows here:
 
 - **L1** (10 rows, header-level): the store header test, §5.1 (a).
-- **L2** (10 rows, section-level): the section test, §5.1 (b), except the three
-  `solved` rows, which live in §5.3 where the geometry they protect is produced.
+- **L2** (10 rows, section-level): the section test, §5.1 (b), except four rows.
+  Three `solved` rows live in §5.3 where the geometry they protect is produced, and
+  the `publish_seq` row lives in §5.1 (d), where the writer's metadata update is
+  the context that makes it meaningful.
 - **L3** (17 rows, slot-level): the allocation tests, §5.1 (c), with the
-  journal-identity row asserted in §5.1 (d) where a writer's metadata update is
-  the context that makes `publish_seq` meaningful.
+  journal-identity row asserted in §5.1 (d) on the same reasoning.
 - **L4** (10 rows, value-level): the value tests, §5.1 (e).
 - **R** (4 rows, replay): the replay test, §5.1 (d).
 
@@ -208,6 +212,27 @@ each once, and the fuzz corpus never bothers with them (a case that clobbers
 constant per `build.md` §1; the mapping precondition and the compile-time assert
 are the same fact checked in two places, and §12.6's check covers them once.
 
+**Which half of `configstorage.md` §14's deferral this covers, and which half it
+does not.** §14 defers "compile-time ABI tests asserting the header's values
+against this document", and the deferral splits in two:
+
+- **Covered.** Every constant in `configstorelayout.md` §2 that the header defines
+  is held by an `OMNI_STATIC_ASSERT`, and the section offsets are held by
+  arithmetic asserts that check the derived chain (`OMNI_JOURNAL_OFF`,
+  `OMNI_REQUESTS_OFF`, `OMNI_REGION_DESC_OFF`, `OMNI_SOLVED_OFF`, `OMNI_POOL_OFF`).
+  So the header cannot disagree with §2's numbers without becoming a build failure,
+  and the section table cannot be laid out inconsistently without one either. §2 is
+  the section `build.md` §1's compile actually checks.
+- **Not covered.** §14 defers the asserts against `configstorage.md`, and that is
+  the half nothing checks. §2's numbers, the header, and the store test agree by
+  transcription; none of them reads `configstorage.md`'s prose, so a rule stated
+  only there — a capacity rationale, a lifecycle sentence, a bound argued rather
+  than tabulated — has no mechanical counterpart and can drift from the constants
+  it justifies. Closing that half means asserts written against the document that
+  carries the reasoning, which is a different exercise from the one §1 performs and
+  is **not** done here. The fuzz target does not close it either, because a
+  mutation asserts what the code does rather than what a document says.
+
 ### 5.3 The layout solve
 
 `layoutengine.md` §3.2 makes the solve deterministic, which is what makes a
@@ -254,21 +279,92 @@ case rather than three settings of one:
   stale `entry_ref` in the exchange must not carry the dead half across: the
   exchange validates both sides or refuses.
 
-### 5.5 The binding index (one test)
+### 5.5 The TOML parser
 
-`input.md` §7.2 names the one case that is stable today: two conflicting bindings
-in one index bucket, where `generaldesign.md` §14.4's `mode_id` is part of the
-index key and Mango's `isallowconflict` makes config order load-bearing inside a
-bucket. The test asserts that the later binding in the same bucket wins, and that
-a binding in a different bucket does not participate. Everything else about input
-— keymodes, device-rule records, trigger kinds — is owned by `03-input.md`.
+`tomlparser.md` is closed: its §11's five bullets are decided, delegated or out of
+scope, so every assertion below is read off a decision rather than off a guess.
+The parser's most important property is not a parse at all — it is that it is a
+facade — so the first group is the one that catches a second value format
+appearing.
+
+- **facade equality (§1, §10).** A value written from a config file and the same
+  value written over IPC are byte-identical in the block, in both directions,
+  because the parser reuses `ipc.md` §3's encoder and decoder verbatim rather than
+  having its own. A grouped commit from a file is indistinguishable from one from
+  the socket: same `commit_id`, same `COMMIT_END`, same journal entries, so a
+  watcher cannot tell which surface produced them. An unknown key is stored and
+  served verbatim rather than rejected.
+- **type binding (§2).** `boolean` → `bool` direct; a registered key decodes to its
+  declared tag; an unregistered key's integer literal → `i64` and its float
+  literal → `f64`. All four TOML date and time forms land on the single `datetime`
+  tag rather than four.
+- **no invented tags (§2).** A table bound to a declared composite key — `binding`,
+  `constraint`, `client_rule`, `map` — takes that composite tag with its field
+  names preserved, never a positional `tuple`. There is no `layout`,
+  `layout_rule` or `space` tag: a space is an `option` and a rule is a named key
+  inside it, so the assertion is that a whole program round-trips as the four keys
+  of `omniwm.layouts.<name>`, with `.rules` and `.spaces` as `[[...]]` arrays and
+  `.viewport` as an inline table.
+- **numeric typing comes from the key (§3).** `gaps = 8` and `gaps = 300` are the
+  same declared type, not the narrowest width that fits, so a consumer never has
+  to handle both. A literal that does not fit the declared tag is a line failure
+  carrying the line number, not a truncation. The explicit table form
+  `wm.gaps = { type = "u32", value = 8 }` binds regardless of registration and is
+  checked against the declared type for a registered key.
+- **the two suffixed string forms (§4).** `500ms`, `2s`, `100us` and `500ns` are
+  `duration`; a bare `1500` is a `duration` defaulting to milliseconds. A string
+  that is not a valid suffixed duration is an ordinary `string` and is **not** a
+  failure — `wm.title = "1500"` stays a `string`, which is the case that makes
+  guessing wrong unacceptable. A `duration` is nanoseconds in the block and
+  travels as a wide integer, so the config and socket forms agree exactly.
+- **arrays (§5).** A heterogeneous array is a line failure with the line number,
+  not a coercion that silently discards a value. An empty array has no elements to
+  infer from, so it is representable only because `elem_type` is explicit in the
+  wire form: `wm.key_order = { type = "array", elem_type = "string", value = [] }`
+  parses and round-trips.
+- **tables (§6).** A table is a `tuple` whose `field_types` come from field order
+  once each field is bound to its registration, so `{ width = 2, color = "#3d6bff" }`
+  yields `["u32", "rgba8"]`. A dotted key and a nested table spell the same config
+  key. Assigning a table is one commit replacing the whole value and never a
+  merge, which is what makes a reload's effect predictable.
+- **datetimes (§7).** All four TOML forms normalise to the same value, so two
+  offsets naming the same instant compare equal. A `datetime` is 8 bytes and uses
+  `value_inline`, so it costs no arena frame — asserted against the frame count
+  before and after the write.
+- **per-line failure, one whole-file failure (§8).** A failing line is logged with
+  its line number, counted in the response and not applied, while the rest of the
+  file loads. A file that fails to parse begins no commit and leaves the live
+  block untouched — the transaction assertion, and the one `ipc.md` §6's guarantee
+  is inherited through. Exceeding `OMNI_CONFIG_MAX_OPS` is the single whole-file
+  failure and is reported as `CONFIG_TOO_LARGE` with the count. The guarantee
+  covers the block: an `exec` line's effects lie outside it and are not rolled
+  back when a later line fails.
+- **defaults are per key and never stored (§11).** A program with `rules` and
+  `spaces` and no `viewport` gets the static identity viewport; no
+  `rearrange_on_focus` gets the static `true`; `viewport` with no `spaces` gets no
+  spaces; no absence is an error. The load-bearing assertion is negative — the
+  block never carries a seeded copy of a default, so `save` writes out only what
+  the user chose and a later change to a default still reaches everyone who has
+  not overridden it.
+- **blank is not malformed (§11).** A `spaces` array containing a table that is not
+  a space is a parse error for that line, reported per §8, and never silently
+  replaced by the default. A missing key and a present-but-invalid key take
+  different paths and both are asserted, because the first is a decision about
+  something the user did not write and the second would discard something they
+  did write and did not mean.
+- **round-trip (§9).** The parser is also the `save` implementation, so a saved
+  config reloads: a declared `u32` writes as a bare integer and reloads as the
+  same `u32` through its registration, a literal-derived `f64` reloads as the same
+  tag, and a value TOML cannot express — a `blob`, an `option(None)` — is written
+  in the explicit table form, which is why that form has to exist in the input
+  direction too.
 
 ### 5.6 IPC, the testable boundary
 
 The IPC assertions that run without a live compositor, per `ipc.md`:
 
-- **readiness behaviour** (§5.2): `get`, `watch`, `unwatch`, `save`, and `reset`
-  hard are served while `NOT_READY`; `set`, `exec`, `delete`, `reload`, and
+- **readiness behaviour** (`ipc.md` §5.2): `get`, `watch`, `unwatch`, `save`, and
+  `reset` hard are served while `NOT_READY`; `set`, `exec`, `delete`, `reload`, and
   `reset` soft are refused with `NOT_READY`. The table's split is the test: reads
   are never refused, writes are.
 - **wire limits** (§3.3-§3.4): each of the value limits in §3.3's table is
@@ -326,21 +422,44 @@ Each item that is *not* tested here, and the phase that owns it.
 | absent | owned by |
 |---|---|
 | layout **pass**, not the solve (items 15-17 of `07-layoutengine.md`) | `07-layoutengine.md` |
-| keymodes, device-rule record, stylus trigger kind, and any binding-match test that depends on them | `03-input.md` |
-| wlroots-bound components, tested under the wlroots harness (§2) | `05-server.md` first, then every phase that owns one |
-| the render pipeline, animation, shaders | `06-looks.md` |
+| the binding index's resolution walk and the binding match test that follows it | `03-input.md` item 5 |
+| keymodes, device-rule record, stylus trigger kind | `03-input.md` |
+| the IPC live dispatch that needs a live compositor | `02-substrate.md` (D8's harness, D10's server) |
+| the render pipeline, the scene graph, animation and shaders | `08-draw.md`, `09-decorate.md`, `10-animate.md` |
 | the input pipeline, seats, keyboard handling | `03-input.md` |
+
+Two rows are worth a note. The wlroots harness row names `02-substrate.md` because
+the server has no design decision of its own — its open items are the wlroots
+surface it wraps and the contents of the registration table, which are answers to
+"what does the substrate expose" — so `02-substrate.md` D10 claims it along with
+the live dispatch, and the harness it needs is D8's. The looks row previously named
+`06-looks.md`, which is not a phase in this plan; looks is split across draw,
+decorate and animate, and the render work belongs to all three.
+
+The binding match test was in this document and has moved to `03-input.md` item 5.
+Its ordering rule is decided and was wrong here: §5.5 asserted a winner that
+inverted `generaldesign.md` §14.4, and the correction is that the **last** match in
+config order wins. The test itself has to follow the walk, and the walk is phase
+03's subject — a test written before the bucket layout and candidate resolution
+exist would have been a guess at a shape, which is the one thing §1 forbids.
 
 The framework they will use is the one defined here; the seam they will run
 against is the same boundary. Nothing in the list is deferred because it is hard
-to test. Each is absent because `03-input.md` item 5's rule applies to this phase
-too: a test that has to guess at a shape no document has decided is a test that
-should not exist yet.
+to test. Each is absent because §1's ownership rule applies to this phase too: a
+test that has to guess at a shape no document has decided is a test that should
+not exist yet.
 
 ## 8. Done when
 
-- `nix flake check` and `nix build` both pass, and the `omniwm-test` binary is
-  part of the build with tests enabled and fails loudly if it has no cases.
+- The runner is **specified**, not built. §3 fixes what `omniwm-test` is, what
+  `OMNI_TEST` does, how a test registers, and that the runner fails loudly rather
+  than reporting green with no cases — that much is this phase's output and it is
+  done when the specification above is complete and internally consistent. The
+  binary, the `tests` option in `meson_options.txt` and the `test/` tree are not
+  owed here: a design phase delivers design, and every artifact §3 describes
+  depends on a `libomniwm` that has no symbols until the substrate lands. The
+  implementation lands with the phase that owns the substrate, and `meson.build`
+  already reserves the position by recording that no test registry exists yet.
 - Every §12 row maps to an assertion via §4's matrix, and §4 says which test each
   tier's rows live in. The five tiers each have at least one named case, the
   fifth being replay.
@@ -352,5 +471,5 @@ should not exist yet.
   has a recorded seed.
 - The solve test asserts the determinism *mechanism* (entry_id ordering), not
   merely identical bytes once.
-- The IPC boundary is recorded: what runs here and that live dispatch is owned by
-  `05-server.md`.
+- The IPC boundary is recorded: §5.6 says what runs here, and §7 assigns the live
+  half to `02-substrate.md`.

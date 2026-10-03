@@ -446,10 +446,17 @@ without walking a variable-length record.
 | 20 | 4 | `by` | i32, `OFFSET` only, may be negative |
 
 The other two composite tags have no byte table because they are not
-fixed-shape. `constraint` is `0x32` and its payload is
-`array of option`, one per space, with a rule as a named key of that option, so
-its size is whatever those nested frames come to. `map` is `0x34` and its
-payload is `array of entry` where an entry is a `tuple` of a framed key string
+fixed-shape. `constraint` is `0x32`, the tag of `omniwm.layouts.<name>.spaces`,
+and its payload is `array of option`, one per space, with a rule as a named key
+of that option, so its size is whatever those nested frames come to. Its two
+sibling structural keys are `omniwm.layouts.<name>.rules` and
+`omniwm.layouts.<name>.viewport`, which are `array of option` and `option`
+respectively (`configstorage.md` §4, `layoutlanguage.md` §1). Those three are the
+program's structure and the reason this payload is a tree; a fourth key,
+`rearrange_on_focus`, is a boolean about when a solve runs and has no
+representation in the block at all, so it is not one of the three.
+`map` is `0x34` and its payload is
+`array of entry` where an entry is a `tuple` of a framed key string
 and any value, so likewise. Both are bounded by
 `OMNI_VALUE_MAX_ARRAY_ELEMS` and `OMNI_VALUE_MAX_FRAMED` rather than by a
 length this document could tabulate, and the nesting bound is
