@@ -533,7 +533,7 @@ the reason is one of these three:
 
 **Decided: every field of every binding is stored in shared memory.** A binding
 is a catalog entry whose value is a `binding` tagged value
-(`configstorelayout.md` §4). Mango's `config.key_bindings[]` and its four
+(`configstorelayout.md` §5). Mango's `config.key_bindings[]` and its four
 sibling arrays cease to exist as storage; they become catalog entries, and the
 keymap handler takes its candidates from the block. The reasoning is the same one
 that settled `action_ref` (`helpers.md` §6.2): a binding a user cannot read in
@@ -567,7 +567,7 @@ structure.** These are different things and conflating them is the one way this
 decision could have gone wrong, so the split is explicit:
 
 - A **frame offset is not stable.** The arena grows, the journal is append-only,
-  and `configstorage.md` §2 gives a key reference as
+  and `configstorage.md` §0.1 gives a key reference as
   `(epoch, entry_id, entry_generation)` for exactly this reason. An index built
   out of frame offsets would dangle on the next commit that grows the arena.
 - **`helpers.md` §1 already puts all indexes in process-private memory.** The

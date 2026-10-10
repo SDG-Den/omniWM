@@ -561,13 +561,14 @@ OMNI_STATIC_ASSERT(OMNI_HDR_OFF_REGION_HEAD % 8 == 0, "region_head aligned");
 #define OMNI_TAG_CONSTRAINT UINT16_C(0x32) /* a constraint program, see 2.10 */
 #define OMNI_TAG_CLIENT_RULE UINT16_C(0x33) /* matches a client, not a key */
 #define OMNI_TAG_MAP UINT16_C(0x34)        /* a keyed block of typed values */
+#define OMNI_TAG_Q32_32 UINT16_C(0x35)     /* signed fixed-point 32.32 in int64_t */
 
 /* Tag ranges. See the three-way tag decision in configstorage.md 12.1. */
 #define OMNI_TAG_MIN_KNOWN UINT16_C(0x01)
-#define OMNI_TAG_MAX_KNOWN UINT16_C(0x34)
+#define OMNI_TAG_MAX_KNOWN UINT16_C(0x35)
 #define OMNI_TAG_EXTENSION_BASE UINT16_C(0x8000)
 #define OMNI_TAG_UNASSIGNED_0 UINT16_C(0x00)      /* never a live tag */
-#define OMNI_TAG_UNASSIGNED_LO UINT16_C(0x0035)   /* hole in the core table */
+#define OMNI_TAG_UNASSIGNED_LO UINT16_C(0x0036)   /* hole in the core table */
 #define OMNI_TAG_UNASSIGNED_HI UINT16_C(0x7FFF)
 
 OMNI_STATIC_ASSERT(OMNI_TAG_MAX_KNOWN < OMNI_TAG_EXTENSION_BASE, "tag ranges");

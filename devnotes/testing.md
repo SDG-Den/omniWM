@@ -198,7 +198,7 @@ The largest single test group, and the assertion set is the §12 invariant table
   windows; a `body_ref` resolving to a frame whose `next_free` is non-zero is
   refused as free; inline values have `body_ref == 0` and a type-valid length;
   extension tags accepted only with structurally valid framed payloads; unassigned
-  low tags (0x00, 0x35..0x7FFF) refused, not read as extensions; request-name NUL
+  low tags (0x00, 0x36..0x7FFF) refused, not read as extensions; request-name NUL
   and fixed-limit handling with target generations matching; `CREATE_REGION`
   width/height/slot_count bounds; `(epoch, ticket)` validation by a requester
   before trusting a terminal slot; a region reference carrying a live descriptor
@@ -260,6 +260,12 @@ The fixed-point representation decided for B4 (`02-substrate.md`) is exercised
 here at the commit surface: the input is parsed from TOML float literals
 (`tomlparser.md` §3), the stored value is fixed-point, and the solve consumes the
 fixed-point representation with no float scope in the block.
+
+The assertion that pins it: a q32_32 key holds an `int64_t` frame tagged
+`OMNI_TAG_Q32_32`, and the TOML literal `1.5` stores `0x180000000` (1.5 × 2^32).
+A literal the representation cannot hold exactly (for example `0.1`) is rounded
+to the nearest representable value by the parser, so the round-trip test reads
+back the rounded value, never the literal and never a float.
 
 The pass half — what triggers a pass, when the first pass may run, whether it is
 idempotent — is owned by `07-layoutengine.md` (items 15-17) and is absent here

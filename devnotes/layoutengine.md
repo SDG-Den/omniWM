@@ -274,7 +274,7 @@ expression. `rule` is not one; it is a key match-and-replace record
 (`helpers.md` §6.2). The three-way tag decision in `configstorage.md` §12.1 then
 fixes what follows from that gap:
 
-- `0x35..0x7FFF` is unassigned, and an unassigned low tag is malformed and
+- `0x36..0x7FFF` is unassigned, and an unassigned low tag is malformed and
   refused by the core, so a new core type cannot be quietly introduced. §2.9
   reopens the freeze that made this expensive rather than forbidden, and §2.10
   is the resulting list;
@@ -353,7 +353,7 @@ still open is the narrower
 question §3.7 carries, which is when the first pass can run before there are
 clients to place.
 
-`server.md` §7 and `helpers.md` §6.1 fix the execution model. Dispatch is
+`server.md` §5 and `helpers.md` §6.1 fix the execution model. Dispatch is
 single-threaded on the event loop, there is no quiescence protocol, a callback
 that commits re-enters dispatch one level deep, and arguments are resolved
 before the callback is entered. The arrange pass therefore runs on the event
@@ -439,8 +439,8 @@ estimate:
    `OMNI_TAG_CONSTRAINT` at `0x32` and `OMNI_TAG_CLIENT_RULE` at `0x33`. Added
    since, and not from this list because `windows.md` §9.3 needed it rather than the
    solver: `OMNI_TAG_MAP` at `0x34`, a keyed block of typed values, since the store
-   had no composite value with named fields. So the table now runs `0x01` to `0x34`
-   with `0x35..0x7FFF` as the hole. The gap was real rather than
+   had no composite value with named fields. So the table now runs `0x01` to `0x35`
+   (Q32.32 solve values, B4) with `0x36..0x7FFF` as the hole. The gap was real rather than
    hypothetical, and what it cost was:
 
    *Cost of minting a core tag:* one constant in `omni_layout.h` section 7, a row in
@@ -602,6 +602,14 @@ Resolved: the degradation mechanism, and determinism, which its own last bullet
 states as a requirement. What a user writes belongs to `layoutlanguage.md`, which
 is normative for the language, so the status of the surface is this section's
 reconciliation to read rather than a second opinion to hold.
+
+**The arithmetic width is fixed, and it serves the determinism claim.** Phase 02
+(B4, `build.md` §5) chose Q32.32 in `int64_t`: solve inputs are stored and read
+as `OMNI_TAG_Q32_32` (the §7 tag table, `configstorage.md` §4), a TOML float or
+integer literal is scaled by 2^32 and rounded by the parser (`tomlparser.md` §3),
+and every reading the solver does is that representation, so the solve never
+touches a float (`testing.md` §5.3). There is no kind input, so the solver has no
+client-kind partition to carry into the arithmetic.
 
 **Weighted minimisation, and nothing is dropped.** §2.3's inherited wording asked
 for a drop rule. The mechanism is weighted least squares over the constraint
@@ -807,13 +815,13 @@ value came from: a literal compiled into the binary rather than text read from a
 file. Everything downstream is identical, and the last step of both is a write to
 the SHM block, so "registered" and "configured" are not two different states.
 
-The mechanism is a register function and a per-layout write function. The collect
-pass (`omni_register_layouts()`, `helpers.md` §2) appends the layout component
-and reserves each built-in name; each built-in's own function
-(`init_layout_<name>()`, for example `init_layout_dwindle`) makes the store calls
-for its program. Registration runs at boot ahead of every user registration, so
-the built-in names are already occupied by the time a user can register a layout
-and a user layout of the same name overrides the built-in (`server.md` §2). The
+The mechanism is a register function and a per-layout write function. The built-in
+layouts are registered in a pre-parse boot step (ahead of the collect pass). Each
+built-in's own function (`init_layout_<name>()`, for example `init_layout_dwindle`)
+makes the store calls for its program. Registration runs at boot ahead of every user
+registration, so the built-in names are already occupied by the time a user can
+register a layout and a user layout of the same name overrides the built-in
+(`server.md` §2). The
 reserved set is then whatever was registered rather than a fixed list.
 
 This is the answer to the question this section used to leave open, and it is worth
@@ -1902,7 +1910,7 @@ Blocking, meaning this document cannot be finished first:
 |---|---|
 | `windows.md` | client identity, and the representation of the per-client override, which is the only per-client state the solver reads. **Closed.** `missing-devnotes-topics.md` gives the document the client lifecycle, focus and stacking policy, floating, and window rules besides, and none of those were waiting on anything here. What the solver could not finish without was the override's representation, because §3.1 makes it an input to every solve. The document exists as a prototype and now closes the blocker entirely: client identity is settled by `configstorage.md` §0.1 and needs nothing from here, the override's storage is settled in §2, the rule that *reaches* a client is settled in `windows.md` §9, which gives the matcher a home in a block-structured if/then and keeps `0x33` a pure solve-time constraint, and the order in which several bound sets resolve is `windows.md` §9.7, which is the rule list's name order rather than a field |
 | ~~`helpers.md` §11~~ | **no longer blocking.** The key-to-action binding path was recorded here as not yet designed, and it was the item making stage 3 wait on stage 4. `generaldesign.md` §14 now decides we use Mango's code where we can and change what we need, so the binding path arrives with Mango's `KeyBinding` and `helpers.md` §11 closes the item. What remains on the helpers side is not a blocker on this document |
-| ~~`build.md`~~ | **resolved, and it was never a design blocker.** Nothing in the nine-step pipeline, the language or the ABI depends on the solver's arithmetic width or on CPU versus GPU; the answer changes the numeric type of a solve rather than its shape. The decision is to replicate MangoWM's build system, which `architecture-audit.md` §5 already located at `mango-dev/meson.build`, on the grounds that the project structure is similar. A `flake.nix` is wanted as well, with `cache.nixos.org` set explicitly as the substituter rather than left to inherit whatever the ambient config has, so a build is reproducible from a clean machine |
+| ~~`build.md`~~ | **resolved, and it was never a design blocker.** Nothing in the nine-step pipeline, the language or the ABI depends on the solver's arithmetic width or on CPU versus GPU; the answer changes the numeric type of a solve rather than its shape. The resolution is now in `build.md`: Mango's `meson.build` is the starting structure (`build.md` §6), the wlroots and scenefx versions are pinned in §3, and the solver's width is Q32.32 in `int64_t` in §5. A `flake.nix` exists with `cache.nixos.org` named in `nixConfig` (`build.md` §2), so a build is reproducible from a clean machine |
 | ~~`licence.md`~~ | **resolved.** The project is GPL-3.0 (`architecture-audit.md` §5, from `mango-dev/LICENSE`), so DuckWM's and MangoWM's licences are not an obstacle, nor are most other window managers'. The provenance record is what remains, and it is a small chore at the moment something is copied rather than a design question: the trigger is the first copied line, not a decision about the engine |
 
 ## 11. Open items

@@ -165,7 +165,7 @@ Four commands, all working as of 2026-09-27:
   both were declined. It has `nixConfig.extra-substituters` naming
   `cache.nixos.org`, which `02-substrate.md` B5 makes a requirement rather than a
   preference.
-- `meson.build` is Mango's, with `core_sources` naming all 62 intended
+- `meson.build` is Mango's, with `core_sources` naming all 61 intended
   translation units, `ipc_sources` and `debugger_sources` naming the two smaller
   groups, and the `executable()` call commented out with the reason inline. Every
   dependency lookup above it is live, because a build that cannot resolve wlroots
@@ -186,7 +186,7 @@ itself rather than tracking a patched scenefx (B3's no-fork decision, `build.md`
 libplacebo beside it for the effects the renderer does not express.
 
 **What the build deliberately does not do.** The `omniwm` executable is not
-built, because all 62 source files are zero bytes and a build that fails for a
+built, because all 61 source files are zero bytes and a build that fails for a
 reason unrelated to the design teaches a reader to ignore build failures. So
 `nix build` installs the header and `libomniwm-ipc.so`, and `nix run` runs the
 check. All of that changes when the substrate lands, which is

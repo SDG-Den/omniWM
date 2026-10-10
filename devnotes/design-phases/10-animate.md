@@ -7,8 +7,9 @@ Stub. Not started. P1, stage 9.
 
 ## What it should contain
 
-**1. Animatable properties on nodes.** Not a fresh list: phase 08's node model
-marks the subset and phase 09 marks the decoration subset, and this phase is where
+**1. Animatable properties on nodes.** Not a fresh list: phase 02's node model
+(`build.md` §4.3) defines the properties, phase 08's node type list marks the
+animatable subset, phase 09 marks the decoration subset, and this phase is where
 the two are reconciled into one answer. If a property is animatable, is it
 animatable on every node that has it, or per node type.
 

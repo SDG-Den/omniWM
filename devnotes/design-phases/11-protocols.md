@@ -50,7 +50,8 @@ These two must not be decided separately.
 
 ## Why it is here
 
-It reads the region descriptor from the store and the node model from phase 08. It
+It reads the region descriptor from the store and the node model from phase 02
+(`build.md` §4.3). It
 feeds phase 12, because the Mango interpreter is a client of these protocols and
 `generaldesign.md` §18 pairs stages 16 and 18 with this document.
 

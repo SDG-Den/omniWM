@@ -60,13 +60,15 @@ has to exist before decorations, and the answer changes what this phase owes
 `decorate.md`. If the node model is written first, this phase has to state what a
 node is, because that is the solver's output shape.
 
-**Decided 2026-09-29: nodes come first.** The solver derives nodes before
-anything is rendered, and an animation is a transition from the "active" state to
-the "new" state. So the solver's output shape is the node shape, `decorate.md`
-renders nodes, and phase 08's question is answered at its root: what a node is is
-what this phase's output is. `draw.md` and `animate.md` must be consistent with
-that ordering — the node model is not derived from what decorations happened to
-need.
+*(This item is superseded by the Note below: phase 02 wrote the node and pass model
+in `build.md` §4.3, and this phase's output shape is the solved-layout section, not
+scene nodes.)*
+
+**Note (corrected 2026-10-10):** The node and pass model was written in
+`build.md` §4.3 by phase 02 (not by phase 07), because phases 09 and 10 consume it.
+The solver's output shape is the solved-layout section (entry references + geometry),
+not the scene-graph node shape; phase 08 owns the node type list for drawing. See
+`build.md` §4.3, `decisions-2026-10-10.md` items 8-10, and `08-draw.md`.
 
 ## The twelve questions in the body
 
@@ -112,7 +114,8 @@ that this phase does not mistake their absence for a decision.
   question the project's API-driven premise turns on.
 - The determinism claim, without which `testing.md`'s solver test (phase 01)
   cannot be a golden-file test.
-- The client kind partition, once phase 06 closes the kind list.
+- That the solver has no list to close: phase 06's kind list classifies windows
+  and is not a solver input, so this phase carries no kind partition.
 
 ## Why it is here
 

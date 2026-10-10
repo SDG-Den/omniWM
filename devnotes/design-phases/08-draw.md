@@ -42,12 +42,12 @@ and phase 11. `configstorelayout.md` §10 defines a region descriptor and its
 pixels, and `protocols.md` owns the protocol that produces them, so the question
 is what the compositor does with a region's buffer once it has one.
 
-**8. The scenefx dependency.** `generaldesign.md` §19 calls the extension set the
-largest risk to "Any Look", and user GLSL shaders are a draw requirement, not a
-decorate one. Phase 02 owns the fork-or-patch question; this phase owns what it
-needs from it. The requirement list is written in `build.md` §4.3: a node type
-that can carry a custom pass, and a render-pass entry point that accepts the op
-set.
+**8. The scenefx dependency.** `build.md` §4.3 defines the render toolkit and the
+scenefx 0.5.0 constraint (no fork). User GLSL shaders are a draw requirement, not
+a decorate one. Phase 02 owns the overall dependency decision; this phase owns
+what it needs from it. The requirement list is written in `build.md` §4.3: a node
+type that can carry a custom pass, and a render-pass entry point that accepts the
+op set.
 
 ## What it resolves
 

@@ -20,8 +20,8 @@ capture is a real requirement rather than a detail.
 **4. Glow.**
 
 **5. Opacity.** Mango carries `focused_opacity` and `unfocused_opacity` as floats
-per client, so the concept exists; the node model from phase 08 is what it
-attaches to.
+per client, so the concept exists; the node model from phase 02 (`build.md` §4.3)
+is what it attaches to.
 
 **6. Rounding.** Mango carries `noradius`.
 
@@ -53,7 +53,8 @@ it.
 
 ## Why it is here
 
-It reads the node model from phase 08 and the per-client fields from phase 06. Its
+It reads the node model from phase 02 (`build.md` §4.3) and the per-client fields
+from phase 06. Its
 own output, the set of animatable decoration properties, feeds phase 10. It sits
 before animate because animation needs to know what it may animate.
 

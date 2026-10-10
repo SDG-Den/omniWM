@@ -149,6 +149,14 @@ This is the same rule the socket applies to a `set` that omits `type`
 type is therefore stable as its value changes, and a consumer can rely on the
 declared width.
 
+The one declared tag with a conversion step is `q32_32` (B4, `build.md` §5): a
+float or integer literal scales by 2^32 and rounds to the nearest representable
+value, so `gaps = 1.5` on a q32_32 key stores `0x180000000`. A literal outside
+the signed 64-bit range after scaling is a line failure like any other
+declared-tag overflow, so a value the representation cannot hold exactly becomes a
+parser diagnostic rather than a silently different solve. A duration literal is
+never scaled this way: `500ms` binds to the `duration` tag regardless of the key.
+
 A user who wants a specific width regardless of registration uses the explicit
 table form, which carries the tag:
 

@@ -430,8 +430,8 @@ fit in one line, so a framing limit is not an input limit. Every decoded
 quantity has its own bound, checked before any arena allocation is attempted.
 
 The numbers below are derived from the frozen layout, not chosen. The initial
-arena is `OMNI_POOL_OFF` to the 4 MiB block end, which is `0x225000`, or
-2 248 704 bytes, and every framed allocation costs a 16-byte frame header on top
+arena is `OMNI_POOL_OFF` to the 4 MiB block end, which is `0x2E4000`, or
+3 031 040 bytes, and every framed allocation costs a 16-byte frame header on top
 of its payload.
 
 | limit | value | basis |
@@ -1086,7 +1086,7 @@ would silently write a value nobody is reading.
 table served it, on the grounds that destroying a value has no component
 dependency. That is true and it is not the test: `delete` appends to the journal
 and publishes a committed state, so it can remove state a component is about to
-populate, and the compositor is not finished initialising until `server.md` §4
+populate, and the compositor is not finished initialising until `server.md` §2
 step 5. It is now refused, which also makes this table agree with
 `server.md` §4, where reads are served in every state and writes are refused
 until `READY` with no per-command exception. `unwatch` stays served because it

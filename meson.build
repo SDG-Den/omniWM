@@ -34,7 +34,6 @@ project('omniwm', ['c'],
 # `buildInputs` is the separate SHM-client library over `include/shared/`, which
 # does not exist yet.
 core_sources = [
-  'src/core/lib.c',
   'src/core/log.c',
   'src/core/util.c',
   'src/core/registry.c',
@@ -316,8 +315,7 @@ libomniwm_debugger = shared_library('omniwm-debugger',
 
 libomniwm_debugger_dep = declare_dependency(link_with : libomniwm_debugger)
 
-# Disabled: `src/main.c` is zero bytes, so there is no `main` to link. Enabled in
-# the phase that writes the substrate, which is `02-substrate.md`.
+# Disabled: `src/main.c` is zero bytes, so there is no `main` to link. It will be enabled when the substrate implementation writes it.
 #
 # It links `libomniwm-ipc` and not `libomniwm` directly, because the facade is the
 # only path to the store that a socket client is meant to use. Linking the
@@ -365,7 +363,7 @@ libomniwm_debugger_dep = declare_dependency(link_with : libomniwm_debugger)
 # The check is `-fsyntax-only` on the header, with `-x c` so it is parsed as C and
 # not as a C++ header. Every `OMNI_STATIC_ASSERT` in the file is its only
 # executable content, so a zero exit with no output is a pass over all of them.
-# `02-substrate.md` D9 and `01-testing.md` item 2 both cite this.
+# `01-testing.md` item 2 cites this (ABI static-assert check). `02-substrate.md` D9 is the store operations item.
 #
 # There is no test registry here yet. `devnotes/testing.md` §3 owns the
 # `omniwm-test` runner, the store write/read test, and the fuzz target with its

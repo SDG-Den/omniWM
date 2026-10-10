@@ -21,7 +21,7 @@ That list has been applied here: two tags (`OMNI_TAG_CONSTRAINT` as the
 composite program tree, `OMNI_TAG_CLIENT_RULE` as a 24-byte record with no
 payload), a framed `OMNI_TAG_BINDING`, a composite `OMNI_TAG_MAP` for the
 window-rule block, and a seventh fixed section for the solved layout.
-`OMNI_TAG_MAX_KNOWN` is `0x34` and the unassigned hole starts at `0x35`.
+`OMNI_TAG_MAX_KNOWN` is `0x35` (q32_32) and the unassigned hole starts at `0x36`.
 `OMNI_FORMAT_VERSION` stays 1, because the first runnable build is v1 and there
 is no earlier format to be incompatible with.
 Every number here still has exactly one home, `include/shared/omni_layout.h`,
@@ -141,7 +141,7 @@ header, and the section is single-buffered, so a partial write is visible.
 
 `OMNI_POOL_OFF` is `FIXED_END`. The initial block is 4 MiB because the fixed
 region is now dominated by the catalog and its index, 768KB together; at 2 MiB
-the initial pool would be `0x25000` (148 KiB), less than one 1080p RGBA frame.
+the initial pool would be `0xE4000` (912 KiB), less than one 1080p RGBA frame.
 The mapping is demand-paged, so the untouched tail of a 4 MiB block costs no
 memory.
 
@@ -167,7 +167,7 @@ Layout overview (one contiguous mapping):
 
 The pool is the only growable region. Everything before it is fixed at block
 creation; the pool absorbs all mremap growth. The initial block is 4 MiB, so the
-initial pool is `0x225000` bytes and grows toward `OMNI_BLOCK_MAX_SIZE`.
+initial pool is `0x2E4000` bytes and grows toward `OMNI_BLOCK_MAX_SIZE`.
 
 ## 3. Header (offset 0, fields 0x000..0x0A7, region 0x300)
 
@@ -439,7 +439,7 @@ without walking a variable-length record.
 | 2 | 2 | `against` | u16 `CLIENT`/`VIEWPORT`/`OUTPUT` |
 | 4 | 2 | `axis` | u16 `X`/`Y`, `MATCH` only |
 | 6 | 2 | `edge` | u16, `ALIGN` only |
-| 8 | 2 | `region` | u16, the ten regions of `layoutengine.md` §3.7, `SNAP` only |
+| 8 | 2 | `region` | u16, the ten regions of `layoutlanguage.md` §3.7, `SNAP` only |
 | 10 | 2 | reserved | zero |
 | 12 | 4 | `width` | u32, `SIZE` only |
 | 16 | 4 | `height` | u32, `SIZE` only |
@@ -1109,7 +1109,7 @@ L4    framed values and region payloads stay within their declared section windo
 L4    a body_ref resolving to a frame whose next_free is non-zero is refused as free
 L4    inline values have body_ref == 0 and a type-valid length
 L4    extension tags are accepted only with a structurally valid framed payload
-L4    an unassigned low tag (0x00, 0x35..0x7FFF) is refused, not read as an extension
+L4    an unassigned low tag (0x00, 0x36..0x7FFF) is refused, not read as an extension
 L4    request names include NUL, respect the fixed limit, and target generations match
 L4    CREATE_REGION width and height fit the descriptor u16 fields and slot_count is within range
 L4    a requester validates (epoch, ticket) before trusting any field of a terminal slot

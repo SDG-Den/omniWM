@@ -131,7 +131,7 @@ reasoning is the thing worth keeping:
    and change. A registry handle is a process-local index: it is meaningless in a
    file, it does not survive a restart, and it cannot survive a `save` and reload.
    `helpers.md` §6.2 said handle and is corrected; `ipc.md` §4,
-   `configstorage.md` §4, `configstorelayout.md` §4 and the `omni_layout.h`
+   `configstorage.md` §4, `configstorelayout.md` §5 and the `omni_layout.h`
    comment agree.
 2. **The unresolved name is checked on use, not at set time.** This follows from
    the above and is recorded in `helpers.md` §6.2. A hand-editable store cannot
@@ -141,7 +141,7 @@ reasoning is the thing worth keeping:
 3. **`delete` while `NOT_READY`: closed as refused.** `delete` is a write, it
    appends to the journal and publishes a committed state, so it can remove state
    a component is about to populate before initialisation finishes at
-   `server.md` §4 step 5. `ipc.md` §5.2 now agrees with `server.md` §4, where
+   `server.md` §2 step 5. `ipc.md` §5.2 now agrees with `server.md` §4, where
    reads are served in every state and writes are refused with no per-command
    exception. `unwatch` stays served because it removes a subscription rather
    than adding one.
@@ -158,7 +158,7 @@ reasoning is the thing worth keeping:
    question the deferral was protecting, because it is the port that determines
    what a binding has to express. Mango's five structs share a header and differ
    only in the trigger fields, so this is one tag with a kind discriminant rather
-   than five tags. `configstorelayout.md` §4 now records that its 24-byte table
+   than five tags. `configstorelayout.md` §5 now records that its 24-byte table
    is the v1 minimum and too small, and lists the fields that must exist. The
    **offsets stay open** on purpose: the header grows again in stage 10 for
    tablet and stylus, which Mango has no struct to copy, so fixing offsets now

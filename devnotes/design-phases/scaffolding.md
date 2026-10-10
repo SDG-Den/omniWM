@@ -85,7 +85,7 @@ call instead of a sequence.
 | a richer in-process payload than a journal entry | none, deliberately | **closed as not required**; phase 00: the field set is final and is not extended, a component reads the block, and a synthetic event is not expressible. Phase 02 item D4 is the subscription pattern, not a payload schema |
 | new TOML key registration | `tomlparser.md` | specified |
 | device rule matching | `input.md` §4 and §5, Mango's `find_device_rule` kept as-is | specified; the matchers are Mango's name or `vendor:product:name`, not four, and the four-matcher vocabulary belongs to `04-monitor.md` item 2 |
-| client kind set, which the solver partitions on | `windows.md` §10 | specified; phase 00 closed it at seven, so phase 07 has a fixed partition input |
+| client kind set | `windows.md` §10 | specified; phase 00 closed it at seven, and the kinds classify windows rather than feed the solver — there is no kind input and no kind partition (`layoutengine.md` §3.2) |
 | error and diagnostic reporting outside the store | `configstorage.md` §12.6 covers the store; `helpers.md` §7.5 covers the rest | specified; phase 02 item D5 |
 
 ## Dependencies and backends
@@ -196,7 +196,7 @@ that have no Mango counterpart, and both are marked as such in the build file so
 that the difference from Mango is findable by someone reading the build and not
 only by someone who remembers the design.
 
-The build compiles all 62 sources, and they are all zero bytes, so it produces 62
+The build compiles all 61 sources, and they are all zero bytes, so it produces 61
 empty object files. The earlier version of this paragraph said it compiled none
 of them, which was true when only the header was installed and stopped being true
 when the three shared libraries were enabled. What the empty objects do establish

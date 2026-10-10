@@ -644,7 +644,7 @@ because dismissal then has to put the client back somewhere and nothing records
 where. Mango needs a place to record it — `show_scratchpad` saves the old tag mask
 in `oldtags` and reassigns the client's tags on the way in and out — and that
 second copy of the truth is exactly the hidden state this design is built to avoid
-(`configstorage.md` §1's scope taxonomy, and the whole reason a tag is a container
+(`configstorage.md` §3 and §12.2's scope taxonomy, and the whole reason a tag is a container
 rather than a bit). So the rule is: **membership is retained, participation is
 withheld**, and a client leaves the scratchpad by clearing the scratchpad's
 membership child, at which point it is already a member of the tag it reappears on
@@ -768,8 +768,9 @@ Not covered, deliberately, and listed so the omission is a decision:
 - What a tag looks like: names, colours, icons, ordering in a bar.
 - Tag rules, and per-output tag defaults. These are `generaldesign.md` §6 promises
   that need a document of their own; they do not bear on the layout engine.
-- The surface syntax for setting, unsetting and exclusively setting a tag, which
-  belongs to `input.md` and `helpers.md` §11.
+- The surface syntax for setting, unsetting and exclusively setting a tag. This is
+  open: `input.md` does not define it and `helpers.md` §11 does not contain it, and
+  it is phase 05's deliverable — `05-tags.md` item 4 closes it there rather than here.
 
 Covered here rather than elsewhere, and listed because the placement is a
 decision: a monitor's ordered tag list is stored at `omniwm.monitor.<id>.tags` (§5)
@@ -780,14 +781,15 @@ storage follows them, so holding both here is the lower-risk arrangement until a
 monitor document exists to take it. A monitor document, when there is one, reads
 these two rather than being cited by them.
 
-**Nothing in either group above, or in the list below, is a question any more.** The
-one item `layoutengine.md` §11 used to carry, stored or derived membership, is the
-same question the first entry below used to carry and is closed by the same
-decision; `layoutengine.md` §11 agrees and does not reopen it. What is still
-genuinely undesigned is the bar-side surface — what a tag is *called* in a user
-interface, its colour, its icon, and the order the bar draws them in —
-which is a real gap and is phase 05's deliverable rather than an open decision in
-this document.
+**Nothing in the rest of either group above, or in the list below, is a question any more** —
+the syntax bullet above is the one exception, stated so the closure claim stays honest: it is
+open because `input.md` does not define it and `helpers.md` §11 does not contain it, and phase
+05 closes it there rather than here. The one item `layoutengine.md` §11 used to carry, stored
+or derived membership, is the same question the first entry below used to carry and is closed
+by the same decision; `layoutengine.md` §11 agrees and does not reopen it. The bar-side
+surface — what a tag is *called* in a user interface, its colour, its icon, and the order the
+bar draws them in — is the other genuinely undesigned part, and it too is phase 05's
+deliverable rather than an open decision in this document.
 
 Open, and the ones that bear on the layout engine:
 

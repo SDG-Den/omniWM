@@ -68,9 +68,7 @@ work until a user minimises a client and finds it tagged.
 - Whether a prototype is a specification. The distinction matters because
   `layoutengine.md` and `tags.md` both cite `windows.md` as authority, and a
   document that disclaims being one cannot be the authority for a record layout.
-- The client kind list, which is needed by phase 07: the solver partitions clients
-  by kind, so an open kind set is an open solver input. **Now closed at seven**,
-  so phase 07 has a fixed input rather than an open one.
+- The client kind list, which is relevant to window classification; any solver-side partitioning by kind would require specification in `layoutengine.md`, which currently has no such definition. The kind set is closed in `windows.md` regardless.
 - The window-rule syntax. The table binding is closed (`tomlparser.md` §2, `map` at
   `omniwm.window_rules.<name>`); the `if` and `then` keys inside it are this
   phase's.
@@ -97,4 +95,4 @@ rules reference tags.
   default is what almost every client gets.
 - 3b is written as an implementation note, not only as prose in `tags.md`, so the
   three operations are distinguishable by name.
-- A client kind list exists, and `layoutengine.md` §3.2's partition cites it.
+- A client kind list exists (currently defined in `windows.md`); the "solver partitions clients by kind" claim is not found in `layoutengine.md` and should not be cited unless designed there.

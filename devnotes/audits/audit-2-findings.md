@@ -1,3 +1,5 @@
+> **Disposition, added 2026-10-10.** Historical work log from an earlier audit pass; not reconciled against current decisions. Preserved as written. Where it disagrees with live docs, the live documents win.
+
 the report *did* get made, but the model compacted immediately afterwards, here's the report:
 
 omniWM design audit — stages 1 to 4

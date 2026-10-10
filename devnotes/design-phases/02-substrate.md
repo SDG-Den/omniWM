@@ -16,10 +16,11 @@ are now, and the drift that pass found is repaired, recorded here by kind:
   projects link, and its scenefx comment no longer treats B3 as open;
   `flake.nix`'s `nix run` comment no longer names B3 as the phase that enables
   the executable.
-- **Recorded, not repaired.** `src/core/lib.c` is in `meson.build`'s
-  `core_sources` but appears in no design document and has no
-  `include/core/lib.h` counterpart. It is recorded rather than removed, because
-  removing a file is not a decision this phase takes on its own.
+- **Recorded, not repaired; resolved by the close-out.** `src/core/lib.c` was in
+  `meson.build`'s `core_sources` but appeared in no design document and had no
+  `include/core/lib.h` counterpart. It is now removed: the close-out deleted the
+  file and its `core_sources` entry, and it can be re-added when a design
+  document names it.
 - **Accuracy repair, this file, the scope-taxonomy citation.** D2 and the "Done
   when" list cited `configstorage.md` §1 for the scope taxonomy; §1 is the
   concurrency model and the taxonomy is in §3 (catalog flags) and §12.2 (flag
@@ -202,12 +203,12 @@ implementation, when `libomniwm` has symbols and the `omniwm` target exists; see
 **B6. The Meson structure.** `missing-devnotes-topics.md` says Mango's `meson.build`
 is the model, from `architecture-audit.md` §5. What carries over and what does not
 is open, and the answer depends on how many components there are by stage 3.
-**Mango's structure is in the tree**, with `core_sources` naming all 62
+**Mango's structure is in the tree**, with `core_sources` naming all 61
 intended translation units and the `executable()` call commented out. The list is
 `filestructure.md`'s tree in build-system terms, so it is a second place that has
 to change when the tree does. **Decided 2026-10-10: the core library contains
 everything the WM needs to function, and features extend it by registration.** The
-62 units are the core's own build, so the split B6 asks about is a split of
+61 units are the core's own build, so the split B6 asks about is a split of
 registration rather than of ownership: core functionality is exposed through
 components. `registry.{c,h}` holds the registry itself, and `component-registry.h`
 is a thin header that includes every component's public header, so the fixed table

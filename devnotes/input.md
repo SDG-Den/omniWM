@@ -17,7 +17,7 @@ input", so §6 below is the split between them.
 Same ordering `windows.md` §1 uses, for the same reason.
 
 1. **A document that already owns the subject wins.** `generaldesign.md` §14,
-   `helpers.md` §6 and §7, `configstorelayout.md` §4, and `configstorage.md` §4.
+   `helpers.md` §6 and §7, `configstorelayout.md` §5, and `configstorage.md` §4.
 2. **Otherwise Mango is the shape.** `mango-dev` at `d5a0e1e`, branch
    `config-scriptability`, which is the revision `research/mango.md` indexes. A
    working implementation of a window manager's input stack is worth more than an
@@ -213,7 +213,7 @@ throughout, and it forwards pressure, distance, tilt and rotation to the client
 `StylusBinding`, so there is nothing to copy. A stylus binding needs pressure and
 tilt thresholds, absolute versus relative pointing, and an annotation mode, and
 none of those have a Mango equivalent. This is the one input feature that is
-fresh work rather than a port, and it is why `configstorelayout.md` §4 defers the
+fresh work rather than a port, and it is why `configstorelayout.md` §5 defers the
 `binding` record's offsets: the header grows again for stage 10, so fixing
 offsets at stage 4 would fix them against a shape stage 10 revises.
 
@@ -270,7 +270,7 @@ about what the mode means.
   design: a device rule's record shape is only knowable once the rest of input is,
   and picking a number for a shape that is still moving is how two phases end up
   asserting different ones. So neither `03-input.md` item 2 nor phase 02 claims the
-  number, and `configstorelayout.md` §4's vocabulary and the static assert in
+  number, and `configstorelayout.md` §5's vocabulary and the static assert in
   `include/shared/omni_layout.h` are written when the number is. The namespace is a
   separate and easier question, since a device rule is keyed by device and
   `omniwm.input.device.<n>.*` follows from the same convention as the other options.
@@ -318,7 +318,7 @@ about what the mode means.
 | `helpers.md` §6, §6.1, §6.2 | the action registry, the argument schema, and `action_ref` as a name resolved on use |
 | `helpers.md` §7.2 | `omni_regex_match` as the single PCRE2 engine, which gesture patterns would reach for |
 | `configstorage.md` §4 | the `binding` tag, the `modmask` and `keysym` type tags, and the positional `args` array |
-| `configstorelayout.md` §4, §8 | the `binding` record at `0x2B`, its known-too-small header, the deferred offsets, and the `BINDS_UPDATED` and `KEY_SET` journal entries |
+| `configstorelayout.md` §5, §8 | the `binding` record at `0x2B`, its known-too-small header, the deferred offsets, and the `BINDS_UPDATED` and `KEY_SET` journal entries |
 | `windows.md` §2, §9 | a client as an `entry_ref`, which is what a `tc` argument becomes |
 | `tags.md` | a tag as a catalog entry, which is one of the scoping candidates in §7.1 |
 | `ipc.md` | the socket surface, and §4's general `get`, which is how a binding is read now that `spec` is not carried (see §7.2) |

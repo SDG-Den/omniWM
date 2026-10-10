@@ -25,10 +25,10 @@ exists whether or not a rule made it.
 **3. Per-output tag defaults.** Depends on phase 04's matching vocabulary.
 
 **4. The surface syntax for setting, unsetting and exclusively setting a tag.**
-`tags.md` §9 assigns this jointly to `input.md` and `helpers.md` §11, so this
-phase has to produce half of it and coordinate the other half. `input.md` §7.1's
-scoping question is entangled: if a binding is scoped to a tag, then the syntax
-for setting a tag is what a binding most often needs.
+`tags.md` §9 assigns this jointly to `input.md` and `helpers.md` §11, but
+neither defines it. `input.md` §7.1's scoping question is entangled: if a binding
+is scoped to a tag, the syntax for setting a tag is what a binding most often needs.
+This phase closes the gap.
 
 **5. The two questions `tags.md` §9 used to carry, now closed by phase 00 and
 recorded here so this phase does not reopen them.** *Stored versus derived

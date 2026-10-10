@@ -132,7 +132,7 @@ are filed as `const` data whenever possible).
 
 ### 2.2 The register-function set
 
-The collect phase is where every registration call runs, and the set below is
+The collect phase is where most registration calls run (the built-in layout set is an exception, registered in a pre-parse boot step per `server.md` §2 and `layoutengine.md` §3.4), and the set below is
 the machinery a component uses to make itself known. A component may make
 several of these calls, and a registration made in one component's file is
 still the component's own: nothing here is a global side door.
@@ -144,7 +144,7 @@ because components do not unload (`§3.4`, `§6.3`).
 
 | call | purpose | lifetime |
 |---|---|---|
-| `omni_register_<component>(void)` | the collect entry: appends the descriptor, never runs `init` | static |
+| `omni_register_<component>(void)` | the collect entry (append pass): appends the descriptor, never runs `init` | static |
 | `omni_append_component(const struct omni_component *)` | the append call the collect entry makes; one descriptor | static |
 | `omni_option_register(key, type_tag, default)` | one component option, added to the descriptor's array | static |
 | `omni_option_register_many(const struct omni_option *, size_t)` | the array form: registers a `§3.1` option array in one call | static |

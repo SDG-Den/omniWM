@@ -6,7 +6,7 @@ are frozen. Where `devnotes/layoutengine.md` records what was decided and why, a
 `devnotes/tomlparser.md` records how the bytes are read, this file records what the
 language *is*. A program written to this file is a program the engine can solve.
 
-The companion suite is `layout-tests.md`: eighteen mock designs, one per idea worth
+The companion suite is `layout-test-examples.md`: eighteen mock designs, one per idea worth
 testing, written to find places where this language is awkward, ambiguous, or missing
 a key. Its findings are the evidence behind the decisions here, and a rule in this
 file that looks arbitrary usually has a numbered finding explaining it. The suite is

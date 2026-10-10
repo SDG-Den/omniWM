@@ -67,7 +67,7 @@ build system in the tree: `flake.nix`, `meson.build`, `meson_options.txt`,
 with no runner in the tree is a specification nothing checks.
 
 What the build does **not** do is build a compositor. The `omniwm` executable is
-disabled in `meson.build` while all 62 source files are zero bytes, so
+disabled in `meson.build` while all 61 source files are zero bytes, so
 `nix build` installs the ABI header and `nix run` runs the header check. The
 section 1 invocation above is the same compile, wrapped so that `nix flake check`
 performs it on every evaluation.
@@ -625,14 +625,14 @@ cross-architecture bit reproducibility the choice was made for is a property of
 the type rather than a hope. It is already an integer, so the commit boundary does
 not convert it: the commit stores the `int64_t`, and a SHM client reads that same
 integer. `tomlparser.md` §3 absorbs the one lossy-looking step by interpreting a
-TOML float or duration literal as a scaling by 2^32 and a round to the nearest
+TOML float or integer literal as a scaling by 2^32 and a round to the nearest
 representable value, so a literal the representation cannot hold exactly is a
 parser diagnostic rather than a silently different solve. `layoutengine.md` §3.2
 consumes it. Width, range and precision are closed.
 
 ## 6. The Meson structure (B6)
 
-**Mango's structure is in the tree and configures.** `meson.build` names all 62
+**Mango's structure is in the tree and configures.** `meson.build` names all 61
 intended translation units in `core_sources`, with `ipc_sources` and
 `debugger_sources` as the two smaller groups and the `executable()` call
 commented out. The list is `filestructure.md`'s tree in build-system terms, so it
@@ -665,7 +665,7 @@ itself, and `component-registry.h` is a thin header that includes every
 component's public header, so the fixed table in `core/server.c` names all the
 register functions in one place. A component's own code lives entirely in its own
 file, and adding one line to that table registers it, so a component cannot be
-half-wired and "why is my component not running" has one answer. The 62-unit list
+half-wired and "why is my component not running" has one answer. The 61-unit list
 in `meson.build` is the core's own build under this rule. The scope of the
 registry functions is `helpers.md` §2.2, and the worked component that
 demonstrates the whole path with mock functions is `helpers.md` §12; both are

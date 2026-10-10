@@ -320,7 +320,8 @@ The tag space is a u16. Values are stored in native endianness and alignment, ti
 | 0x32  | constraint  | a nestable layout program, see below |
 | 0x33  | client_rule | one client rule, a 24 B record, see below |
 | 0x34  | map         | a keyed block of typed values, see below |
-| 0x35..0x7FFF | reserved | the unassigned low hole, see below       |
+| 0x35        | q32_32   | 8 bytes, Q32.32 signed fixed-point in int64_t (build.md §5) |
+| 0x36..0x7FFF | reserved | the unassigned low hole, see below       |
 | 0x8000.. | extension | extension range, structurally valid framed payloads |
 
 For v1 representation, fixed-size scalars and fixed-size composite types whose
@@ -404,7 +405,7 @@ off  size  field
 2    2     against   u16, CLIENT | VIEWPORT | OUTPUT
 4    2     axis      u16, X | Y, MATCH only
 6    2     edge      u16, LEFT | RIGHT | TOP | BOTTOM | CENTER_X | CENTER_Y, ALIGN only
-8    2     region    u16, the ten regions of §3.7, SNAP only
+8    2     region    u16, the ten regions of `layoutlanguage.md` §3.7, SNAP only
 10   2     reserved  zero
 12   4     width     u32, SIZE only, pixels
 16   4     height    u32, SIZE only, pixels
@@ -790,11 +791,11 @@ the core carry extension values it cannot interpret while still refusing its own
 malformed values.
 
 ```
-0x01..0x34        known:      require the tag's exact encoded length and its
+0x01..0x35        known:      require the tag's exact encoded length and its
                               representation rule (inline or framed)
 0x8000..0xFFFF     extension:  require VALUE_FRAMED, a verified frame, and a
                               length the core never interprets
-0x00, 0x35..0x7FFF unassigned: malformed, refused by the core
+0x00, 0x36..0x7FFF unassigned: malformed, refused by the core
 ```
 
 `0x00` is unassigned in the catalog and is used only by journal entries that
@@ -803,8 +804,9 @@ extension, so it is refused. Save preserves entries on the extension branch and
 skips entries that fail any structural tier.
 
 The upper end of the known range is a moving target: `0x32` and `0x33` were added
-for the layout engine and `0x34` for the window-rule block, and the hole simply
-moved from `0x32..0x7FFF` to `0x35..0x7FFF`. `OMNI_TAG_MAX_KNOWN` and
+for the layout engine, `0x34` for the window-rule block, and `0x35` for the
+Q32.32 solve value (build.md §5), and the hole simply
+moved from `0x32..0x7FFF` to `0x36..0x7FFF`. `OMNI_TAG_MAX_KNOWN` and
 `OMNI_TAG_UNASSIGNED_LO` are asserted to be adjacent in `omni_layout.h` so the two
 cannot drift apart, which is the only thing that makes a hole detectable at all.
 
