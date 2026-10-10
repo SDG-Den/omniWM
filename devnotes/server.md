@@ -34,7 +34,10 @@ owning component's descriptor and instance, never a reachable global
 Boot is one entry point, `omni_boot()`, and it runs once. The order is not
 interchangeable, because each step depends on the previous one existing.
 
-1. create the store and seed the core `wm.*` keys
+1. create the store, seed the core `omniwm.*` keys, and register the built-in
+   layouts: reserve each built-in name and write its program through the same
+   store calls the TOML parser makes, before any user config is replayed so a
+   user layout of the same name overrides the built-in
 2. start the socket facade, if it can be created
 3. run the register-function table from `core/server.c`, appending descriptors
 4. `omni_boot()`: create instances in priority order, seed options, subscribe
@@ -51,6 +54,16 @@ Registration at step 3 never runs `init` and never creates an instance. It
 records what a component is, and activation is a separate pass, so a component
 that fails to start is still registered and can still be named in a readiness
 report.
+
+The built-in layouts are registered in step 1 rather than during activation
+because the config facade replays the config file in step 4 and the ordering has
+to favour the user: the built-in names are occupied and their programs written
+first, so a user layout of the same name lands on top (`layoutengine.md` §3.4).
+The built-in registration functions run before the register-function table at
+step 3 and before the config parse at step 4, so by the time any user can
+register a layout the built-in names are already taken. A soft reset re-runs the
+same booted sequence, so the built-in is restored and an in-place edit to it does
+not survive, which is the reset edge `layoutengine.md` §3.4 already states.
 
 ## 3. Activation
 
@@ -85,7 +98,7 @@ recoverable configuration because a component failed to start. Reads are still
 served in every one of these states, and writes are refused with `NOT_READY`
 until `ready` is `READY` (`ipc.md` §5.2).
 
-`ready` is written only in a commit, so a client that observes the `wm.ready`
+`ready` is written only in a commit, so a client that observes the `omniwm.ready`
 journal event has necessarily already observed the new field value.
 
 ## 5. Dispatch
@@ -150,11 +163,62 @@ coupling to the compositor. An external program is not a component, has no
 | config file binding | `tomlparser.md` |
 | extension boundary | `helpers.md` §8.1, and §7 here |
 
-## 9. Open items
+## 9. What the server owns, and what it defers (settled in phase 02)
 
-- Display and output lifecycle, input devices, and the Wayland protocol set are
-  not designed. They belong with the compositor subsystem work that follows,
-  and this document owns the server half of whatever that produces.
-- The exact registration table contents in `core/server.c` are an
-  implementation artifact, but the priority bands and what belongs in each are a
-  design question that the first real component set will answer.
+The three items this section used to leave open are not the server's to design.
+Each now names the phase that designs it and the surface the server exposes for
+it, so the deferral lands somewhere instead of pointing at a document that does
+not exist yet.
+
+- **Display and output lifecycle.** Designed by phase 04 (`monitor.md`) and phase
+  11 (`protocols.md`). The server half is the output surface: the server owns the
+  output layout and the output manager, and hands each output to the monitor
+  component through the action and trigger context, never as a reachable global
+  (§1).
+- **Input devices.** Designed by phase 03 (`input.md`). The server half is the
+  seat surface: the server owns the seat, the device manager, and the pointer,
+  keyboard, touch, and tablet protocol objects, and routes their events to the
+  input component. `input.md` §3's file map is the decomposition of that routing.
+- **The Wayland protocol set.** Designed by phase 11 (`protocols.md`). The server
+  half is the registration of the protocols the compositor instantiates and the
+  `wl_display` and `wl_event_loop` that carry them (§1).
+
+What phase 02 settles is the server's own shape, below.
+
+### 9.1 The registration table
+
+`core/server.c` owns one fixed table of register functions, run at §2 step 3. Its
+contents are the component set, and they are ordered by the priority convention
+`helpers.md` §9 fixes rather than by inference. The ordering the component set
+must respect is:
+
+| order | components |
+|---|---|
+| first | core: the store and the registry's own activation |
+| next | the config facade and the IPC bootstrap |
+| then | input |
+| then | tags and windows |
+| then | decorate and draw |
+| last | ext-protocol and the miscellaneous components |
+
+The concrete `priority` numbers are chosen when the first components register,
+because they are an implementation artifact; what is fixed is the relative order
+above and the fact that the table is static and compile-time known
+(`helpers.md` §8.1). A component is added by writing its register function and
+adding one line here, and the band decides order without the server inferring a
+dependency (`helpers.md` §9). A component registers once even when it has several
+translation units.
+
+The built-in layout registration is the one set that runs ahead of this table,
+at §2 step 1, so the built-in layout names are occupied before any component or
+user config can register a layout of the same name.
+
+### 9.2 The live IPC surface
+
+The half of the socket facade that needs a live compositor is the command
+dispatch that runs an action or a `set` against the running server. `ipc.md` §5.2
+fixes the per-command readiness behaviour, and the server half is that the
+dispatch is a call on the event loop (§5) in the order the store publishes, so a
+client that changes the store and then triggers an action observes the action
+after the change. These are wlroots-harness cases (`testing.md` §2), not unit
+cases.

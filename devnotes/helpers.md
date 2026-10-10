@@ -31,9 +31,45 @@ core/
 Umbrella header `include/commonheaders.h` includes every public core header;
 component files include it and nothing else.
 
+### 1.1 Public and private headers, and a symbol two components need (D6)
+
+`filestructure.md` fixes the directories (`include/<dir>` mirrors `src/<dir>`);
+this fixes what goes in them. It also makes "and nothing else" above precise.
+
+- **A header is public when another component's translation unit includes it.**
+  A header under `include/<dir>` is the public surface of that subsystem. A
+  declaration only its own file uses does not get a header at all; it is
+  `static` in the `.c` file. A declaration shared by the several `.c` files of
+  one component goes in that component's `include/<dir>` header, because those
+  files include it by the same rule anyone else does and there is no third place.
+- **A header under `src/<dir>` is private to that directory and is never
+  included across a boundary.** The mirror gives a private header an obvious home
+  instead of forcing it into a `.c` file when it grows.
+- **A symbol two components need is a core symbol.** It moves down into
+  `src/core` and is declared in the `include/core` header that owns its concern,
+  which is why `commonheaders.h` includes every public core header and why that
+  umbrella exists at all. The rule is ownership, not convenience: `core` is the
+  ground layer that owns the lifecycle every component runs within, so a shared
+  need either moves down or is two implementations that are genuinely not shared.
+  No feature component becomes a dependency of `core`, and two feature components
+  never include each other's headers.
+
+So "and nothing else" above means: a component file includes
+`include/commonheaders.h` plus its own component's `include/<dir>` headers, and
+nothing from another subsystem's surface. A symbol another component must include
+has, by the rule, already moved to `core`.
+
 ## 2. Registry (core/registry.{c,h})
 
 Two-phase activation, per decision.
+
+`registry.{c,h}` is the registry itself: the append API, the descriptor array,
+and the sort-and-activate body. `component-registry.h` is a thin header, not a
+second registry: it includes every component's public header, so each
+component's register function is declared in one place and the fixed table in
+`core/server.c` can name the whole set without a per-file edit to the server. A
+component's own code still lives entirely in its own files; the thin header is
+only what makes the set visible.
 
 Phase 1, collect: each component `.c` ships exactly one public function,
 placed next to the rest of that component's code:
@@ -94,6 +130,51 @@ Stack safety: no dynamic allocation at sort time beyond one working array of
 descriptor pointers, and none permitted inside the collect phase (descriptors
 are filed as `const` data whenever possible).
 
+### 2.2 The register-function set
+
+The collect phase is where every registration call runs, and the set below is
+the machinery a component uses to make itself known. A component may make
+several of these calls, and a registration made in one component's file is
+still the component's own: nothing here is a global side door.
+
+The partition that matters is which calls return a handle. **Only actions and
+triggers return a releasable handle**, because they are the two registrations a
+suspended component releases. Everything else is process-lifetime static,
+because components do not unload (`§3.4`, `§6.3`).
+
+| call | purpose | lifetime |
+|---|---|---|
+| `omni_register_<component>(void)` | the collect entry: appends the descriptor, never runs `init` | static |
+| `omni_option_register(key, type_tag, default)` | one component option, added to the descriptor's array | static |
+| `omni_action_register(name, handler, context, schema) -> handle` | a named control (`§6`) | handle |
+| `omni_trigger_register(pattern, gap_policy, callback) -> handle` | a journal subscription (`§5`) | handle |
+| `omni_register_init(fn, priority)` | a startup step that runs at `init` time, distinct from the descriptor's own `init` | static |
+| `omni_rule_field_register(name, type_tag, read_fn)` | a window-rule match field (`windows.md` §9) | static |
+| `omni_rule_property_register(name, type_tag, apply_fn)` | a window-rule target property | static |
+| `omni_layout_register(name, program)` | a layout the engine may select (`layoutengine.md` §3.4) | static |
+| `omni_node_type_register(type_id, properties, draw_fn, pass_fn)` | a scenefx node type and its pass | static |
+| `omni_decoration_register(name, ...)` and its lower-level variants | decoration pieces registered within scenefx and omniWM's own extensions | static |
+| `omni_effect_register(name, primitive_ids[], params_schema)` | a preset mapping primitives onto one config key | static |
+| `omni_shader_register(name, glsl_source, kind)` | a GLSL source a preset may name | static |
+| `omni_animation_register(name, property, curve_or_timeline, property_source_fn)` | an animatable property binding | static |
+| `omni_render_layer_register(layer, ...)` | an above-background or above-windows render buffer | static |
+| `omni_protocol_register(name, interface, bind_fn)` | a Wayland protocol the server instantiates (`server.md` §9) | static |
+| `omni_ipc_method_register(name, handler, schema)` | a socket command verb (`ipc.md` §4) | static |
+
+Two entries are deliberately absent. **There is no register for a window-rule
+operator**, because the operator set is fixed and the field and property
+registrations are the extension point. **There is no gesture register**: a
+gesture collapses into a trigger plus an action for now, so the input layer
+recognises it and dispatches an action it names, and the trigger carries the
+event. A dedicated gesture kind is not added.
+
+**Decoration is exposed low-level.** `omni_decoration_register` and its
+lower-level variants register pieces within scenefx and within omniWM's own
+extensions to it, so a component can add a decoration the built-in presets do
+not cover. The higher-level preset form is built on those primitives rather than
+replacing them, which is the same toolkit shape `build.md` §4 states for the
+render layer as a whole.
+
 ## 3. Descriptor and instance (core/component.{c,h})
 
 Registration exists so that adding a feature means writing functions and
@@ -113,7 +194,7 @@ struct omni_component {
 
     int32_t priority;            /* lower = earlier (ascending) */
     uint8_t critical;            /* 1 = boot fails if init fails */
-    const char *enable_key;      /* full config key, e.g. "wm.tags.enabled";
+    const char *enable_key;      /* full config key, e.g. "omniwm.tags.enabled";
                                     NULL = always on */
 
     /* options: zero or more typed keys seeded into the block on activation */
@@ -183,7 +264,7 @@ the user did not change is still the configuration the instance was built from.
 `struct omni_option`:
 
 ```
-const char *key;        /* full public key: "wm.gaps" */
+const char *key;        /* full public key: "omniwm.gaps" */
 uint16_t    type;       /* type tag from configstorelayout.md §2/§4 */
 const void *value;      /* native default per type */
 ```
@@ -191,14 +272,14 @@ const void *value;      /* native default per type */
 `struct omni_action`:
 
 ```
-const char *name;       /* "wm.cycle_layout"; must be namespaced */
+const char *name;       /* "omniwm.cycle_layout"; must be namespaced */
 void (*handler)(const struct omni_args *args);
 ```
 
 `struct omni_trigger`:
 
 ```
-const char *pattern;    /* "wm.*" or a category; same grammar as IPC watch */
+const char *pattern;    /* "omniwm.*" or a category; same grammar as IPC watch */
 void (*callback)(const struct omni_event *event);
 ```
 
@@ -208,7 +289,7 @@ foreign-WM configs. `name` is identity only, never a key prefix.
 
 ### 3.3 Enable key convention
 
-Full key, namespaced: `wm.<component>.enabled`. Default seeded by the option
+Full key, namespaced: `omniwm.<component>.enabled`. Default seeded by the option
 array (`true`), so a component is on unless a config says otherwise. A
 component that genuinely cannot be torn down at runtime declares
 `enable_key = NULL` and is always active.
@@ -231,13 +312,77 @@ suspended by anything. It exists for the WM's lifetime or it does not, and
 releasing its own resources is its own decision. Suspension is therefore not the
 unloading mechanism for extensions, and §6.3 is where that decision is recorded.
 
+### 3.5 Where a component's fields live (D1, D2)
+
+Every component answers the same question about every field it holds, and the
+answer has to be the same each time or `WINDOW_DEPENDENT` scope and the `save`
+exclusion test start disagreeing with each other. The rule has three homes, and a
+field is in exactly one of them.
+
+- **The descriptor** holds what is immutable and known at registration: identity,
+  the option, action and trigger arrays, and the callback pointers (§3.1). It
+  holds no mutable state, so a field that changes after registration is not a
+  descriptor field even when it looks like configuration.
+- **The instance** holds mutable, process-local runtime state: the activation
+  state, whether `init` returned, whether `suspend` returned, and the error code
+  from a failed init (§3.2). This is memory the process owns and the block never
+  sees. A private derived cache (§5.1) is process memory too, for the same reason:
+  it is a performance structure, not configuration.
+- **The block** holds a field only when it is either user configuration or state
+  that must be observed by someone outside the process. The vocabulary is the
+  store's, not the component's: an ordinary entry is configuration, `EPHEMERAL`
+  marks bookkeeping that `save` and reset both skip, and `WINDOW_DEPENDENT` marks
+  per-window state that is observable but never saved (`configstorage.md` §3 and
+  §12.2, whose scope bits apply only to a live entry).
+
+The dividing question is one sentence: **is this field part of the user's
+configuration, or is it the component's own working memory?** Configuration and
+the state a user can observe go in the block, marked for scope if they are not
+ordinary; everything else is process memory and never touches the block. A
+component that wants its transient state observable publishes it as a value on
+purpose; a component that has not is not, by default, writing it anywhere the
+block can see.
+
+Two consequences follow, and they are the point of writing the rule down:
+
+- **A field does not move between homes when it becomes convenient.** A value
+  that is configuration is in the block from the start, even before anything
+  reads it live, and a value that is runtime state is in the instance even when a
+  test would find it easier in the block.
+- **`WINDOW_DEPENDENT` is a claim, not a tag of convenience.** Setting it is what
+  tells `save` to skip a value, so a component that sets it to avoid writing a
+  field it should have kept has a `save` output that is silently incomplete. The
+  exclusion test is `WINDOW_DEPENDENT clear AND EPHEMERAL clear`
+  (`configstorage.md` §13), and it is the same test a soft reset uses, so a wrong
+  scope bit is wrong in two operations at once.
+
+`configstorage.md`'s scope taxonomy is the vocabulary; this is how a component
+uses it, and the identity fields (`configstorage.md` §0.1) are what a component
+stores instead of a pointer when it needs to name another entry.
+
+### 3.6 How an option's behavior attaches
+
+An option is declaration only: `{key, type, default}` (`§3.1`). It carries no
+callback, and there is no `on_change` field, because a per-option callback would
+be a second dispatch path and `§5` forbids a synthetic in-process event. Behavior
+attaches through the existing machinery, never through a field on the option:
+
+- If the key is the component's `enable_key`, the toggle engine (`§4`) drives
+  `init`, `suspend` and `resume` from it.
+- Every other key is acted on by a trigger subscription. The callback re-reads
+  the key and applies it, which is the ordinary read-and-react pattern of `§5.1`
+  rather than a special option path.
+
+That is why the option array is enough on its own: registration declares *what*
+the key is, and a subscription decides what happens when it changes.
+
 ## 4. Toggle engine (core/component.{c,h})
 
 Immediate runtime toggling, no restart. A toggle changes the state of the one
 long-lived instance; it never creates or destroys one, and never re-runs `init`.
 
 - After activation, the toggle engine subscribes to the component's
-  `enable_key` (and to `wm.*` at most briefly, only for components with
+  `enable_key` (and to `omniwm.*` at most briefly, only for components with
   dependent keys).
 - On an `enable_key` commit to `false`, from `ACTIVE`: call `suspend()`; the
   component unsubscribes its triggers, unregisters its actions, tears down
@@ -341,6 +486,52 @@ subscribed here at activation.
   during its own execution, has opted out of this guarantee and may observe its
   own commit's effect.
 
+### 5.1 The read and subscription pattern every component copies (D3, D4)
+
+Two halves, written together here because every component does both and no
+document stated the composition. §5 above is the subscription mechanism and
+`configstorage.md` §3.1 is the read mechanism; what was missing was the pattern
+that puts them together, and it has to be stated here before a component can cite
+it.
+
+```
+resolve once:    name -> hash -> catalog index -> (entry_id, entry_generation)
+cache privately: keep the resolved value in the component's own process memory
+per frame:       if the private copy's commit_id is unchanged, use it
+on a change:     invalidate on the journal event for that entry, re-resolve
+```
+
+Four properties are load-bearing, and each is a decision rather than a style:
+
+- **Resolution goes through the catalog name index, never a catalog walk.**
+  `configstorage.md` §3.1 removed the walk behind `get` by design, so a component
+  reads through the index or through its own private-copy refresh, and neither
+  degrades to a scan whose cost scales with how many keys the user has configured.
+- **The cache is process-private, and it is refreshed rather than polled.**
+  `configstorage.md` §3.1 states the cost it removes: forty options read every
+  frame become forty `u64` compares and zero hash lookups.
+- **A frame offset is never cached.** An arena frame can be recycled; the private
+  copy holds a copied value or a resolved `(entry_id, entry_generation)`, both of
+  which survive a commit, and a raw offset does not.
+- **Invalidation is a journal event, and it is the same event for every
+  component.** An ordinary cached value invalidates on `KEY_SET` for its
+  `entry_id`. A derived structure invalidates on `BINDS_UPDATED`
+  (`configstorage.md` §3.1), because it is invalidated by the set changing rather
+  than by any single entry. The subscription is §5's `omni_subscribe`, and the
+  callback is what refreshes the private copy.
+
+The worked example this pattern was waiting for is `input`, which is the
+component with the most reads: `generaldesign.md` §14.4's binding index is a
+derived structure refreshed on `BINDS_UPDATED`, and it is the first real instance
+of the pattern rather than a citation of it. Writing that instance is a change to
+`input.md` in `03-input.md`, not a second statement of the pattern, which is why
+the pattern is stated here first.
+
+**D4's remaining half is deliberately small.** A component that wants more than a
+journal entry reads the block, because there is no richer in-process payload and
+no synthetic event (§5). Subscription is a pattern and not a schema, and this is
+the consequence of `omni_event`'s field set being final.
+
 ## 6. Actions (core/actions.{c,h})
 
 Namespaced handler registry feeding IPC `exec` (ipc.md §4) and keybindings.
@@ -357,8 +548,8 @@ Namespaced handler registry feeding IPC `exec` (ipc.md §4) and keybindings.
   Handlers do not reach for server globals, so a handler's dependencies are
   visible at its definition and a descriptor cannot be used after its component
   is gone without that being evident.
-- Names use the key namespace discipline: `wm.*` core, `ext.<name>.*`
-  extensions. The first registration of a name wins; a later one is refused and
+- Names use the key namespace discipline: an action name is an `omniwm.*` key.
+  The first registration of a name wins; a later one is refused and
   logged, and returns a null handle. The component learns at registration that
   its action is unreachable, rather than at first dispatch.
 - Dispatch validates the handler exists and the arg shape (typed arg array),
@@ -431,7 +622,7 @@ by handle:
 ```
 { "type": "binding", "value": { "mods": "ctrl+alt",
                                 "key": "Shift+Return",
-                                "action": "wm.cycle_layout",
+                                "action": "omniwm.cycle_layout",
                                 "args": ["master_stack"] } }
 ```
 
@@ -458,10 +649,10 @@ edited by hand cannot promise that every name in it resolves, and refusing the
 write would mean refusing to store a binding for a component that has not
 activated yet, which is the normal state during boot.
 
-The argument array is where `wm.cycle_layout` finally gets its layout name, and
+The argument array is where `omniwm.cycle_layout` finally gets its layout name, and
 it removes the reason §6.1's positional schema was previously unusable from a
 keybind. A snap can be one action taking a direction
-(`wm.snap left`) rather than four actions, and a layout can be selected by
+(`omniwm.snap left`) rather than four actions, and a layout can be selected by
 binding rather than only by a cycle command, so the parameter count stops being a
 function of the number of directions. Arguments are validated against the
 action's schema from §6.1 at decode time and at dispatch time, because the
@@ -472,7 +663,7 @@ extension between the two.
 rather than arbitrary values:
 
 ```
-{ "type": "rule", "value": { "match":   { "key": "wm.*", "type": "u32" },
+{ "type": "rule", "value": { "match":   { "key": "omniwm.*", "type": "u32" },
                              "replace": { "type": "u32", "value": 8 } } }
 ```
 
@@ -568,7 +759,7 @@ Four levels and no more, because the set is wlroots' and wlroots' version is
 not pinned yet (`build.md` does not exist). A fifth level invented here would
 mean maintaining a translation table the day wlroots' enum changes.
 
-`wm.log.level` is a `wm.*` key, so it is saved and restored like any other. It
+`omniwm.log.level` is a `omniwm.*` key, so it is saved and restored like any other. It
 is read in `omni_boot()` step 4, before any component's `init` runs, because a
 component that logs from `init` and is silenced because nothing read the level
 first is a confusing first impression. `ERROR` and above go to stderr
@@ -664,7 +855,7 @@ the registry's lookup is not the one everything else uses. That is exactly the
 coupling which makes a new action more than a descriptor.
 
 Interning pays for itself on the first keypress rather than later, because
-`wm.cycle_layout`'s argument is a layout name, and resolving a name to a slot
+`omniwm.cycle_layout`'s argument is a layout name, and resolving a name to a slot
 twice per lookup is a string compare per lookup.
 
 ### 7.4 What this section deliberately does not do yet
@@ -685,6 +876,77 @@ What §7.3 commits to is the substrate all three need, and nothing in it has to
 be thrown away when they land. That is the constraint to hold this section to:
 utilities here are chosen so the later extensibility work builds on them, not
 so it has to replace them.
+
+### 7.5 Error and diagnostic conventions (D5)
+
+Two questions were parked on this item and they are not the same question, so
+this says which it answers first. The first is **what a caller sees when a
+request fails**, and it is answered for actions in §6.1 and for the store in
+`configstorage.md` §12.6; the general rule below extends it to options. The
+second is **where a diagnostic goes and what it names**, which is the log policy
+below. They are answered in that order.
+
+**The return path.** Every failure a component reports has one of two shapes,
+chosen by what the caller can do about it, never by where the failure was
+detected:
+
+- A **store failure** is an `OMNI_ERR_*` value from the vocabulary in
+  `omni_layout.h` §12. A component does not invent a code for it and does not
+  translate it; the code names a fact about the block, and the component passes it
+  through (`configstorage.md` §12.6).
+- A **message failure** is an `OMNI_SOCK_ERR_*` value: the request did not decode,
+  the arguments did not match the schema, the action does not exist, or the action
+  failed. §6.1 fixes the action cases, and the rule for the rest is that a
+  component reports the same code the socket would, because a trigger-visible
+  outcome and a socket client's outcome are the same fact.
+
+A **failed option validation** is a store failure, not a third shape. A registered
+option's declared type tag is checked against the stored value
+(`configstorage.md` §12's L4 tier), and a value that does not satisfy it is
+refused with the same `OMNI_ERR_*` the read path uses, because the option table is
+registration data and a mismatch is a fact about the block and its registration
+rather than about a message.
+
+The consequence is that a component has no private error vocabulary. It either
+returns a code from one of the two shared sets or it has no error to report, and
+the two sets are already partitioned by what they name: `OMNI_ERR_*` is the
+block, `OMNI_SOCK_ERR_*` is a message or a facade limit.
+
+**The diagnostic path.** `configstorage.md` §12.6 owns the store's diagnostics.
+The rule outside the store is the one already stated as a contract in §7.1:
+
+- A diagnostic is logged through `omni_log_*`, tagged with the component's bound
+  name, and never written into the store as a key. A component that wants its
+  state observable publishes it as an ordinary or `WINDOW_DEPENDENT` value, which
+  is data, and keeps its diagnostics out of the block.
+- `ERROR` and above go to stderr regardless of the configured level, per §7.1. A
+  failure a user has to act on is never silenceable.
+- A diagnostic names the component and the failing operation, not the caller. A
+  log line is for the WM's operator and the caller's error is the return path
+  above; the two are not substitutes and a component does neither on behalf of the
+  other.
+- `ACTION_FAILED` is the one place the two paths meet, and §6.1 states the split:
+  the caller gets `ACTION_FAILED` as its result and the component logs what went
+  wrong. Keeping them distinct is what tells "you asked for something that does
+  not exist" (`ACTION_NOT_FOUND`)   from "the thing you asked for went wrong".
+
+### 7.6 File-local symbols carry the module prefix (D7)
+
+`omni_` is the prefix for an exported symbol, one that is declared in a header and
+reaches another translation unit. It is not the prefix for a file-local symbol.
+§7.2's operations are the exported case and their `omni_` names are right; this is
+the other case, and it was the last open naming item because it is the difference
+between a `grep` that finds a symbol's callers and one that returns one file's
+private helper alongside every `omni_` symbol in the tree.
+
+**Decided 2026-10-10: a file-local symbol is prefixed with its module, not with
+`omni_`.** The module is the file's name without extension, so a `static` helper in
+`src/input/input.c` is `input_setup` and a `static` helper in
+`src/input/pointer.c` is `pointer_setup`. A file and its prefix are the same string,
+which is what makes the rule mechanical rather than a judgement call. The two rules
+partition the namespace rather than competing for it: anything with external
+linkage is `omni_`-prefixed, anything `static` carries its module prefix, and the
+dwms macros in §7.2 are `OMNI_`-prefixed and unaffected.
 
 ## 8. Server (core/server.{c,h})
 
@@ -810,3 +1072,144 @@ component reading config keys instead of `#ifdef`d options.
   no access check consults it; it exists so a log line can name a component
   without a registry lookup. A component that wants access control has to use
   the namespace convention in `configstorage.md` §3, which is convention too.
+
+## 12. Worked component: a per-window display name
+
+This is the phase-02 worked component ("Done when" item 4). It is written here
+rather than in the tree, so it is a guide every later phase cites instead of a
+restatement of the patterns. It is deliberately small and synthetic: a component
+that gives a window a display name, chosen by a window rule or set by a
+dispatcher. It exists to exercise the whole path once: descriptor, options,
+actions, triggers, block-versus-instance fields, the read-and-react pattern, and
+the register calls of §2.2.
+
+The mock names below are illustrative in the same way the rest of this document
+is: the signatures are the design, the bodies are sketches.
+
+### 12.1 The component and what each field belongs to
+
+The component is `displayname`. Its one user-visible rule is that a window may
+carry a name other than its title, and the name is per-window, so it is
+`WINDOW_DEPENDENT`: observable, never saved (§3.5). Applying §3.5's dividing
+question to every field the component holds:
+
+- **Descriptor** (immutable, §3.1): the option, action and trigger arrays, the
+  name, priority, `enable_key`, and the callback pointers.
+- **Instance** (mutable process memory, §3.2): the derived index cache (§12.4)
+  and the activation and init-result fields.
+- **Block** (config or observable state, §3.5): the per-window name itself, an
+  ordinary or `WINDOW_DEPENDENT` value under the window's entry; and the
+  component's own options, which are ordinary configuration.
+
+### 12.2 The descriptor
+
+```
+static const struct omni_option displayname_options[] = {
+    { "omniwm.displayname.enabled", OMNI_TYPE_BOOL, &(bool){true} },
+    { "omniwm.displayname.default", OMNI_TYPE_STRING, "" },
+};
+
+static const struct omni_action displayname_actions[] = {
+    { "omniwm.displayname.set",
+      displayname_action_set, NULL,
+      &(struct omni_action_schema){
+          .n_args = 2, .arg_tags = (uint16_t[]){ OMNI_TYPE_STRING, OMNI_TYPE_STRING },
+          .result_tag = 0 } },
+};
+
+static const struct omni_trigger displayname_triggers[] = {
+    { "omniwm.client.*.display_name", OMNI_GAP_FAIL, displayname_on_name_change },
+};
+```
+
+The action's two arguments are the window to target and the name to give it,
+and the window is an argument rather than a binding scope, which is the
+2026-09-29 decision that client targeting is the action's business.
+
+### 12.3 How the component is registered
+
+```
+void omni_register_displayname(void)
+{
+    omni_option_register_many(displayname_options);
+    omni_action_register_many(displayname_actions);
+    omni_append_component(&(struct omni_component){
+        .name       = "displayname",
+        .priority   = 200,
+        .critical   = 0,
+        .enable_key = "omniwm.displayname.enabled",
+        .init       = displayname_init,
+        .suspend    = displayname_suspend,
+        .resume     = displayname_resume,
+    });
+
+    omni_rule_property_register("display_name", OMNI_TYPE_STRING, displayname_apply_rule);
+}
+```
+
+One collect entry, and the rule property is registered beside the component
+because it is the component's own extension point. `component-registry.h`
+includes this file so `core/server.c`'s table can name `omni_register_displayname`.
+
+### 12.4 The instance and the derived index
+
+The name is read on every draw, so it is cached and refreshed rather than
+looked up per frame. This is §5.1's pattern made concrete:
+
+```
+struct displayname_instance {
+    struct omni_instance base;              /* descriptor, state, init_errno */
+    struct omni_map     name_by_client;     /* key: entry_id, value: copied name */
+    uint64_t            indexed_commit_id;  /* commit the cache reflects */
+};
+
+static void displayname_init(void)
+{
+    omni_subscribe("omniwm.client.*.display_name", OMNI_GAP_FAIL,
+                   displayname_on_name_change);
+}
+
+static void displayname_on_name_change(const struct omni_event *event)
+{
+    displayname_index_refresh();          /* re-read the block, copy values */
+}
+```
+
+The cache holds a copied name, never a frame offset, because an arena frame can
+be recycled and a copied value survives a commit (§5.1). Invalidation is the
+journal event for the window's name entry, and the callback refreshes rather
+than polls.
+
+### 12.5 The action and the rule
+
+```
+static void displayname_action_set(const struct omni_args *args)
+{
+    struct omni_entry window = omni_resolve_client(args->value[0]);
+    if (!window.entry_id)
+        return omni_action_fail(OMNI_SOCK_ERR_ACTION_FAILED);
+    omni_set_window_value(window, "display_name", args->value[1],
+                          OMNI_SCOPE_WINDOW_DEPENDENT);
+}
+
+static void displayname_apply_rule(const struct omni_rule_ctx *ctx)
+{
+    omni_set_window_value(ctx->window, "display_name", ctx->value,
+                          OMNI_SCOPE_WINDOW_DEPENDENT);
+}
+```
+
+Both paths write the same block value with the same scope bit, so a name set by
+a rule and a name set by the dispatcher are one kind of value. The write is what
+raises the journal event the subscription refreshes on, so the action needs no
+separate notification step.
+
+### 12.6 What this example is a guide to
+
+A later phase adding a component follows this shape: a descriptor with its
+option, action and trigger arrays; an instance holding only mutable process
+state; block entries only for configuration and observable state; behavior
+attached through a trigger subscription rather than an option callback (§3.6);
+and one `omni_register_<component>` entry that a single line in `core/server.c`
+names. The parts specific to `displayname` are the two rule paths and the
+per-window scope; everything else is the substrate.

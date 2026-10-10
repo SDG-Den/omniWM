@@ -54,7 +54,7 @@ omniWM's `include/input/` and `src/input/`.
 | `tablet.c` (431) | `tablet.c` | **port, and extended in stage 10.** Device plumbing ports now; the stylus binding type does not exist and is §6's job. |
 | `touch.c` (363) | `touch.c` | **port.** Touch-to-pointer emulation, which Mango does well and which is not a binding kind at all. |
 | (none) | `binds.c` | **fresh.** The index from `generaldesign.md` §14.4, the journal maintenance, and the one dispatch path all five kinds share. This is the file that has no Mango ancestor. |
-| (none) | `input.c` | **fresh.** The component descriptor, its `wm.input.*` options, and the wlroots listener registration that `device.c` currently does implicitly. |
+| (none) | `input.c` | **fresh.** The component descriptor, its `omniwm.input.*` options, and the wlroots listener registration that `device.c` currently does implicitly. |
 
 Line counts are at `d5a0e1e` and are there so the size of each piece is visible,
 not as a target.
@@ -85,17 +85,17 @@ binding's action name resolve on use rather than at set time (`helpers.md` §6.2
 
 The descriptor's shape is `helpers.md` §3.1's. The parts that are specific here:
 
-- **`enable_key = "wm.input.enabled"`, default `true`**, per the `wm.<component>.enabled`
+- **`enable_key = "omniwm.input.enabled"`, default `true`**, per the `omniwm.<component>.enabled`
   convention in `helpers.md` §3.3. Input can be torn down at runtime, so it
   suspends rather than declaring `NULL`.
 - **Options** are the device-rule-shaped keys and the two timing knobs Mango
-  carries as globals: `wm.input.axis_apply_timeout_ms` (Mango's
+  carries as globals: `omniwm.input.axis_apply_timeout_ms` (Mango's
   `axis_bind_apply_timeout`, default 100, clamped 0..1000) and
-  `wm.input.key_order`. Everything else Mango keeps in `Config` is either a
+  `omniwm.input.key_order`. Everything else Mango keeps in `Config` is either a
   binding, which is a catalog entry, or a device rule, which is §5.
 - **Actions** are the things a binding can name, and they are not declared by
-  this document. They belong to whichever component owns the subject: `wm.focus`
-  and `wm.snap` are `windows.md`'s and `layoutengine.md`'s, `wm.tags` is
+  this document. They belong to whichever component owns the subject: `omniwm.focus`
+  and `omniwm.snap` are `windows.md`'s and `layoutengine.md`'s, `omniwm.tags` is
   `tags.md`'s. This is the seam `generaldesign.md` §14 calls the second one, and
   it is why `input` registers almost no actions of its own: it names the
   registry, it does not populate it.
@@ -191,7 +191,7 @@ because stage 5 needs windows on screen and stage 10 is a long way off.
 
 **Stage 4, "set up basic input":** the device plumbing, the block-backed binding
 records, the index, and the keyboard path. Specifically: `devices.c`,
-`keyboard.c`, `binds.c`, `input.c`, and the `wm.input.*` options. A keybind
+`keyboard.c`, `binds.c`, `input.c`, and the `omniwm.input.*` options. A keybind
 resolves an action by name and an action that does not exist yet is inert, which
 `helpers.md` §6.2 already decided is the correct behaviour rather than a fault.
 
@@ -249,7 +249,7 @@ scoped to**, and the candidates are the namespaces that already exist:
 | drop scoping | nothing; every binding is always in scope | loses `common`/`default` and with them the ability to have a binding that only applies in one context. Simplest, and it is a real loss. |
 | scope to a tag | a tag name or `entry_ref` | a binding that applies on one tag. But a tag is where windows are, and Mango's mode is a global focus context, so this changes the meaning rather than translating it. |
 | scope to a client | an `entry_ref` | a binding scoped to one window, which Mango has no equivalent for at all. This is a new feature wearing an old name. |
-| keep a mode string, renamed | a namespaced string like `wm.input.modes.<name>` | the closest to a port, and it keeps a global mutable string, which is the thing `tags.md` and `windows.md` are built to avoid. |
+| keep a mode string, renamed | a namespaced string like `omniwm.input.modes.<name>` | the closest to a port, and it keeps a global mutable string, which is the thing `tags.md` and `windows.md` are built to avoid. |
 
 None of these is obviously right, which is why the seam is listed as open rather
 than resolved. The one thing that can be said without deciding: `generaldesign.md`
@@ -273,7 +273,7 @@ about what the mode means.
   number, and `configstorelayout.md` §4's vocabulary and the static assert in
   `include/shared/omni_layout.h` are written when the number is. The namespace is a
   separate and easier question, since a device rule is keyed by device and
-  `wm.input.device.<n>.*` follows from the same convention as the other options.
+  `omniwm.input.device.<n>.*` follows from the same convention as the other options.
 - **`isallowconflict` is not carried, and the binding match test belongs to phase
   03.** The rule `generaldesign.md` §14.4 now states is that ordering inside an
   index bucket is config order and the **last** match wins. That is not a
@@ -314,7 +314,7 @@ about what the mode means.
 | reference | use |
 |---|---|
 | `generaldesign.md` §14 | the use-Mango's-code-where-we-can decision, the three seams, and §14.1 to §14.4 the field map, the block/index split, the measured scan cost, and the index |
-| `helpers.md` §3, §9 | the component descriptor, the `wm.<component>.enabled` convention, suspension, and input's priority of `100` |
+| `helpers.md` §3, §9 | the component descriptor, the `omniwm.<component>.enabled` convention, suspension, and input's priority of `100` |
 | `helpers.md` §6, §6.1, §6.2 | the action registry, the argument schema, and `action_ref` as a name resolved on use |
 | `helpers.md` §7.2 | `omni_regex_match` as the single PCRE2 engine, which gesture patterns would reach for |
 | `configstorage.md` §4 | the `binding` tag, the `modmask` and `keysym` type tags, and the positional `args` array |

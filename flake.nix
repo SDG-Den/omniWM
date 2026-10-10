@@ -94,7 +94,8 @@
           # `nix run` does. It is the ABI check rather than the compositor because
           # there is no compositor executable yet, and a `nix run` that fails with
           # a missing file teaches nothing. This line is deleted when
-          # `02-substrate.md` B3 installs the real binary.
+          # `02-substrate.md`'s build half enables the `omniwm` executable, which
+          # is the B6/§6 target-selection work in `build.md`.
           apps.default = {
             type = "app";
             program = "${abi-check}/bin/omniwm-abi-check";

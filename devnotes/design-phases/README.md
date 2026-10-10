@@ -60,7 +60,7 @@ being tracked separately, so there is one place to look:
 | `tags.md` §9 | 3 "not covered" bullets, one placement decision recorded separately, then 4 struck and closed, **none open** |
 | `input.md` §7, §7.2 | 4 not-covered bullets in §7 and 3 more in §7.2; one of the seven is the substantive gap and the rest are owned elsewhere or not needed at stage 4 |
 | `ipc.md` §8 | 8 bullets; 2 of them were stale restatements of decisions already closed and have been corrected. `swap_tags` was added to §4 rather than here, because it is specified rather than open |
-| `server.md` §9 | 2 bullets, both delegating to the compositor subsystem work that follows it |
+| `server.md` §9 | 2 bullets, both delegating to the compositor subsystem work that follows it; **settled in phase 02**, which names the phase that owns each and the server surface for it (`server.md` §9, §9.1, §9.2) |
 
 The counts are as of this reconciliation pass, and **no document listed above
 carries an open item**. The two that used to, `layoutengine.md` §11 and `tags.md`
@@ -248,7 +248,7 @@ scene graph is written before decorations or after.
 ## Design Phase Tracking
 - [x] Phase 00
 - [x] Phase 01 (`testing.md` exists and is complete: the seam, the framework, the per-tier store tests, the fuzz corpus and the deliberate absences. The stub's checklist was the working document; see `01-testing.md`)
-- [ ] Phase 02
+- [x] Phase 02 (design complete: the design half D1-D10 is written, including the worked component and its registry-function scope in `helpers.md` §12 and §2.2, and the build half B1-B7 is decided and written, including the render toolkit's primitive set, preset mapping, and node and pass model in `build.md` §4.2 and §4.3. The one item not verified in this phase is the `flake build` check, deferred to the substrate implementation. See `02-substrate.md` and `scaffolding.md`'s phase-02 append)
 - [ ] Phase 03
 - [ ] Phase 04
 - [ ] Phase 05

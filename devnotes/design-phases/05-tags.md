@@ -32,11 +32,11 @@ for setting a tag is what a binding most often needs.
 
 **5. The two questions `tags.md` §9 used to carry, now closed by phase 00 and
 recorded here so this phase does not reopen them.** *Stored versus derived
-membership* is closed as **stored** on the tag (`tags.md` §5, `wm.monitor.<id>.tags`),
+membership* is closed as **stored** on the tag (`tags.md` §5, `omniwm.monitor.<id>.tags`),
 on access-pattern grounds, and `layoutengine.md` §3.2's determinism requirement is
 the reason; §7.7 agrees by pointing at the same decision. *The surface form of the
 swap's keypath arguments* is closed as **two full keypaths**: `ipc.md` §4 writes
-them as `wm.monitor.<m>.tag.<n>` and the operation is a content swap in one grouped
+them as `omniwm.monitor.<m>.tag.<n>` and the operation is a content swap in one grouped
 commit. Both were struck from `tags.md` §9 when they were decided. What remains for
 this phase is the bar-side surface in item 1, which is a gap rather than an open
 decision.
@@ -57,7 +57,7 @@ written down.** `tags.md` §3 was reversed in the reconciliation pass: a tag was
 documented as belonging to no particular monitor and is now identified by the pair
 (monitor, number), mirroring was reframed from a given-up feature into the protocol
 violation the per-monitor identity makes unrepresentable, and the scratchpad
-became configurable between one shared tag and one per monitor (`wm.scratchpad.
+became configurable between one shared tag and one per monitor (`omniwm.scratchpad.
 shared`, default `true`) with a layout of its own. Phase 05 should not re-derive
 those; it should check that the document is internally consistent with them, and
 the specific things worth re-reading are `tags.md` §3.1 (the invariant is *at most*
@@ -85,7 +85,7 @@ binding scope. It gates phase 06, because `windows.md` §9's window rules refere
 tags. The dependency with phase 04 now runs the other way from the one this stub
 used to state: `tags.md` §9 used to leave the storage of a monitor's tag list to
 `monitor.md`, and it no longer does, so phase 04 reads this phase and the two must
-agree on the `wm.monitor.<id>.tags` shape.
+agree on the `omniwm.monitor.<id>.tags` shape.
 
 ## Done when
 

@@ -180,8 +180,10 @@ unresolved, and the coupling to scenefx 0.5 was a hard constraint on everything
 else. nixpkgs-unstable resolves the pair, wlroots 0.20.2 against scenefx 0.5.0,
 and the whole list configures. `scenefx` is taken from nixpkgs rather than from
 Mango's `github:wlrfx/scenefx` flake input, because Mango pins that input for
-scenefx extensions nixpkgs does not carry and B3 has not yet decided whether we
-need them. That is a deliberate deferral, not an oversight, and B3 remains open.
+scenefx extensions nixpkgs does not carry, and omniWM builds those extensions
+itself rather than tracking a patched scenefx (B3's no-fork decision, `build.md`
+§4). The render stack is chosen too (`build.md` §4.1): the wlroots renderer with
+libplacebo beside it for the effects the renderer does not express.
 
 **What the build deliberately does not do.** The `omniwm` executable is not
 built, because all 62 source files are zero bytes and a build that fails for a

@@ -405,7 +405,7 @@ process-local index, so storing one would put an unreadable value in a file a us
 edits and would not survive a `save` and reload. The name is resolved through the
 registry when the key fires, and an unregistered name is `ACTION_NOT_FOUND` on
 use. Its `args` is an optional positional string array, validated against the
-action's schema at decode and again at dispatch, so `wm.snap left` is one action
+action's schema at decode and again at dispatch, so `omniwm.snap left` is one action
 rather than four. A `rule` matches by key pattern and optionally type, and its
 `replace` is a full typed value whose type must match the match constraint.
 
@@ -503,8 +503,8 @@ mistake it for an oversight.
 Read the current value of one key from the catalog.
 
 ```
-{ "cmd": "get", "key": "wm.focus.color", "id": 1 }
--> { "ok": true, "result": { "key": "wm.focus.color", "type": "rgba8",
+{ "cmd": "get", "key": "omniwm.focus.color", "id": 1 }
+-> { "ok": true, "result": { "key": "omniwm.focus.color", "type": "rgba8",
      "value": "#3d6bff", "length": 4 }, "epoch": 7, "commit_id": 43, "id": 1 }
 ```
 
@@ -526,8 +526,8 @@ contents for the tag it names.
 Single-key commit or grouped commit in one message.
 
 ```
-{ "cmd": "set", "keys": [ { "key": "wm.gaps", "type": "u32", "value": 8 },
-                          { "key": "wm.gaps_enabled", "type": "bool", "value": true } ], "id": 2 }
+{ "cmd": "set", "keys": [ { "key": "omniwm.gaps", "type": "u32", "value": 8 },
+                          { "key": "omniwm.gaps_enabled", "type": "bool", "value": true } ], "id": 2 }
 ```
 
 - Without `keys` array, one shot: `{"cmd":"set","key":"...","type":"...","value":...}`.
@@ -540,7 +540,7 @@ Single-key commit or grouped commit in one message.
   An unregistered key has no declared type, so `type` is then required and is
   the client's own choice.
 - This is what makes a bare integer unambiguous: the value's type comes from the
-  key's registration, not from the literal's magnitude, so `wm.gaps = 8` keeps
+  key's registration, not from the literal's magnitude, so `omniwm.gaps = 8` keeps
   the type its component declared regardless of whether the number later grows.
 - Mapped onto commit protocol configstorelayout.md §13: single-key = one
   `commit_id` and one `journal_seq`; grouped = one `commit_id` and N distinct
@@ -557,10 +557,10 @@ Subscribe to a journal-forward stream of events for a key glob. The field is
 `pattern`; the term `play` used in older notes is not accepted.
 
 ```
-{ "cmd": "watch", "pattern": "wm.*", "since": { "epoch": 7, "journal_seq": 43 },
+{ "cmd": "watch", "pattern": "omniwm.*", "since": { "epoch": 7, "journal_seq": 43 },
   "gap_policy": "fail", "id": 3 }
 -> { "ok": true,
-     "result": { "sub": 1, "pattern": "wm.*",
+     "result": { "sub": 1, "pattern": "omniwm.*",
                  "cursor": { "epoch": 7, "journal_seq": 100 } },
      "epoch": 7, "commit_id": 99, "id": 3 }
 ```
@@ -575,12 +575,12 @@ Subsequent lines on the connection are forward in `journal_seq` order from
 `since.journal_seq` (or from the current tail if omitted):
 
 ```
-{ "sub": 1, "event": "key_set", "key": "wm.gaps", "type": "u32", "value": 8,
+{ "sub": 1, "event": "key_set", "key": "omniwm.gaps", "type": "u32", "value": 8,
   "epoch": 7, "commit_id": 44, "journal_seq": 44, "entry_id": 12,
   "entry_generation": 3, "time": 12345 }
-{ "sub": 1, "event": "key_delete", "key": "wm.gaps", "epoch": 7, "commit_id": 45,
+{ "sub": 1, "event": "key_delete", "key": "omniwm.gaps", "epoch": 7, "commit_id": 45,
   "journal_seq": 45, "entry_id": 12, "entry_generation": 3, "time": 12346 }
-{ "sub": 2, "event": "custom", "category": "ext.foo.signal", "value": "hello",
+{ "sub": 2, "event": "custom", "category": "foo.signal", "value": "hello",
   "epoch": 7, "commit_id": 46, "journal_seq": 46, "time": 12347 }
 ```
 
@@ -625,8 +625,8 @@ watch such a key literally. The escape is a backslash, and it applies only to
 `*` and to itself:
 
 ```
-wm.*        prefix match on "wm."
-wm.\*       the exact key "wm.*"
+omniwm.*        prefix match on "omniwm."
+omniwm.\*       the exact key "omniwm.*"
 \\          a literal backslash
 \*          a literal asterisk
 w\*x        the exact key "w*x"
@@ -710,7 +710,7 @@ Invoke a registered action by namespace-qualified name. Bindings reference
 actions as strings, resolved via the registry at dispatch time.
 
 ```
-{ "cmd": "exec", "action": "wm.cycle_layout", "args": ["master_stack"], "id": 4 }
+{ "cmd": "exec", "action": "omniwm.cycle_layout", "args": ["master_stack"], "id": 4 }
 ```
 
 - `args` is a JSON array, validated positionally against the action's declared
@@ -817,7 +817,7 @@ precise about what it covers.
   on to do. Ordering is likewise partial: the block applies in file order, and
   each `exec` runs at its line, but an action's side effects are not rolled back
   if a later line fails.
-- `wm.reload` is appended as a journal event in the same commit, carrying the
+- `omniwm.reload` is appended as a journal event in the same commit, carrying the
   new `commit_id`, so a client watching for it can confirm the boundary rather
   than infer it.
 
@@ -828,7 +828,7 @@ is not a reset: `delete` unmakes an entry, while `reset` re-establishes a
 configuration state.
 
 ```
-{ "cmd": "delete", "key": "wm.gaps", "id": 7 }
+{ "cmd": "delete", "key": "omniwm.gaps", "id": 7 }
 ```
 
 - The entry goes DESTROYED + FREE (configstorelayout.md §6), `KEY_DELETE` is
@@ -847,7 +847,7 @@ of as "move this tag to that monitor", and it is named for what it does rather
 than for what it is called, because `tags.md` §3 makes the two different things.
 
 ```
-{ "cmd": "swap_tags", "a": "wm.monitor.1.tag.3", "b": "wm.monitor.2.tag.7", "id": 10 }
+{ "cmd": "swap_tags", "a": "omniwm.monitor.1.tag.3", "b": "omniwm.monitor.2.tag.7", "id": 10 }
 -> { "ok": true, "commit_id": 44, "epoch": 7, "id": 10 }
 ```
 
@@ -953,7 +953,7 @@ applier that only watches the epoch will not notice a soft reset.
 | `WINDOW_DEPENDENT` entries | kept | **gone** |
 | `EPHEMERAL` entries | kept | **gone** |
 | catalog | affected entries cleared | empty, then re-seeded |
-| journal | continues, `wm.reset` appended | **new ring, new `epoch`** |
+| journal | continues, `omniwm.reset` appended | **new ring, new `epoch`** |
 | every outstanding reference | stays valid | **invalid** |
 | reversible | no, not by itself; `save` first and `reload` after | no |
 
@@ -964,15 +964,18 @@ every outstanding `watch` cursor, all remain valid. A hard reset changes the
 existing `WATCH_EPOCH_CHANGED` path rather than through anything new. That is
 why `epoch` is the whole reset-detection story and no new error code is needed.
 
-Extension entries are ordinary configuration under the `EPHEMERAL` default,
-which is the one genuinely sharp edge in soft reset: an extension's `ext.*`
-keys are cleared and it must repopulate them from its own `wm.reset` handler.
-That is correct, and it is a real obligation on extension authors rather than
-something the store can infer, so it is stated rather than hidden.
+Foreign-writer keys are ordinary configuration by default, exactly as a
+component's option keys are: a key written through TOML and a key written over
+the socket carry the same classification. That default is the one genuinely sharp
+edge in soft reset: those keys are cleared, and a writer that drove the WM
+entirely through the SHM, with no TOML at all, must repopulate them from its own
+`omniwm.reset` handler. That is correct, and it is a real obligation on a foreign
+writer rather than something the store can infer, so it is stated rather than
+hidden.
 
 To make both modes observable to any applier, and not only to the caller, both
-append a journal `EVENT` with category `wm.reset`, carrying `mode` and the new
-`commit_id`, and nothing else. An applier watching `wm.reset` re-runs its init.
+append a journal `EVENT` with category `omniwm.reset`, carrying `mode` and the new
+`commit_id`, and nothing else. An applier watching `omniwm.reset` re-runs its init.
 Without this, soft reset would work only for the built-in TOML path, because that
 path happens to be the caller, which is the coupling this design exists to remove.
 
@@ -981,6 +984,43 @@ path happens to be the caller, which is the coupling this design exists to remov
 - A soft reset issued while a window operation is in flight is refused with
   `NOT_READY`. A hard reset is always permitted, because it does not depend on
   block state surviving.
+
+### Component methods
+
+The command set is not closed. A component may register a verb of its own, and
+`swap_tags` above is the example: it is not in §2's list, and it is not
+implemented in the socket facade, it is registered by the tags component and
+invoked like any other command.
+
+```
+omni_ipc_method_register(name, handler, schema) -> handle
+```
+
+- `name` is an `omniwm.*` command key, chosen under the same namespace discipline
+  actions use (`helpers.md` §6), because `omniwm` is the one root the project
+  owns (`configstorage.md` §3). There is no per-component namespace and no
+  `ext.<name>.*`; the earlier idea that a component gets its own root is gone.
+- `schema` is an `omni_action_schema` (`helpers.md` §6.1), so a method validates
+  its arguments the same way an action does and reports the same codes,
+  `ACTION_NOT_FOUND`, `ARGS_INVALID`, `ACTION_FAILED`, and `PARAM_INVALID`. A
+  method and an action that do the same thing can share one schema.
+- A method is registered during the component's registration pass (`helpers.md`
+  §2), so the set is complete before the socket serves a request. It adds a verb;
+  it does not add a second dispatch path, a second envelope, or a second
+  readiness rule.
+- Dispatch is the ordinary dispatch path (`server.md` §5), on the event loop. A
+  method is a write-like verb, so `§5.2` refuses it with `NOT_READY` while `ready`
+  is not `READY`, by the same rule the built-in write verbs use.
+- The handle is released at suspend, exactly like an action or trigger handle
+  (`helpers.md` §8.1), because the handler is the component's code: a suspended
+  component has no live methods. A client that names one gets `UNKNOWN_CMD`, the
+  same way a released action gives `ACTION_NOT_FOUND`.
+
+Registration is internal, and the internal/external split is the one `helpers.md`
+§6.3 already draws. An external program has no registration path, because it is
+not a component and there is no in-process ABI (§8.1); it reaches a method by
+sending the command, the same way it reaches a built-in verb, and writes a key
+when no verb exists.
 
 ## 5. Readiness
 
@@ -1056,7 +1096,7 @@ Commands are not queued while `NOT_READY`. Queueing would mean a client cannot
 tell whether its `set` was applied, and the failure mode of a silently-dropped
 queued command is worse than an explicit `NOT_READY` the client can retry. A
 client that wants to wait polls `ready`; a client that wants to react to the
-transition can `watch` the `wm.ready` event, which is appended in the commit
+transition can `watch` the `omniwm.ready` event, which is appended in the commit
 that changes the field.
 
 `ready` is written only in a commit, so it is observed atomically with respect
@@ -1167,7 +1207,7 @@ and a path and produces a file rather than leaving each caller to assemble one.
   §watch. Richer matching, if reload ever needs it, would be a new grammar
   rather than an extension of this one, because a client already relying on `\*`
   being a literal asterisk constrains what any extension may mean.
-- The `wm.reset` journal event's category name and its field set are fixed here.
+- The `omniwm.reset` journal event's category name and its field set are fixed here.
   **The temp-file naming and lifetime that used to appear on this list are gone,
   and the bullet is deleted rather than rewritten, because the thing it was about
   no longer exists.** There is no soft-reset snapshot: §reset clears the affected

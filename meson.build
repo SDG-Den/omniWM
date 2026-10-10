@@ -27,10 +27,12 @@ project('omniwm', ['c'],
 #   `debugger/`     the SHM block visual analyser
 # ---------------------------------------------------------------------------
 
-# The core library. Everything in `src/` except the entry point, so that a
-# consumer can link the compositor's logic without linking a compositor. This is
-# the package that exists to be depended on: `libomniwm` is what another project
-# would put in its `buildInputs` to drive the store rather than reimplement it.
+# The core library. Everything in `src/` except the entry point. `libomniwm` is
+# the *internal* development library omniWM itself is built from, not a hand-off
+# surface, which is why it links the whole Mango dependency list directly
+# (`build.md` §3). The narrow surface another project would put in its
+# `buildInputs` is the separate SHM-client library over `include/shared/`, which
+# does not exist yet.
 core_sources = [
   'src/core/lib.c',
   'src/core/log.c',
@@ -153,12 +155,16 @@ endif
 #   wlroots/scenefx coupling `generaldesign.md` §19 called the largest external
 #   risk resolves against a released pair rather than against a fork.
 #
-# `scenefx` is taken from nixpkgs rather than from a flake input. Mango pins
-# `github:wlrfx/scenefx` as a flake input because its own build needs extensions
-# to scenefx that nixpkgs does not carry, and `02-substrate.md` B3 is the open
-# question of whether we need them too. Until B3 is decided, the nixpkgs package
-# is the honest choice: it is the released extension set, and a fork would be a
-# decision taken by accident.
+# `scenefx` is taken from nixpkgs rather than from Mango's flake input. Mango
+# pins `github:wlrfx/scenefx` because its own build needs extensions nixpkgs does
+# not carry; `02-substrate.md` B3 decided omniWM does not fork or patch scenefx
+# but builds those extensions itself in its own render layer, so the released
+# nixpkgs package is the correct base and `build.md` §4 is the record.
+#
+# `libplacebo` is the one addition on top of Mango's list (`02-substrate.md` B1,
+# `build.md` §3 and §4.1): the external cross-GPU shader library the render layer
+# uses beside the wlroots renderer. It is not on the path of a draw that uses no
+# effect, and it is non-optional for the same reason scenefx is.
 #
 # `pc` is an oddity inherited from Mango and kept deliberately: some nixpkgs
 # packages are only findable by pkg-config name where the Meson `dependency()`
@@ -177,6 +183,7 @@ libinput_dep = dependency('libinput', version : '>=1.27.1')
 libwayland_client_dep = dependency('wayland-client')
 pcre2_dep = dependency('libpcre2-8')
 libscenefx_dep = dependency('scenefx-0.5', version : '>=0.5.0')
+libplacebo_dep = dependency('libplacebo')
 pixman_dep = dependency('pixman-1')
 cjson_dep = dependency('libcjson')
 pangocairo_dep = dependency('pangocairo')
@@ -187,6 +194,7 @@ compositor_deps = [
   xcb,
   xlibs,
   libscenefx_dep,
+  libplacebo_dep,
   wayland_server_dep,
   wlroots_dep,
   xkbcommon_dep,
@@ -247,9 +255,10 @@ subdir('protocols')
 # ---------------------------------------------------------------------------
 # Targets
 #
-# Four of them, and the split is not cosmetic. `libomniwm` is the part other
-# projects link. `libomniwm-ipc` is the socket facade, which the WM links and a
-# client does not. `libomniwm-debugger` is a reader of the block, which nothing
+# Four of them, and the split is not cosmetic. `libomniwm` is the internal
+# development library the WM is built from. `libomniwm-ipc` is the socket
+# facade, which the WM links and a client does not. `libomniwm-debugger` is a
+# reader of the block, which nothing
 # links into the compositor. `omniwm` is the compositor itself, and it is the
 # only one of the four that pulls in wlroots.
 #

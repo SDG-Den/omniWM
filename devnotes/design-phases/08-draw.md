@@ -20,6 +20,8 @@ before stage 8. **This is the phase's first item and it decides its own scope.**
 **2. The scene graph node types and their animatable properties.** The core of
 the document, and the thing phases 09 and 10 consume. What is a node, what
 properties it carries, and which of those properties an animation may touch.
+Phase 02 has already written the pass model a node emits, in `build.md` §4.3; this
+phase owns the node type list itself.
 
 **3. Backgrounds: colour, image, shader, vector overlay, and a panning infinite
 canvas.** `generaldesign.md` §19 explicitly defers the background and
@@ -43,7 +45,9 @@ is what the compositor does with a region's buffer once it has one.
 **8. The scenefx dependency.** `generaldesign.md` §19 calls the extension set the
 largest risk to "Any Look", and user GLSL shaders are a draw requirement, not a
 decorate one. Phase 02 owns the fork-or-patch question; this phase owns what it
-needs from it.
+needs from it. The requirement list is written in `build.md` §4.3: a node type
+that can carry a custom pass, and a render-pass entry point that accepts the op
+set.
 
 ## What it resolves
 

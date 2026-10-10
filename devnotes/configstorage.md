@@ -143,8 +143,9 @@ value_inline     : u64   low bytes of an inline value or reference generation
 ```
 
 - Any key name is accepted. No whitelist, no reject-at-write. Unknown keys are stored and served verbatim.
-- Namespace by convention: `wm.*` is reserved for the core; extensions use their own prefixes (`ext.<name>.*`). This is convention, not enforcement: the block cannot identify writers, so there is no real access control. Scope is expressed by exclusion: an unmarked entry is ordinary configuration, and a facade marks a value out of `save` by setting `WINDOW_DEPENDENT` (scoped to one window) or `EPHEMERAL` (no long-term relevance, such as process bookkeeping). `save` and a soft reset use the same test, `WINDOW_DEPENDENT clear AND EPHEMERAL clear`.
+- Namespace by convention: `omniwm.*` is reserved for omniWM and its components; every other root is a foreign writer's own, carried but never interpreted by the store. This is convention, not enforcement: the block cannot identify writers, so there is no real access control. Scope is expressed by exclusion: an unmarked entry is ordinary configuration, and a facade marks a value out of `save` by setting `WINDOW_DEPENDENT` (scoped to one window) or `EPHEMERAL` (no long-term relevance, such as process bookkeeping). `save` and a soft reset use the same test, `WINDOW_DEPENDENT clear AND EPHEMERAL clear`.
 - The WM seeds its core keys at startup as ordinary entries, exactly the way an extension creates theirs at runtime.
+- Facade-set does not imply `EPHEMERAL`. A key the config facade writes from TOML is ordinary configuration, and `save` writes it back, because a saved config has to reload; `EPHEMERAL` is reserved for transient state, such as process bookkeeping or a temporary change over IPC, and most of the places that set it belong to higher-level functions not yet designed.
 - Entries are created live. The fixed-capacity array has a freelist; live entries never move, so holders can keep references stable.
 - A catalog reference is `(epoch, entry_id, entry_generation)`. `entry_id` is the slot index and `entry_generation` changes whenever that slot is reused.
 - Names are immutable during one entry lifetime. A rename deletes and recreates the entry so old journal references cannot acquire a new name.
@@ -359,7 +360,7 @@ The header is fixed and the array is variable, which is why this is a framing
 change and not a new tag: a binding without arguments is still a binding, and
 `args_ref == OMNI_REF_NONE` says so without a length comparison. The argument
 array is positional and every element is a string, matching what `exec` already
-accepts, so `wm.cycle_layout master_stack` and a TOML
+accepts, so `omniwm.cycle_layout master_stack` and a TOML
 `args = ["master_stack"]` are the same value in two syntaxes. Argument count and types
 are the action's business, not the store's.
 
@@ -924,7 +925,7 @@ Free win: because bad data is a designed-for state, hardening is fuzzable. Garba
 
 ## 13. Startup, config-as-saved-state, and save-file semantics
 
-- Startup: create block, initialise the header, seed core `wm.*` keys, set
+- Startup: create block, initialise the header, seed core `omniwm.*` keys, set
   `OMNI_INSTANCE_SIGNATURE`, serve. The header initial values are not left to
   "whatever the allocator handed back", because a field whose initial value is
   implied rather than written is a field whose meaning differs between the creator
@@ -965,7 +966,7 @@ a recycled file, which is otherwise indistinguishable until it matters.
 | `arena_end` | `pool_base` | an empty arena. The end is the bump cursor, so an empty arena is where they meet |
 | `arena_free_head` | `OMNI_REF_NONE` | an empty free list terminates on the sentinel rather than on 0, because 0 is not a valid frame offset: the pool starts at `OMNI_POOL_OFF` |
 | `region_head` | `OMNI_REF_NONE` | same reason, same sentinel |
-| `catalog_free_head` | the first unseeded slot, or `OMNI_REF_NONE` only if seeding consumed every slot | a fresh block is not short of free slots, it is *entirely* free slots, so the freelist is a chain over the unseeded tail of the array rather than the sentinel. The creator seeds a low run of slots for the core `wm.*` keys and links the whole remainder, which is why the head is usually a real index and the sentinel is the rare case it was designed for |
+| `catalog_free_head` | the first unseeded slot, or `OMNI_REF_NONE` only if seeding consumed every slot | a fresh block is not short of free slots, it is *entirely* free slots, so the freelist is a chain over the unseeded tail of the array rather than the sentinel. The creator seeds a low run of slots for the core `omniwm.*` keys and links the whole remainder, which is why the head is usually a real index and the sentinel is the rare case it was designed for |
 | `catalog_free_count` | `OMNI_CATALOG_SLOT_COUNT` minus the number of slots seeding consumed | the honest count for the same reason. Zero is correct only for a block whose catalog is full, and a fresh block is the opposite of full, so a creator that wrote zero here would have its first `omni_set` walk an empty freelist while sixteen thousand FREE slots sat in the array looking unavailable |
 | `request_ticket_next` | 1 | 0 is reserved as "no ticket ever issued", so the first real ticket is 1. A u32 wraps in practice, so §0.1's no-wrap rule holds within an epoch and a wrapped ticket is rejected against the live one rather than trusted |
 | `catalog` slots, the 16,384 not handed to a seeded entry | `entry_generation` = 0, `FREE` set, `DESTROYED` clear, `name_ref` = the next unseeded slot, `0xFFFFFFFF` on the last one | these are the empty slots, and generation 0 is what distinguishes "never allocated" from "allocated and later freed" (`configstorelayout.md` §6 gives 1 to the first allocation of a slot). `name_ref` carries the freelist link that §6 reserves for a FREE entry, which is what makes them allocatable rather than merely present. `DESTROYED` is deliberately clear, and it stays clear on a chain of never-allocated slots rather than being set to match the generic FREE rule in `configstorelayout.md` §6: that rule describes a slot freed from a live entry, where `DESTROYED` is a statement about a name that existed and was deleted, and a slot that was never named has nothing to have destroyed |
@@ -1096,4 +1097,37 @@ problem too late.
   child naming a destroyed-and-recycled client must not carry the stale half
   across, so the exchange validates both sides or refuses, and refusing is correct
   because a swap with a dead member in it is already a bad request.
+
+#### 14.1.1 The mechanism each operation needs
+
+The three are obligations above; each also has a shape, and the shape is what
+tells an implementer they are not variations of one another.
+
+**Subtree delete** is a recursive walk of one prefix. At each level it frees the
+entry's name frame and payload frame back onto the pool free chain
+(`configstorelayout.md` §5), marks the catalog slot `FREE` with its length,
+`body_ref` and `value_inline` cleared, and invalidates the name's catalog-index
+row in the same commit. It is safe to free as it recurses because nothing outside
+the prefix references those frames. `catalog_free_count` is the assertion that
+the walk is correct: it rises by exactly the number of frames released, and a name
+left resolvable after its frame is on the free chain is the failure from the
+delete obligation above.
+
+**Subtree exchange** is not that walk run over two prefixes. It frees nothing,
+because every child of one container is still live in the other, so it moves
+values between the two existing subtrees instead of deleting and re-adding them.
+The mechanism is a paired walk of the two prefixes that rewrites each side's
+parent and child references to point at the other side's children, with no
+intermediate commit in which either container is short a member. Its
+`catalog_free_count` assertion is that it is **unchanged** before and after, which
+is precisely the assertion a delete-and-re-add would fail.
+
+**Generation-correct deletion** is the rule both of the above obey when they
+remove or move a membership child. A membership child stores an `entry_ref`, and
+the operation compares the `entry_id` **and** the `entry_generation` it was given
+against the live slot before acting (§0.1). A reader or writer that finds the slot
+gone takes the `ENTRY_FREE` path; one that finds the slot live but reallocated
+takes the `GENERATION_MISMATCH` path. For the exchange this is a refusal rather
+than a skip: a child naming a destroyed-and-recycled client must not carry the
+stale half across, so the exchange validates both sides or refuses.
 

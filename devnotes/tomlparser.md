@@ -22,7 +22,7 @@ against a schema, or reject an unknown key.
 A TOML document is therefore read as:
 
 - a top-level table, whose keys are config keys, with dotted keys nesting the
-  namespace (`wm.gaps` is a TOML dotted key or a nested table, and both spell
+  namespace (`omniwm.gaps` is a TOML dotted key or a nested table, and both spell
   the same config key);
 - arrays of tables, which are config keys whose values are `array`;
 - values whose type comes from the key's registration where one exists, and from
@@ -153,7 +153,7 @@ A user who wants a specific width regardless of registration uses the explicit
 table form, which carries the tag:
 
 ```
-wm.gaps = { type = "u32", value = 8 }
+omniwm.gaps = { type = "u32", value = 8 }
 ```
 
 The table form is the one escape hatch, and it is checked against the declared
@@ -186,11 +186,11 @@ The table form remains available for an explicit unit and for a value that does
 not fit the shorthand:
 
 ```
-wm.animation = { type = "duration", value = { "$u64": "1500000" } }
+omniwm.animation = { type = "duration", value = { "$u64": "1500000" } }
 ```
 
 A string that is not a valid suffixed duration is an ordinary `string`. There is
-no failure here, because guessing wrong would make `wm.title = "1500"` unusable
+no failure here, because guessing wrong would make `omniwm.title = "1500"` unusable
 as a title.
 
 ## 5. Arrays
@@ -202,7 +202,7 @@ number, rather than a coercion that would silently discard a value.
 An empty array has no elements to infer from, so `elem_type` must be given:
 
 ```
-wm.key_order = { type = "array", elem_type = "string", value = [] }
+omniwm.key_order = { type = "array", elem_type = "string", value = [] }
 ```
 
 This is why `elem_type` is explicit in the wire form (`ipc.md` §3.2): an empty
@@ -214,7 +214,7 @@ A table or inline table is a `tuple` whose `field_types` come from the field
 order, with dotted keys flattened into the same namespace as any other key:
 
 ```
-wm.border = { width = 2, color = "#3d6bff" }
+omniwm.border = { width = 2, color = "#3d6bff" }
 ```
 
 becomes a `tuple` with `field_types` `["u32", "rgba8"]` once each field is bound

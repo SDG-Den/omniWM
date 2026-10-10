@@ -3,7 +3,37 @@
 *Not expected to be accurate about other documents until this phase starts; see
 [README.md](README.md).*
 
-Stub. Not started.
+**Started 2026-10-10.** The stub was re-evaluated against the documents as they
+are now, and the drift that pass found is repaired, recorded here by kind:
+
+- **Accuracy repair, this file.** B6 called the core/compositor unit split a
+  phase 03 decision; it is this phase's, and the line now says so.
+- **Accuracy repairs, in the documents this phase owns.** `build.md`'s closing
+  line that "B3 is explicitly still open" is replaced by §3 to §6, and
+  `build.md` §3 and §4 now carry B1, B2 and B3 live rather than as stub items.
+- **Accuracy repairs, in build-system comments.** `meson.build`'s `libomniwm`
+  comment and target comment no longer call `libomniwm` the surface other
+  projects link, and its scenefx comment no longer treats B3 as open;
+  `flake.nix`'s `nix run` comment no longer names B3 as the phase that enables
+  the executable.
+- **Recorded, not repaired.** `src/core/lib.c` is in `meson.build`'s
+  `core_sources` but appears in no design document and has no
+  `include/core/lib.h` counterpart. It is recorded rather than removed, because
+  removing a file is not a decision this phase takes on its own.
+- **Accuracy repair, this file, the scope-taxonomy citation.** D2 and the "Done
+  when" list cited `configstorage.md` §1 for the scope taxonomy; §1 is the
+  concurrency model and the taxonomy is in §3 (catalog flags) and §12.2 (flag
+  state). Both citations now name §3 and §12.2.
+
+**Complete 2026-10-10.** Every item below is decided and written. The design half
+D1 to D10 is in the documents, including the worked component in `helpers.md` §12
+and the register-function scope in §2.2. The build half B1 to B7 is decided and
+written, including the render toolkit's primitive set, preset mapping, and node
+and pass model in `build.md` §4.2 and §4.3. The one item not verified in this
+phase is the `flake build` Done-when check, deferred to the substrate
+implementation (`build.md` §2).
+
+The scope below is unchanged.
 
 Stage 3 is "create shared helpers and scaffolding (core libraries, logging and
 server backend)". One roadmap stage, so one phase file. It has two halves that
@@ -57,8 +87,11 @@ nixpkgs-unstable: libinput 1.31.3, libxcb 1.17.0, libxkbcommon 1.13.2, PCRE2
 10.48, pango 1.57.1, cjson 1.7.19, pixman 0.46.4, wayland 1.26.0,
 wayland-protocols 1.49, wlroots 0.20.2, scenefx 0.5.0, libGL 1.7.0, libdrm
 2.4.134, with libxcb-wm 0.4.2 and xwayland 24.1.13 behind `meson_options.txt`'s
-`xwayland` feature. XWayland is the only optional one. Still open is whether we
-add anything on top, which is what the user described as likely.
+`xwayland` feature. XWayland is the only optional one. **Decided 2026-10-10: one
+library is added on top, libplacebo**, the render layer's external cross-GPU
+shader library. It is non-optional for the same reason scenefx is: the render
+layer is a core service and `libomniwm` is the internal library omniWM is built
+from. `build.md` §3 names it and §4.1 owns the choice.
 
 One sub-question inside B1 that the package split raised is settled: all five
 packages carry the whole Mango list while the sources are empty, and that is the
@@ -120,12 +153,23 @@ one-off code paths.
 - custom GLSL shader support
 - all buffers available in SHM for direct modification
 
-All of it in-GPU, which accepts that a different higher-level rendering library
-may have to be integrated into the WM to support and extend scenefx. A proposed
-integration is not yet chosen; that is a consequence of this decision, not a
-second deferral. This affects the dependency set (B1): the render layer is a
-core service with its own dependency set, and `libomniwm` being internal means
-carrying scenefx and whatever the renderer needs is normal for it.
+All of it in-GPU, which requires a rendering library integrated into the WM to
+support and extend scenefx. **Decided 2026-10-10: the anchor is wlroots' own
+renderer, and the external cross-GPU layer is libplacebo.** scenefx renders
+through `wlr_renderer`, so every node and effect the toolkit draws is on the same
+renderer and the same GL context as scenefx's own draws; libplacebo sits beside it
+for arbitrary GLSL passes, render-to-texture effect chains, and the compute
+primitives the list above needs, and it is not on the path of a draw that does not
+use an effect. It is a native C library, LGPL-2.1-or-later (compatible with this
+project's GPL-3.0, `licence.md`), and its OpenGL backend uses the GL context that
+is already current rather than creating one, so it can be handed the context
+scenefx renders in. `build.md` §4.1 owns the interop mechanism
+(`pl_opengl_wrap`/`pl_opengl_unwrap`, the `egl_display`/`egl_context` dmabuf
+fields, the `make_current`/`release_current` thread-safety hooks) and records the
+alternatives that were rejected. This affects the dependency set (B1): libplacebo
+is the one addition, named there. **The primitive set and the preset mapping are
+written in `build.md` §4.2, and the node and pass model in §4.3**, so B3's
+decomposition is closed.
 
 **B4. The solver's arithmetic width, and CPU versus GPU.** `missing-devnotes-topics.md`
 notes the layout engine does not depend on the answer. It still has to be in the
@@ -149,7 +193,11 @@ clean machine. This is a stated requirement, not a preference. **Done**:
 `nixConfig.extra-substituters` names `https://cache.nixos.org`. Note that Nix
 requires `--accept-flake-config` to honour it, so a clean-machine user gets it
 from the prompt rather than silently; that is Nix's behaviour and not something
-the flake can override.
+the flake can override. **Decided 2026-10-10: the `flake build` Done-when check
+is deferred to implementation.** A build over a tree whose sources are all zero
+bytes proves nothing about the design, so the check runs in the substrate
+implementation, when `libomniwm` has symbols and the `omniwm` target exists; see
+`build.md` §2.
 
 **B6. The Meson structure.** `missing-devnotes-topics.md` says Mango's `meson.build`
 is the model, from `architecture-audit.md` §5. What carries over and what does not
@@ -157,12 +205,15 @@ is open, and the answer depends on how many components there are by stage 3.
 **Mango's structure is in the tree**, with `core_sources` naming all 62
 intended translation units and the `executable()` call commented out. The list is
 `filestructure.md`'s tree in build-system terms, so it is a second place that has
-to change when the tree does. Whether the list survives stage 3 is still open,
-and the package split has made the question sharper: `libomniwm` is the internal
-development library, so the 62 units are the WM's own build, and the unit split
-is about component boundaries rather than about shielding an external library
-from dependencies. Which units belong to the core and which to the compositor is
-a phase 03 decision, and B1 above records the dependency-set correction.
+to change when the tree does. **Decided 2026-10-10: the core library contains
+everything the WM needs to function, and features extend it by registration.** The
+62 units are the core's own build, so the split B6 asks about is a split of
+registration rather than of ownership: core functionality is exposed through
+components. `registry.{c,h}` holds the registry itself, and `component-registry.h`
+is a thin header that includes every component's public header, so the fixed table
+in `core/server.c` names all the register functions in one place. A component's own
+code lives entirely in its own file and one line in that table registers it. `build.md` §6 owns the rule; the registry-function scope and
+the worked component that demonstrates it are its remaining design work and D1's.
 
 A general principle governs that decision, stated 2026-09-29: the core lib is a
 simple, generic feature set that cannot do much by itself, but serves as a
@@ -200,8 +251,8 @@ exclusion test in `configstorage.md` §12 start disagreeing with each other.
 **D2. The rule for what goes in the block versus process memory.** The store is the
 configuration, and a component's transient state is not, but the line between them
 is drawn per component and a wrong draw is invisible until a `save` writes
-something it should not. `configstorage.md` §1's scope taxonomy is the vocabulary;
-this phase says how a component uses it.
+something it should not. `configstorage.md` §3 and §12.2's scope taxonomy is the
+vocabulary; this phase says how a component uses it.
 
 **D3. The store access pattern, as a pattern.** `configstorage.md` §3.1 optimizes
 the read path and `generaldesign.md` §14.4 has the index design for bindings. What
@@ -324,15 +375,20 @@ that consumes them.
 
 - The wlroots and scenefx versions are named, and the fork-or-patch question has
   an answer.
-- `flake build` succeeds on a machine with no ambient Nix configuration.
+- `flake build` succeeds on a machine with no ambient Nix configuration. **Deferred
+  to the substrate implementation, 2026-10-10**: a clean build over zero-byte
+  sources proves nothing about the design, so the check runs when `libomniwm` has
+  symbols and the `omniwm` target exists (§B5, `build.md` §2).
 - The provenance record exists as a file, even if it is nearly empty.
-- One worked component exists in the tree, following the conventions, and later
-  phases cite it instead of restating the patterns.
+- One worked component exists in a document rather than in the tree, following the
+  conventions, with mock functions, and it becomes the guide every later phase
+  cites instead of restating the patterns. The implementation method is generic,
+  and the doc example fully designs the registry-function scope it exercises.
 - The three operations of D9 have a stated mechanism each, and the exchange is
   documented as a distinct operation from the delete rather than as a reuse of
   it.
 - The block-versus-process-memory rule is written as a rule, and `configstorage.md`
-  §1's scope taxonomy is referenced rather than paraphrased.
+  §3 and §12.2's scope taxonomy is referenced rather than paraphrased.
 - The seam is stated in `devnotes/testing.md` §2: which components run in the
   plain unit runner and which under the wlroots test harness, with the line
   between them defined.

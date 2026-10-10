@@ -67,6 +67,11 @@ covered by the unit runner, and a component that owns wlroots objects is covered
 by the wlroots test harness. The wlroots harness is a shared facility rather than
 each phase inventing one, because every phase from the server onward needs it.
 
+The components that run under the harness are the ones that own a wlroots object:
+the server itself (`core/server.c`), the input router, and the output and monitor
+components when they land. Phase 02 assigns the server; the rest are named by the
+phase that writes them, and each is added here when it does.
+
 ## 3. How a test is written
 
 One source file per test, named `test_<unit>.c`, next to the unit it tests — a
@@ -309,18 +314,18 @@ appearing.
   same declared type, not the narrowest width that fits, so a consumer never has
   to handle both. A literal that does not fit the declared tag is a line failure
   carrying the line number, not a truncation. The explicit table form
-  `wm.gaps = { type = "u32", value = 8 }` binds regardless of registration and is
+  `omniwm.gaps = { type = "u32", value = 8 }` binds regardless of registration and is
   checked against the declared type for a registered key.
 - **the two suffixed string forms (§4).** `500ms`, `2s`, `100us` and `500ns` are
   `duration`; a bare `1500` is a `duration` defaulting to milliseconds. A string
   that is not a valid suffixed duration is an ordinary `string` and is **not** a
-  failure — `wm.title = "1500"` stays a `string`, which is the case that makes
+  failure — `omniwm.title = "1500"` stays a `string`, which is the case that makes
   guessing wrong unacceptable. A `duration` is nanoseconds in the block and
   travels as a wide integer, so the config and socket forms agree exactly.
 - **arrays (§5).** A heterogeneous array is a line failure with the line number,
   not a coercion that silently discards a value. An empty array has no elements to
   infer from, so it is representable only because `elem_type` is explicit in the
-  wire form: `wm.key_order = { type = "array", elem_type = "string", value = [] }`
+  wire form: `omniwm.key_order = { type = "array", elem_type = "string", value = [] }`
   parses and round-trips.
 - **tables (§6).** A table is a `tuple` whose `field_types` come from field order
   once each field is bound to its registration, so `{ width = 2, color = "#3d6bff" }`

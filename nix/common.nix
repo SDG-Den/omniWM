@@ -7,15 +7,16 @@
 # a header that only the library package ships is a header a dependent cannot
 # find.
 #
-# The dependency list is Mango's, unchanged, and the reason it is written once
-# here rather than four times is that four copies of a pin list is four things to
-# keep in agreement. `02-substrate.md` B1 owns changing it, and changing it here
-# changes all four at once.
+# The dependency list is Mango's plus one addition, `libplacebo`, and the reason
+# it is written once here rather than four times is that four copies of a pin list
+# is four things to keep in agreement. `02-substrate.md` B1 owns changing it, and
+# changing it here changes all four at once.
 {
   lib,
   libdrm,
   libGL,
   libinput,
+  libplacebo,
   libxcb,
   libxcb-wm,
   libxkbcommon,
@@ -120,6 +121,7 @@ stdenv.mkDerivation {
 
   buildInputs = [
     libinput
+    libplacebo
     libxcb
     libxkbcommon
     pcre2

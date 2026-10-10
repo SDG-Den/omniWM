@@ -267,7 +267,7 @@ Mappers must not trust the block until the header parses cleanly against
 `OMNI_MAGIC`, `OMNI_FORMAT_VERSION`, the expected header/section constants,
 and `state == READY`. `state == BROKEN` is terminal for this epoch: readers
 refuse the block and no writer may mutate it. `state` is set to READY after the
-WM seeds its `wm.*` core keys (`configstorage.md` §13).
+WM seeds its `omniwm.*` core keys (`configstorage.md` §13).
 
 `ready` is a separate axis from `state`, and the separation is the point.
 `state` answers "is this block structurally trustworthy", `ready` answers "is the
@@ -501,8 +501,8 @@ ordinary configuration; scope is expressed by exclusion, not by opt-in.
 `WINDOW_DEPENDENT` marks a value scoped to one window (per-client geometry,
 focus, per-window overrides) and `EPHEMERAL` marks a value with no long-term
 relevance, such as process bookkeeping or a cached derivation. Both are
-excluded from `save`. The core and extension facades set these bits; the core
-store never interprets namespace ownership. A `wm.*` convention is not
+excluded from `save`. The core and extension facades may set these bits; the core
+store never interprets namespace ownership. The `omniwm.*` root is a convention, not
 enforcement. Bit 0 is reserved and was `MUTABLE`, which no rule ever read.
 
 `save` and a soft reset use one identical classification, which is the point of
@@ -1191,7 +1191,7 @@ may be reused. The authority marks the block `BROKEN`, refuses further access,
 and the compositor recreates the block with a new `epoch`. No path attempts an
 in-place rollback of a partially mutated block.
 
-Worked example (single-key set): store `wm.focus.color` = u32 0xFF0000FF.
+Worked example (single-key set): store `omniwm.focus.color` = u32 0xFF0000FF.
 `commit_id` goes 42 -> 43 and the entry receives `journal_seq` 100. The
 journal slot records `epoch`, `commit_id = 43`, `journal_seq = 100`,
 `entry_id`, `entry_generation`, `type = 0x08`, and the inline value. The entry

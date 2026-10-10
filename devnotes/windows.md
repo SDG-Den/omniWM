@@ -640,7 +640,7 @@ and recomputed rather than maintained.
   (`configstorage.md` §3) and it is the only seed that asserts something about the
   solve. This is the "this program lives on that workspace" case, and it is why the
   field exists despite membership being central. Each named tag is a full
-  `wm.monitor.<m>.tag.<n>` keypath for the same reason `ipc.md` §4's `swap_tags`
+  `omniwm.monitor.<m>.tag.<n>` keypath for the same reason `ipc.md` §4's `swap_tags`
   takes two: there is no monitor-independent way to write one.
 - **A seed landing on a grouped client is inert, and §9.4's answer still holds.**
   `tags.md` §5 refuses to represent a client with member entries while inside a

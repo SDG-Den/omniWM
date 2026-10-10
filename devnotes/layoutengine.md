@@ -332,7 +332,7 @@ be a component. So the engine needs:
   tag from the core set, and a native default.
 - **actions**, what a binding, a rule, or a client invokes. The one existing
   example of a layout action in the whole repository is
-  `ipc.md` §exec, `{ "action": "wm.cycle_layout", "args": ["master_stack"] }`,
+  `ipc.md` §exec, `{ "action": "omniwm.cycle_layout", "args": ["master_stack"] }`,
   which passes a layout **name** as a string argument rather than a program.
   That is a datum about the socket contract, and §3.4 has to live with
   it.
@@ -456,7 +456,7 @@ estimate:
    themselves take positional arguments per `helpers.md` §6.1. The required set
    hits this immediately: §7.6 needs snap in each direction from a keybind, §3.4
    needs `cycle_layout` to take a layout name, and the existing `ipc.md` §exec
-   example already shows `wm.cycle_layout` taking `"master_stack"`. A
+   example already shows `omniwm.cycle_layout` taking `"master_stack"`. A
    parameterized binding could only be expressed by minting one action per
    parameter value, which is a combinatorial mess that grows with every
    direction and every layout.
@@ -807,6 +807,15 @@ value came from: a literal compiled into the binary rather than text read from a
 file. Everything downstream is identical, and the last step of both is a write to
 the SHM block, so "registered" and "configured" are not two different states.
 
+The mechanism is a register function and a per-layout write function. The collect
+pass (`omni_register_layouts()`, `helpers.md` §2) appends the layout component
+and reserves each built-in name; each built-in's own function
+(`init_layout_<name>()`, for example `init_layout_dwindle`) makes the store calls
+for its program. Registration runs at boot ahead of every user registration, so
+the built-in names are already occupied by the time a user can register a layout
+and a user layout of the same name overrides the built-in (`server.md` §2). The
+reserved set is then whatever was registered rather than a fixed list.
+
 This is the answer to the question this section used to leave open, and it is worth
 being explicit about why it beats the alternatives. A seeded value, a named entry
 the engine expands, and a compiled-in default that seeds an ordinary key were the
@@ -826,7 +835,7 @@ would be a divergence nobody would notice until it behaved differently.
   `layout-test-examples.md` holds a mock design for most of the required set, so the
   first built-ins are a transcription exercise rather than a design one, and §9
   already names which primitives each one needs.
-- **Open:** the existing `wm.cycle_layout` example passes a layout name
+- **Open:** the existing `omniwm.cycle_layout` example passes a layout name
   (`ipc.md` §exec), so names are already part of the surface vocabulary. Whether
   a name selects a seeded key, an entry reference, or an `enum` constant is
   unstated, and it interacts with §3.5 because a per-tag layout needs a name
@@ -867,12 +876,12 @@ was blocked on them.
   which is the same shape a client already has. The candidates this section listed
   are settled: not a generated stable string, and not a name-mangling convention,
   because a tag is a container of several named values and a container in an open
-  catalog is an entry with children. `wm.tags.3.layout` still does not exist, and
+  catalog is an entry with children. `omniwm.tags.3.layout` still does not exist, and
   now cannot, because a tag is not a number.
 - **The tag holds a layout name.** A value under the tag's entry, naming a slot
   from `layoutengine.md` §4's closed set. This retires the storage half of the
   question, and a binding can carry the name as its argument exactly as the
-  existing `wm.cycle_layout` example does.
+  existing `omniwm.cycle_layout` example does.
 - **A monitor displays an ordered list, and the head is the primary.**
   `tags.md` §4. The primary is the first still-set tag in chronological insertion
   order, it is derived from list order rather than stored, and it supplies the

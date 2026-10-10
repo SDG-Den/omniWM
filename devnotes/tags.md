@@ -44,7 +44,7 @@ is referred to by
 rather than cosmetic.** If a tag were a top-level catalog entry with its monitor in
 a sibling value, then two tags could claim the same monitor, and "a tag belongs to
 one monitor" would be a convention the storage declined to enforce. As a child of
-`wm.monitor.<id>` the parent *is* the monitor half of the identity, so the store
+`omniwm.monitor.<id>` the parent *is* the monitor half of the identity, so the store
 already knows it, and a caller that finds a tag entry has already been told which
 monitor it is on without reading anything the caller could have got wrong. This is
 the same reasoning that put the layout program at a fixed prefix rather than
@@ -168,7 +168,7 @@ form and because the weaker form is the one the safety argument actually require
 
 The safety argument above forbids a tag on two monitors *at once*. It says nothing
 about a tag on zero. A tag is a container that exists whether or not anyone is
-looking at it: `wm.monitor.2.tag.5` with nothing displayed is a tag holding
+looking at it: `omniwm.monitor.2.tag.5` with nothing displayed is a tag holding
 windows the user has stepped away from, and there is no reason to destroy it or to
 pretend it is a different kind of object. So the two cases are separated:
 
@@ -340,24 +340,24 @@ half of the identity from §3 is structural rather than encoded in a string a
 keyboard path has to spell correctly. The shape is:
 
 ```
-wm.monitor.<monitor_id>            the monitor's own entry
-wm.monitor.<monitor_id>.tags       the ordered list from §4, held as a value
-wm.monitor.<monitor_id>.tag.<n>    one tag, itself a container
+omniwm.monitor.<monitor_id>            the monitor's own entry
+omniwm.monitor.<monitor_id>.tags       the ordered list from §4, held as a value
+omniwm.monitor.<monitor_id>.tag.<n>    one tag, itself a container
 ```
 
 and a tag's parts are children of *that* entry, with the `layoutengine.md` §4.3
 rule that a name is a value applying to each of them.
 
-**A singleton has no monitor to nest under, so it sits at `wm.tag.<name>` instead,
+**A singleton has no monitor to nest under, so it sits at `omniwm.tag.<name>` instead,
 and that difference in shape is the whole mechanism.** The shared scratchpad is the
 only singleton in v1:
 
 ```
-wm.tag.scratchpad                   the shared scratchpad, a container
-wm.monitor.<monitor_id>.tag.scratchpad   that monitor's own scratchpad
+omniwm.tag.scratchpad                   the shared scratchpad, a container
+omniwm.monitor.<monitor_id>.tag.scratchpad   that monitor's own scratchpad
 ```
 
-Nothing special-cases the `wm.monitor.` segment: a path that carries it is a
+Nothing special-cases the `omniwm.monitor.` segment: a path that carries it is a
 per-monitor tag whose identity includes the monitor, and a path that does not is a
 singleton, which is what §3.1 means by the two kinds differing only in *where
 their entries are stored*. A per-monitor scratchpad is therefore an ordinary tag
@@ -366,16 +366,16 @@ rather than a second kind of thing. Two details fall out of the shape rather tha
 being stated separately:
 
 - **The setting and the tag do not share a prefix.** Whether the scratchpad is
-  shared is `wm.scratchpad.shared` (§8.2), a `bool` at the top level, while the
-  shared tag is `wm.tag.scratchpad`. Keeping the setting out from under
-  `wm.tag.` is deliberate: the catalog is a flat store of dotted names with no
+  shared is `omniwm.scratchpad.shared` (§8.2), a `bool` at the top level, while the
+  shared tag is `omniwm.tag.scratchpad`. Keeping the setting out from under
+  `omniwm.tag.` is deliberate: the catalog is a flat store of dotted names with no
   trie (`configstorage.md` §3), so the two would not collide, but a reader
-  inspecting `wm.tag.scratchpad.shared` would have no way to tell a child of the
+  inspecting `omniwm.tag.scratchpad.shared` would have no way to tell a child of the
   tag from a setting, and this is a design that should not need a paragraph to
   explain its own key names.
 - **A swap may name a singleton and a per-monitor tag in the same command**, which
   is what `ipc.md` §4's `BAD_TARGET` rule is written to allow. A swap of the shared
-  scratchpad with `wm.monitor.1.tag.3` is a legal exchange of one singleton and one
+  scratchpad with `omniwm.monitor.1.tag.3` is a legal exchange of one singleton and one
   pinned tag, and it is the same operation rather than a special case, because §7
   defines a swap as exchanging subtrees and neither kind is a special subtree.
 
@@ -688,7 +688,7 @@ privileged path and no second representation.
 
 | key | type | default | meaning |
 |---|---|---|---|
-| `wm.scratchpad.shared` | `bool` | `true` | one scratchpad for the whole compositor, openable on at most one monitor at a time, rather than one per monitor |
+| `omniwm.scratchpad.shared` | `bool` | `true` | one scratchpad for the whole compositor, openable on at most one monitor at a time, rather than one per monitor |
 
 The default is `true` because it is the Mango behaviour and because a single
 scratchpad is what almost every user wants: a parked window is a thing you recall
@@ -772,7 +772,7 @@ Not covered, deliberately, and listed so the omission is a decision:
   belongs to `input.md` and `helpers.md` §11.
 
 Covered here rather than elsewhere, and listed because the placement is a
-decision: a monitor's ordered tag list is stored at `wm.monitor.<id>.tags` (§5)
+decision: a monitor's ordered tag list is stored at `omniwm.monitor.<id>.tags` (§5)
 rather than in a monitor document of its own, because no `monitor.md` exists yet
 and a promise to hand storage to a document that has not been written is how a tag
 list ends up owned by nobody. The ordering semantics are this document's and the
@@ -814,11 +814,11 @@ Open, and the ones that bear on the layout engine:
   concept, rather than the question being parked until something else forced it.
 - ~~**The surface form of the swap operation.**~~ **Closed: two full keypaths.**
   `ipc.md` §4's `swap_tags` takes `a` and `b` as complete
-  `wm.monitor.<m>.tag.<n>` keypaths, rather than as a pair of monitor/number
+  `omniwm.monitor.<m>.tag.<n>` keypaths, rather than as a pair of monitor/number
   fields, and the reason is that it reuses the one addressing rule the rest of the
   protocol already has instead of adding a second way to name a tag. That choice
-  also pays for itself on the singleton: a keypath says `wm.tag.scratchpad` in the
-  same field where it says `wm.monitor.1.tag.3`, so §5's two tag shapes need no
+  also pays for itself on the singleton: a keypath says `omniwm.tag.scratchpad` in the
+  same field where it says `omniwm.monitor.1.tag.3`, so §5's two tag shapes need no
   argument-order convention and no separate command, which a monitor/number pair
   would have required.
 

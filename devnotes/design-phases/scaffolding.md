@@ -61,12 +61,12 @@ but four.
 | writer transaction and futex-based commit | `configstorage.md` §1.1 and `configstorelayout.md` §13 | specified |
 | get/put/take/claim/list request surface | `configstorage.md` §8 | specified |
 | validation guard tiers, four structural plus replay | `configstorage.md` §12, `configstorelayout.md` §12 | specified; phase 00 split the flat bundle into L1-L4 and `01-testing.md` item 7 carries the per-tier cases across all five tier labels |
-| subtree delete, subtree exchange, generation-correct deletion | `configstorage.md` §14.1, `tags.md` §5 and §7 | specified as an obligation; the mechanism is phase 02 item D9 |
-| process-private derived cache and its invalidation | `configstorage.md` §3.1 and `helpers.md` §5, between them | partial; **the worked example this row used to cite does not exist.** `input.md` has no §14.2 and describes no cache, so the two halves of the pattern are specified and no component yet instantiates them. Phase 02 item D3 |
+| subtree delete, subtree exchange, generation-correct deletion | `configstorage.md` §14.1 and §14.1.1, `tags.md` §5 and §7 | specified; the obligation and the mechanism each, phase 02 item D9 |
+| process-private derived cache and its invalidation | `configstorage.md` §3.1 and `helpers.md` §5.1, between them | specified as a pattern; phase 02 item D3 states it, and the first worked instance moves to `input.md` in phase 03 |
 | `get` result codes | `omni_layout.h` §12, one `OMNI_ERR_*` set plus `OMNI_SOCK_ERR_*` | specified; phase 00, and `configstorelayout.md` §14's bullet is struck |
 | fresh-block header initialization, including the arena free head | `configstorage.md` §13.1, `configstorelayout.md` §3 and §6.1 | specified; phase 00 fixed the creator's low run, the `name_ref` chain for the remainder, a nonzero `catalog_free_count`, and clearing a `DESTROYED` name |
-| the rule for which component fields live in the block | `configstorage.md` §1 has the scope taxonomy | undetermined; phase 02 item D2 |
-| per-component store handle, so a component does not re-derive any of the above | none | undetermined; phase 02 item D2 |
+| the rule for which component fields live in the block | `configstorage.md` §3 and §12.2 have the scope taxonomy; `helpers.md` §3.5 has the rule | specified; phase 02 item D2 |
+| per-component store handle, so a component does not re-derive any of the above | `helpers.md` §5.1 has the read pattern; `configstorage.md` §3.1 has the lookup | specified; the read pattern is phase 02 item D3 |
 
 ## Registration
 
@@ -77,7 +77,7 @@ call instead of a sequence.
 | Requirement | Specified in | Status |
 |---|---|---|
 | component descriptor and instance, toggle engine, suspension | `helpers.md` §3 | specified |
-| component activation order | `helpers.md` §9 records the problem, not the answer | undetermined; phase 02 item D1 |
+| component activation order | `helpers.md` §9 | specified; priority is ascending with registration order as the stable tiebreak, and it is advisory rather than a dependency edge |
 | action registry and typed positional arguments | `helpers.md` §6 | specified |
 | option registration and typed read/write | `helpers.md` §7 | specified |
 | trigger registration and dispatch | `helpers.md` §5 | specified |
@@ -86,7 +86,7 @@ call instead of a sequence.
 | new TOML key registration | `tomlparser.md` | specified |
 | device rule matching | `input.md` §4 and §5, Mango's `find_device_rule` kept as-is | specified; the matchers are Mango's name or `vendor:product:name`, not four, and the four-matcher vocabulary belongs to `04-monitor.md` item 2 |
 | client kind set, which the solver partitions on | `windows.md` §10 | specified; phase 00 closed it at seven, so phase 07 has a fixed partition input |
-| error and diagnostic reporting outside the store | `configstorage.md` §12.6 covers the store only | undetermined; phase 02 item D5 |
+| error and diagnostic reporting outside the store | `configstorage.md` §12.6 covers the store; `helpers.md` §7.5 covers the rest | specified; phase 02 item D5 |
 
 ## Dependencies and backends
 
@@ -95,7 +95,7 @@ call instead of a sequence.
 | wlroots server backend and which managers are instantiated | `generaldesign.md` §12 at a high level | partial; phase 11 names the managers |
 | core library, log, util | `helpers.md` §7 | specified |
 | PCRE2 in the util layer | `helpers.md` §7 | specified |
-| scenefx, for user GLSL, blur, glow and shader animation | `generaldesign.md` §19 calls it the largest risk | undetermined; phase 02, requirement list from phase 08 |
+| scenefx, for user GLSL, blur, glow and shader animation | `build.md` §4; `generaldesign.md` §19 calls it the largest risk | specified as a toolkit; no fork, extensions built in, phase 02 items B2/B3 |
 | protocol set, and the buffer-injection protocol | `configstorelayout.md` §10 defines the region descriptor | partial; phase 11 |
 | a test seam for a component that needs an event loop | `devnotes/testing.md` §2 | decided 2026-09-29; item D8. Note this row sits in a section the stage-3 paragraph does not name |
 
@@ -110,9 +110,9 @@ every file inherits whether or not it was decided on purpose.
 |---|---|---|
 | `omni_` prefix on exported symbols | `helpers.md` §7.2 | specified |
 | naming for file-local symbols | `helpers.md` §7.2 does not say | undetermined; phase 02 item D7 |
-| what belongs in a public header versus a private one | `filestructure.md` covers the layout, not this | undetermined; phase 02 item D6 |
-| a symbol two components need | none | undetermined; phase 02 item D6 |
-| how a failed option validation is reported | no general policy | undetermined; phase 02 item D5 |
+| what belongs in a public header versus a private one | `filestructure.md` covers the layout; `helpers.md` §1.1 covers the content rule | specified; phase 02 item D6 |
+| a symbol two components need | `helpers.md` §1.1 | specified; it moves down to `core`, phase 02 item D6 |
+| how a failed option validation is reported | `helpers.md` §7.5 | specified; it is a store failure, phase 02 item D5 |
 
 ## Nodes and visuals
 
@@ -207,3 +207,64 @@ it; what they cannot establish is anything about the code. A build log full of
 `include/shared/omni_layout.h` is the one file in the tree with content, and
 `meson.build` checks it at configure time with `cc.compiles`, so a broken ABI
 fails `meson setup` rather than the first test.
+
+## Phase 02's append, 2026-10-10
+
+Phase 02 is the substrate phase: it works the design half (D1 to D10) and the
+build half (B1 to B7). This section records what it settled and where each row
+now lives, and what it deliberately left open, marked anticipated versus surfaced
+the way the rule above asks.
+
+### Settled, with the document that now carries it
+
+| row | now specified in | item |
+|---|---|---|
+| subtree delete, exchange, generation-correct deletion, mechanism included | `configstorage.md` §14.1.1 | D9 |
+| the read and subscription pattern every component copies | `helpers.md` §5.1 | D3, D4 |
+| where a component's fields live (descriptor, instance, block) | `helpers.md` §3.5 | D1, D2 |
+| error and diagnostic conventions outside the store | `helpers.md` §7.5 | D5 |
+| public versus private header, and where a shared symbol lives | `helpers.md` §1.1 | D6 |
+| the server's deferred items, registration table, live dispatch | `server.md` §9 | D10 |
+| the wlroots/scenefx version pair and the pin | `build.md` §3 | B2 |
+| the render extension set, no fork, own extensions | `build.md` §4 | B3 |
+| the render toolkit's primitive set, preset mapping, and node and pass model | `build.md` §4.2, §4.3 | B3 |
+| the solver arithmetic (fixed-point form) | `build.md` §5 | B4 |
+| the Meson structure and the core-versus-compositor principle | `build.md` §6 | B6 |
+| the licence file and the provenance record | `LICENSE`, `PROVENANCE.md`, `licence.md` | B7 |
+| the module prefix on file-local symbols, and the file-to-prefix rule | `helpers.md` §7.6 | D7 |
+| libplacebo as the one dependency addition, and the wlroots-renderer anchor with libplacebo beside it | `build.md` §3, §4.1 | B1, B3 |
+| the fixed-point width: Q32.32 in `int64_t` | `build.md` §5 | B4 |
+| the core scope (everything the WM needs) and the `component-registry.h` registration machinery | `build.md` §6 | B6 |
+| the worked component: in a document, mock functions, generic method | `helpers.md` §12 | D1, B6 |
+| the test artifacts: specified, not written | `testing.md` §8, `02-substrate.md` | — |
+
+These rows decided on **2026-10-10** are recorded in the documents named; the two
+design artifacts among them, the worked component and the registry-function scope
+it exercises, are now written, in `helpers.md` §12 and §2.2.
+
+Two of the earlier rows were *surfaced* rather than anticipated, in the sense the
+top of this file uses: the server live-dispatch row (it became a substrate concern
+only once the socket facade's readiness rules existed) and the subtree-mechanism
+row (it became one only once `tags.md` §5 made a tag a container). The rest of
+the settled set was *anticipated*, which is the expected shape for a substrate
+phase.
+
+### Left open, and by whom
+
+After the render toolkit was written on 2026-10-10, no phase-02 item is left open
+as design. B3 was the last: its decision half was the library choice and its design
+half was the primitive decomposition and the node and pass model, now written in
+`build.md` §4.2 and §4.3.
+
+One item is not open but deferred: the `flake build` Done-when check, recorded in
+`build.md` §2 and `02-substrate.md`, runs in the substrate implementation rather
+than in this design phase, because a build over zero-byte sources proves nothing
+about the design.
+
+### Rows the checklist can now close
+
+`What stage 3 still owes` listed the design rows D1 to D9. Phase 02 closed D1,
+D2, D3, D4, D5, D6, D7, D9 and D10 by writing the documents above, and D8 was
+already decided by phase 01. On the build half, B2, B5 and B7 were already closed,
+and B1, B3, B4 and B6 closed on 2026-10-10. Every phase-02 item is closed as
+design; the `flake build` verification is deferred to implementation, not open.

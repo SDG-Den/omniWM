@@ -23,7 +23,7 @@
  *      and it carries no matchers: the matcher selects which sets a client is
  *      bound to, and it lives in the window-rule block, not in this record.
  *   3. OMNI_TAG_BINDING is now framed and carries an argument list, because a
- *      snap-by-keybind takes a direction and wm.cycle_layout already takes a
+ *      snap-by-keybind takes a direction and omniwm.cycle_layout already takes a
  *      layout name in ipc.md's own example.
  *   4. OMNI_SECTION_SOLVED_LAYOUT, a non-journalled section holding the most
  *      recent solve, so an external program can read a layout and a solve does
@@ -730,7 +730,7 @@ OMNI_STATIC_ASSERT(OMNI_CLIENT_RULE_SIZE % 4 == 0, "client rule 4-aligned");
 /* --- binding (0x2B), now framed -------------------------------------- *
  *
  * A binding carries its action's positional arguments, so a snap can take a
- * direction and wm.cycle_layout can take a layout name. The argument array is
+ * direction and omniwm.cycle_layout can take a layout name. The argument array is
  * inline after a fixed header and holds string values, which is the shape
  * ipc.md's exec already uses. args_ref names the array's arena frame so a
  * reader can find it without walking the payload. */

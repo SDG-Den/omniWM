@@ -7,7 +7,7 @@ Stub. Not started.
 
 Stage 5, P1. This stub used to open by saying `tags.md` §9 deliberately left the
 monitor's ordered tag list storage to this document. It no longer does: `tags.md` §5
-now assigns the list to `wm.monitor.<id>.tags` and keeps both the semantics and the
+now assigns the list to `omniwm.monitor.<id>.tags` and keeps both the semantics and the
 storage, because a promise to hand storage to a document that has not been written
 is how a tag list ends up owned by nobody. The handoff is therefore **reversed**,
 and this document reads `tags.md` rather than the other way round.
@@ -39,8 +39,8 @@ shape of the answer even though the subjects differ.
 
 **3. The monitor's ordered tag list, read rather than defined.** This was the
 handoff and it is closed. `tags.md` §4 owns the ordering semantics and §5 owns the
-storage at `wm.monitor.<id>.tags`, with a tag at
-`wm.monitor.<id>.tag.<n>`. What is left for this document is the half that is
+storage at `omniwm.monitor.<id>.tags`, with a tag at
+`omniwm.monitor.<id>.tag.<n>`. What is left for this document is the half that is
 genuinely the monitor's: whether the list is a value or a child list, how it is
 seeded at hotplug, and how a monitor's other per-output state and its tag list stay
 consistent with each other. The dependency now runs monitor-after-tags, so this
@@ -58,7 +58,7 @@ client's, or the compositor has two truths.
 ## What it resolves
 
 - Where a monitor's tag list lives. **Closed in `tags.md` §5** at
-  `wm.monitor.<id>.tags`, so this is no longer a deliverable of this phase; what
+  `omniwm.monitor.<id>.tags`, so this is no longer a deliverable of this phase; what
   remains is the consistency between that list and the monitor's other per-output
   state, which is a genuine part of this document.
 - Per-output rule precedence, which `input.md` §5.1 also needs and which should
