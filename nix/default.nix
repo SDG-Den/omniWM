@@ -1,10 +1,10 @@
-# The four omniWM packages.
+# The five omniWM packages.
 #
 # They share one source tree, one Meson project, and one dependency base
 # (`common.nix`), and they differ in which target they build and what they depend
-# on. Keeping them in one file rather than four is deliberate: the dependency
+# on. Keeping them in one file rather than five is deliberate: the dependency
 # edges between them are the thing most likely to be got wrong, and one file puts
-# the four packages and the three edges in one place to be read together.
+# the five packages and the three edges in one place to be read together.
 #
 #   libomniwm            the compositor's logic. Exists to be depended on.
 #   libomniwm-ipc        the socket facade. The WM links it; a client does not.

@@ -1,6 +1,6 @@
-# Shared pieces of the four omniWM derivations.
+# Shared pieces of the five omniWM derivations.
 #
-# The build is four packages, and this is the part they agree on: the same
+# The build is five packages, and this is the part they agree on: the same
 # source, the same Meson flags, the same Mango dependency base, and the ABI
 # header installed by each. Anything a consumer of one of them might need to
 # compile against the library belongs here rather than in one derivation, because
@@ -8,9 +8,9 @@
 # find.
 #
 # The dependency list is Mango's plus one addition, `libplacebo`, and the reason
-# it is written once here rather than four times is that four copies of a pin list
-# is four things to keep in agreement. `02-substrate.md` B1 owns changing it, and
-# changing it here changes all four at once.
+# it is written once here rather than five times is that five copies of a pin list
+# is five things to keep in agreement. `02-substrate.md` B1 owns changing it, and
+# changing it here changes all five at once.
 {
   lib,
   libdrm,
@@ -42,7 +42,7 @@
   pname,
   # The ninja target this package builds, and the Meson install tag it installs.
   # One Meson project defines all four targets; each derivation names one of each,
-  # so the packages stay separate without the work being done four times.
+  # so the packages stay separate without the work being done five times.
   buildTarget ? null,
   installTag,
 }:
@@ -80,8 +80,8 @@ stdenv.mkDerivation {
   # regardless of it. So the phase is written out rather than configured through an
   # attribute whose name suggests it selects targets.
   #
-  # This is also what makes the four packages cost one build between them rather
-  # than four.
+  # This is also what makes the five packages cost one build between them rather
+  # than five.
   buildPhase = ''
     runHook preBuild
 
@@ -104,7 +104,7 @@ stdenv.mkDerivation {
 
     meson install --no-rebuild --tags ${installTag}
 
-    # Every one of the four installs the ABI header, not just the library. The
+    # Every one of the five installs the ABI header, not just the library. The
     # header is the project's stable interface — `ipc.md` §7.1 and
     # `configstorage.md` §0 both rest on the block being the interface — so a
     # package that ships a library without shipping the header would be a package

@@ -271,9 +271,10 @@ WM seeds its `omniwm.*` core keys (`configstorage.md` §13).
 
 `ready` is a separate axis from `state`, and the separation is the point.
 `state` answers "is this block structurally trustworthy", `ready` answers "is the
-compositor able to service requests against it". A freshly created block is
-`state == READY` while the WM is still activating components, and the two
-conditions call for different client behaviour, so they are not the same field:
+compositor able to service requests against it". A block that has completed its
+seeding commit is `state == READY` while the WM is still activating components,
+and the two conditions call for different client behaviour, so they are not the
+same field:
 
 ```
 0 NOT_READY   block is valid, compositor is still activating

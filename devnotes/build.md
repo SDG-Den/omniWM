@@ -633,8 +633,8 @@ consumes it. Width, range and precision are closed.
 ## 6. The Meson structure (B6)
 
 **Mango's structure is in the tree and configures.** `meson.build` names all 61
-intended translation units in `core_sources`, with `ipc_sources` and
-`debugger_sources` as the two smaller groups and the `executable()` call
+intended translation units — 59 in `core_sources`, with `ipc_sources` and
+`debugger_sources` as the two smaller groups — and the `executable()` call is
 commented out. The list is `filestructure.md`'s tree in build-system terms, so it
 is a second place that has to change when the tree does; the two drifting apart
 produces a build that silently omits a file rather than a build that fails, which
@@ -642,7 +642,7 @@ is why `scaffolding.md` records the same list rather than leaving it as a commen
 in a build file.
 
 What the build already settled is the package split and its mechanism, in §2.1:
-four `install_tag` values keep the five Nix packages separate, and dependencies
+three `install_tag` values keep the five Nix packages separate, and dependencies
 travel by propagation rather than by copying a `.so` into two outputs.
 
 **The general principle governing what belongs in the core**, stated
@@ -665,8 +665,9 @@ itself, and `component-registry.h` is a thin header that includes every
 component's public header, so the fixed table in `core/server.c` names all the
 register functions in one place. A component's own code lives entirely in its own
 file, and adding one line to that table registers it, so a component cannot be
-half-wired and "why is my component not running" has one answer. The 61-unit list
-in `meson.build` is the core's own build under this rule. The scope of the
-registry functions is `helpers.md` §2.2, and the worked component that
-demonstrates the whole path with mock functions is `helpers.md` §12; both are
+half-wired and "why is my component not running" has one answer. The 59-unit
+`core_sources` list in `meson.build` is the core's own build under this rule.
+The scope of the registry functions is `helpers.md` §2.2, and the worked
+component that demonstrates the whole path with mock functions is `helpers.md`
+§12; both are
 design-half outputs rather than tree code.

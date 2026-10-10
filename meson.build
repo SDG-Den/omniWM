@@ -258,8 +258,9 @@ subdir('protocols')
 # development library the WM is built from. `libomniwm-ipc` is the socket
 # facade, which the WM links and a client does not. `libomniwm-debugger` is a
 # reader of the block, which nothing
-# links into the compositor. `omniwm` is the compositor itself, and it is the
-# only one of the four that pulls in wlroots.
+# links into the compositor. `omniwm` is the compositor itself, and it links the
+# socket facade and, in the debug build, the debugger. All four link the shared
+# dependency set, wlroots included.
 #
 # The three libraries build today. Every source in them is zero bytes, which
 # links into a valid shared object with no symbols — the link is real, the
@@ -267,7 +268,7 @@ subdir('protocols')
 # empty `main` does not link at all, and a build that fails for a reason
 # unrelated to the design teaches a reader to ignore build failures.
 #
-# Each carries an `install_tag`, and that is the mechanism that keeps the four
+# Each carries an `install_tag`, and that is the mechanism that keeps the five
 # Nix packages separate. Meson has no per-target install selection other than
 # tags, and `meson install` otherwise installs every target in the plan — so a
 # package built for one library gets all three, and the split the packages exist

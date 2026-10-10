@@ -12,8 +12,8 @@ at the point of the copy, in the file or in the license text it carries.
 
 | area | source project | source path | licence | what was taken | date |
 |---|---|---|---|---|---|
-| `protocols/wlr-layer-shell-unstable-v1.xml` | wlroots / wlr-protocols | `wlr-layer-shell-unstable-v1.xml` | MIT (notice in file) | vendored protocol definition, unchanged | 2026-10-02 |
-| `protocols/wlr-foreign-toplevel-management-unstable-v1.xml` | wlroots / wlr-protocols | `wlr-foreign-toplevel-management-unstable-v1.xml` | MIT (notice in file) | vendored protocol definition, unchanged | 2026-10-02 |
+| `protocols/wlr-layer-shell-unstable-v1.xml` | wlroots / wlr-protocols | `wlr-layer-shell-unstable-v1.xml` | X11-style permissive (notice in file) | vendored protocol definition, unchanged | 2026-10-02 |
+| `protocols/wlr-foreign-toplevel-management-unstable-v1.xml` | wlroots / wlr-protocols | `wlr-foreign-toplevel-management-unstable-v1.xml` | X11-style permissive (notice in file) | vendored protocol definition, unchanged | 2026-10-02 |
 | `protocols/wlr-output-power-management-unstable-v1.xml` | wlroots / wlr-protocols | `wlr-output-power-management-unstable-v1.xml` | MIT (notice in file) | vendored protocol definition, unchanged | 2026-10-02 |
 | `protocols/meson.build` | MangoWM | `protocols/meson.build` | GPL-3.0 (same as this project) | adopted unchanged | 2026-10-02 |
 

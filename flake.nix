@@ -35,9 +35,9 @@
         let
           inherit (pkgs) callPackage;
 
-          # The four packages. `nix/default.nix` returns all of them together
+          # The five packages. `nix/default.nix` returns all of them together
           # because the dependency edges between them are the part that is easy
-          # to get wrong and hard to see when they are in four files.
+          # to get wrong and hard to see when they are in five files.
           omniPackages = callPackage ./nix { };
 
           omniwm = omniPackages.omniwm;
