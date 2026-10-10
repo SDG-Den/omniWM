@@ -10,9 +10,9 @@ The rest of the document is phase 02's build half
 dependency set, the wlroots and scenefx version coupling, the exact scenefx
 extensions needed for user GLSL shaders and 3D transforms, the solver's
 arithmetic width, the Meson structure, and the `flake.nix` with
-**`cache.nixos.org` set explicitly as the substituter**. None of that is written
-ahead of the phase that decides it. §1 is the only section that exists until
-then, and other documents should cite §1 rather than restate an invocation.
+**`cache.nixos.org` set explicitly as the substituter**. §2 to §6 are that half.
+§1 remains the one section other documents should cite rather than restate an
+invocation.
 
 ## 1. Compiling the ABI header
 
@@ -186,12 +186,12 @@ both are in use.
 ## 3. The dependency set, and the wlroots/scenefx pair (B1, B2)
 
 **B2 is closed: wlroots 0.20.2 and scenefx 0.5.0, taken as a matched pair.**
-`generaldesign.md` §19 records the tracked wlroots release as unresolved and the
-coupling to scenefx 0.5 as a hard constraint rather than a preference. Both are
-released and both are in nixpkgs-unstable, so the pair resolves against released
-software rather than against a fork. `flake.nix` pins `wlroots_0_20` rather than
-the moving `wlroots` attribute, because the two name the same version today and
-will not stay that way.
+`generaldesign.md` §19 recorded the tracked wlroots release as unresolved and
+the coupling to scenefx 0.5 as a hard constraint rather than a preference; this
+section closes it. Both are released and both are in nixpkgs-unstable, so the
+pair resolves against released software rather than against a fork.
+`nix/common.nix` pins `wlroots_0_20` rather than the moving `wlroots` attribute,
+because the two name the same version today and will not stay that way.
 
 The base list is Mango's, unchanged, and it is the same list in `meson.build`'s
 `dependency()` calls and `nix/common.nix`'s `buildInputs`:
@@ -667,6 +667,6 @@ register functions in one place. A component's own code lives entirely in its ow
 file, and adding one line to that table registers it, so a component cannot be
 half-wired and "why is my component not running" has one answer. The 62-unit list
 in `meson.build` is the core's own build under this rule. The scope of the
-registry functions, and a worked component that demonstrates the whole path with
-mock functions, are the remaining design work of this item and of D1, and both
-land in a document rather than in the tree.
+registry functions is `helpers.md` §2.2, and the worked component that
+demonstrates the whole path with mock functions is `helpers.md` §12; both are
+design-half outputs rather than tree code.

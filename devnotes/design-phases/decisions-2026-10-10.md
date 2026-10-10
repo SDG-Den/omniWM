@@ -12,7 +12,8 @@ internal component write only there. Any other root is a foreign writer's own:
 carried in SHM, IPC, and TOML, but never registered, reserved, validated, or
 interpreted. `ext.<name>.*` is no longer a project concept. It is convention,
 not enforcement, because the block cannot identify writers. Recorded
-`configstorage.md` §3, `configstorelayout.md` §12.2, `helpers.md` §6.
+`configstorage.md` §3 and `configstorelayout.md` §6; the discipline is applied
+in `helpers.md` §6.
 
 **The EPHEMERAL correction.** A TOML key is ordinary configuration even though
 the config facade sets it, because `save` must write it back. Facade-set does

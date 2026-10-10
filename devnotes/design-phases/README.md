@@ -60,7 +60,7 @@ being tracked separately, so there is one place to look:
 | `tags.md` §9 | 3 "not covered" bullets, one placement decision recorded separately, then 4 struck and closed, **none open** |
 | `input.md` §7, §7.2 | 4 not-covered bullets in §7 and 3 more in §7.2; one of the seven is the substantive gap and the rest are owned elsewhere or not needed at stage 4 |
 | `ipc.md` §8 | 8 bullets; 2 of them were stale restatements of decisions already closed and have been corrected. `swap_tags` was added to §4 rather than here, because it is specified rather than open |
-| `server.md` §9 | 2 bullets, both delegating to the compositor subsystem work that follows it; **settled in phase 02**, which names the phase that owns each and the server surface for it (`server.md` §9, §9.1, §9.2) |
+| `server.md` §9 | 3 bullets, each delegating to compositor subsystem work that follows it; **settled in phase 02**, which names the phase that owns each and the server surface for it (`server.md` §9, §9.1, §9.2) |
 
 The counts are as of this reconciliation pass, and **no document listed above
 carries an open item**. The two that used to, `layoutengine.md` §11 and `tags.md`

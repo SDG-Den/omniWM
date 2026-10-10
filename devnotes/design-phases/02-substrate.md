@@ -108,7 +108,7 @@ scenefx 0.5 requires wlroots 0.20 and that the tracked wlroots release is
 unresolved. This is a hard coupling, not a preference, and it constrains
 everything else in the document. **Answered against nixpkgs-unstable**: wlroots
 0.20.2 and scenefx 0.5.0 are both released and both present, so the coupling
-resolves against a matched pair rather than against a fork. The flake pins
+resolves against a matched pair rather than against a fork. `nix/common.nix` pins
 `wlroots_0_20` rather than `wlroots` to say so explicitly, since they are the same
 version today and will not stay that way.
 
@@ -273,7 +273,7 @@ stated here before it can be cited anywhere.
 **D4. The event and subscription pattern.** `helpers.md` §5 and `ipc.md`'s watch
 mechanism both exist, and this item used to say that a follow-up design was owed
 because `omni_event`'s field set is fixed by the journal slots. That is closed:
-`helpers.md` §7 now records that the field set is final and is **not** extended, so
+`helpers.md` §5 now records that the field set is final and is **not** extended, so
 there is no follow-up to do and no component should be written expecting one. The
 part of the item that survives is the pattern itself, and the consequence is
 sharper for being settled: a component that wants more than a journal entry reads

@@ -993,7 +993,7 @@ implemented in the socket facade, it is registered by the tags component and
 invoked like any other command.
 
 ```
-omni_ipc_method_register(name, handler, schema) -> handle
+omni_ipc_method_register(name, handler, schema)
 ```
 
 - `name` is an `omniwm.*` command key, chosen under the same namespace discipline
@@ -1011,10 +1011,11 @@ omni_ipc_method_register(name, handler, schema) -> handle
 - Dispatch is the ordinary dispatch path (`server.md` §5), on the event loop. A
   method is a write-like verb, so `§5.2` refuses it with `NOT_READY` while `ready`
   is not `READY`, by the same rule the built-in write verbs use.
-- The handle is released at suspend, exactly like an action or trigger handle
-  (`helpers.md` §8.1), because the handler is the component's code: a suspended
-  component has no live methods. A client that names one gets `UNKNOWN_CMD`, the
-  same way a released action gives `ACTION_NOT_FOUND`.
+- The registration is process-lifetime static, like every registration except
+  actions and triggers (`helpers.md` §2.2), because components do not unload.
+  There is no handle to release at suspend. A client that names a verb with no
+  registered handler gets `UNKNOWN_CMD`, the same way an unknown action name
+  gives `ACTION_NOT_FOUND`.
 
 Registration is internal, and the internal/external split is the one `helpers.md`
 §6.3 already draws. An external program has no registration path, because it is

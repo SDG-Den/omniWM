@@ -1856,9 +1856,9 @@ and the requested layouts need both.
 DuckWM is GPL (`~/repos/duckwm/LICENSE`), as is Mango
 (`architecture-audit.md` §7), and `architecture-audit.md` §8 records GPL-3.0 as
 the project's chosen licence. Code from any of these may be read and ported
-under that licence, with the applicable notices preserved. The `licence.md` row
-in `missing-devnotes-topics.md` is where the file itself and the per-source
-provenance get recorded, and it is still unwritten.
+under that licence, with the applicable notices preserved. The licence decision
+and the per-source provenance are recorded in `devnotes/licence.md`, with
+`LICENSE` and `PROVENANCE.md` at the repository root.
 
 Behavioural references and code references are different things and are used
 differently. The window managers above are named for the behaviour they have

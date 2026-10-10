@@ -85,7 +85,8 @@ design patterns transfer directly from wlroots-based compositors.
 
 Two dependencies are version-coupled and this is a known constraint on the
 build: scenefx 0.5 requires wlroots 0.20, and the two are developed together.
-Any work that starts the build must settle which wlroots release omniWM tracks.
+The build half of phase 02 settled the release: wlroots 0.20.2 with scenefx
+0.5.0, taken as a matched pair (`build.md` §3).
 
 **The largest technical risk to Any Look is stated here so it is not
 rediscovered later.** scenefx 0.5 has no public API to register a user shader or
@@ -94,9 +95,10 @@ attach a filter to a node, and it has no 3D transforms at all: a node carries a
 supports only basic 2D composition and that anything more complicated requires
 compositors to implement custom rendering logic. omniWM wants user GLSL shaders
 and 3D animation, so both require extending scenefx with a new node type and a
-new render-pass entry point. This is the one place where "extend the base
-library" means "maintain a patch", and the cost should be scoped deliberately
-rather than discovered at stage 11.
+new render-pass entry point. This is the place where "extend the base
+library" would mean "maintain a patch"; the build half of phase 02 closed it as
+no fork and no patch, owning the render layer that uses scenefx instead of
+modifying it (`build.md` §4).
 
 ## 4. The architectural spine: one authority, many clients
 
@@ -796,14 +798,14 @@ external fact this design cannot decide. They are listed with their owner rather
 than as open work because an item with no owner is what turns into a forgotten
 question three phases later.
 
-- **The scenefx extension set, and patch versus fork.** Unresolved, and the largest
-  external risk in the project. Owned by **phase 02 items B2 and B3**, which is
-  the only phase that can answer it, because the answer is a version and a
-  packaging decision rather than a design one. It gates `draw.md` and `animate.md`,
-  both of which inherit whatever it settles.
-- **Which wlroots release the build tracks.** Unresolved; scenefx 0.5 requires
-  wlroots 0.20, so the two answers are not independent and must be taken together.
-  Owned by **phase 02 item B2**, same reason.
+- **The scenefx extension set, and patch versus fork.** Resolved by the build half
+  of phase 02: no fork and no patch, with the extensions built into omniWM as a
+  rendering toolkit (`build.md` §4) behind a libplacebo boundary (`build.md` §4.1).
+  It was the largest external risk in the project, and it gates `draw.md` and
+  `animate.md`, both of which inherit the toolkit.
+- **Which wlroots release the build tracks.** Resolved by the build half of phase
+  02: wlroots 0.20.2 with scenefx 0.5.0 as a matched pair (`build.md` §3). The two
+  remain coupled, because scenefx 0.5 requires wlroots 0.20.
 - **Whether a Lua library is a deliverable. Closed: no, and the same answer covers
   every interpreter and library in the project.** They are example implementations
   made *after* the project is otherwise complete, to prove the claims and inspire

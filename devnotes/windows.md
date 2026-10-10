@@ -615,6 +615,12 @@ and the set bindings in §9.5. **`tags` is in neither half**, because a client h
 tag field to set or store: it is exposed read-only as a derived value, and §9.3
 records the asymmetry that creates.
 
+The roster is not closed. A component extends either half through the rule
+registries in `helpers.md` §2.2 (`omni_rule_field_register` adds a match field,
+`omni_rule_property_register` adds a target property), and an extension keeps the
+split above: a new `if` field must stay block-observable, and a new `then`
+property must be a write to the client's entry.
+
 **Tags are not a client field at all, in either direction.** `tags.md` §5 stores
 membership centrally, one member child per client on the tag's own entry, and that
 is the only place it lives. A client has no tag field, so `tags` is neither a

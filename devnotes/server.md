@@ -201,13 +201,14 @@ must respect is:
 | then | decorate and draw |
 | last | ext-protocol and the miscellaneous components |
 
-The concrete `priority` numbers are chosen when the first components register,
-because they are an implementation artifact; what is fixed is the relative order
-above and the fact that the table is static and compile-time known
-(`helpers.md` §8.1). A component is added by writing its register function and
-adding one line here, and the band decides order without the server inferring a
-dependency (`helpers.md` §9). A component registers once even when it has several
-translation units.
+The numbers are the `helpers.md` §9 v1 bands (0, 10, 100, 200, 300, 400), the
+convention until a component has a concrete reason to differ; what is fixed is
+the relative order above and the fact that the table is static and compile-time
+known (`helpers.md` §8.1). Priority stays advisory: a component sets its own
+within the convention to express its dependency position (`helpers.md` §9), and
+the band decides order without the server inferring a dependency. A component is
+added by writing its register function and adding one line here. A component
+registers once even when it has several translation units.
 
 The built-in layout registration is the one set that runs ahead of this table,
 at §2 step 1, so the built-in layout names are occupied before any component or

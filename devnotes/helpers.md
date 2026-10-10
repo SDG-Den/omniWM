@@ -154,7 +154,7 @@ because components do not unload (`§3.4`, `§6.3`).
 | `omni_register_init(fn, priority)` | a startup step that runs at `init` time, distinct from the descriptor's own `init` | static |
 | `omni_rule_field_register(name, type_tag, read_fn)` | a window-rule match field (`windows.md` §9) | static |
 | `omni_rule_property_register(name, type_tag, apply_fn)` | a window-rule target property | static |
-| `omni_layout_register(name, program)` | a layout the engine may select (`layoutengine.md` §3.4) | static |
+| `omni_layout_register(name, program)` | a layout the engine may select; built-ins register through `omni_register_layouts()`/`init_layout_<name>()` in the pre-parse boot step (`layoutengine.md` §3.4, `server.md` §2) | static |
 | `omni_node_type_register(type_id, properties, draw_fn, pass_fn)` | a scenefx node type and its pass | static |
 | `omni_decoration_register(name, ...)` and its lower-level variants | decoration pieces registered within scenefx and omniWM's own extensions | static |
 | `omni_effect_register(name, primitive_ids[], params_schema)` | a preset mapping primitives onto one config key | static |
@@ -275,14 +275,18 @@ const void *value;      /* native default per type */
 `struct omni_action`:
 
 ```
-const char *name;       /* "omniwm.cycle_layout"; must be namespaced */
-void (*handler)(const struct omni_args *args);
+const char *name;                          /* "omniwm.cycle_layout"; must be namespaced */
+void (*handler)(const struct omni_action_context *ctx,
+                const struct omni_args *args);
+const struct omni_action_context *context; /* NULL: the registry supplies one (§6) */
+const struct omni_action_schema    *schema; /* positional declaration, §6.1 */
 ```
 
 `struct omni_trigger`:
 
 ```
-const char *pattern;    /* "omniwm.*" or a category; same grammar as IPC watch */
+const char *pattern;     /* "omniwm.*" or a category; same grammar as IPC watch */
+uint16_t    gap_policy;  /* configstorage.md §5.2; a trigger is not exempt (§5) */
 void (*callback)(const struct omni_event *event);
 ```
 
@@ -539,18 +543,28 @@ the consequence of `omni_event`'s field set being final.
 
 Namespaced handler registry feeding IPC `exec` (ipc.md §4) and keybindings.
 
-- `omni_action_register(name, handler, context)` during activation returns an
-  `omni_action_handle`, and `omni_action_release(handle)` during suspend is the
+- `omni_action_register(name, handler, context, schema)` during activation
+  returns an `omni_action_handle`, and `omni_action_release(handle)` during
+  suspend is the
   only removal path. Unregistering by name is not offered, for the same reason
   `omni_unsubscribe` takes a handle: a name does not identify a registration
   uniquely once two components can register the same name or a component has
   already suspended. The name is dispatch metadata; the handle is lifetime
   identity.
-- `context` is a `struct omni_action_context` carrying the server and the owning
-  component's descriptor and instance, passed to the handler on every call.
-  Handlers do not reach for server globals, so a handler's dependencies are
-  visible at its definition and a descriptor cannot be used after its component
-  is gone without that being evident.
+- `context` is a `struct omni_action_context` carrying the server, the owning
+  component's descriptor and its instance, passed to the handler on every call.
+  `NULL` means "the registry supplies the default", which is exactly those three
+  fields. Handlers do not reach for server globals, so a handler's dependencies
+  are visible at its definition and a descriptor cannot be used after its
+  component is gone without that being evident.
+
+```
+struct omni_action_context {
+    struct omni_server          *server;
+    const struct omni_component *descriptor;
+    struct omni_instance        *instance;
+};
+```
 - Names use the key namespace discipline: an action name is an `omniwm.*` key.
   The first registration of a name wins; a later one is refused and
   logged, and returns a null handle. The component learns at registration that
@@ -758,8 +772,8 @@ void omni_log_impl(bool through_wlr, enum omni_log_level level,
 #define omni_debug(...) omni_log_at(false, OMNI_LOG_DEBUG, __VA_ARGS__)
 ```
 
-Four levels and no more, because the set is wlroots' and wlroots' version is
-not pinned yet (`build.md` does not exist). A fifth level invented here would
+Four levels and no more, because the set is wlroots' and the wlroots version is
+the one `build.md` §3 fixes (0.20.2). A fifth level invented here would
 mean maintaining a translation table the day wlroots' enum changes.
 
 `omniwm.log.level` is a `omniwm.*` key, so it is saved and restored like any other. It
@@ -1048,7 +1062,7 @@ component reading config keys instead of `#ifdef`d options.
 - ~~`omni_event` field set is fixed by the journal slots (configstorelayout.md
   §8); richer in-process payloads need a follow-up design if components want
   them.~~ **Closed by decision: the field set is final and is not extended.**
-  §7 now records the decision and the reasoning. A trigger is a view of the
+  §5 now records the decision and the reasoning. A trigger is a view of the
   journal, so the struct mirrors one slot and stops there; a component needing
   more reads the block, and a synthetic event is deliberately not expressible
   because it would let a dispatch deliver something no commit produced. The
@@ -1134,13 +1148,14 @@ and the window is an argument rather than a binding scope, which is the
 ```
 void omni_register_displayname(void)
 {
-    omni_option_register_many(displayname_options);
-    omni_action_register_many(displayname_actions);
     omni_append_component(&(struct omni_component){
         .name       = "displayname",
         .priority   = 200,
         .critical   = 0,
         .enable_key = "omniwm.displayname.enabled",
+        .options    = displayname_options,  .n_options = OMNI_LENGTH(displayname_options),
+        .actions    = displayname_actions,  .n_actions = OMNI_LENGTH(displayname_actions),
+        .triggers   = displayname_triggers, .n_triggers = OMNI_LENGTH(displayname_triggers),
         .init       = displayname_init,
         .suspend    = displayname_suspend,
         .resume     = displayname_resume,
@@ -1168,8 +1183,6 @@ struct displayname_instance {
 
 static void displayname_init(void)
 {
-    omni_subscribe("omniwm.client.*.display_name", OMNI_GAP_FAIL,
-                   displayname_on_name_change);
 }
 
 static void displayname_on_name_change(const struct omni_event *event)
@@ -1181,12 +1194,15 @@ static void displayname_on_name_change(const struct omni_event *event)
 The cache holds a copied name, never a frame offset, because an arena frame can
 be recycled and a copied value survives a commit (§5.1). Invalidation is the
 journal event for the window's name entry, and the callback refreshes rather
-than polls.
+than polls. `displayname_init` is empty because the descriptor's trigger array is
+subscribed at activation (§5): a component with only declarative triggers has
+nothing to do in `init`.
 
 ### 12.5 The action and the rule
 
 ```
-static void displayname_action_set(const struct omni_args *args)
+static void displayname_action_set(const struct omni_action_context *ctx,
+                                   const struct omni_args *args)
 {
     struct omni_entry window = omni_resolve_client(args->value[0]);
     if (!window.entry_id)
