@@ -65,10 +65,11 @@
           # tree is empty scaffold, so what it installs today is the ABI header.
           # See `nix/default.nix` and the build-status comment in `meson.build`.
           #
-          # The three libraries are built and named individually because they are
-          # the packages a consumer depends on. `libomniwm` is the one the design
-          # wants reachable: `ipc.md` §7.1 says a well-written library maps the
-          # block directly, and this is what it maps it with.
+          # The three libraries are built and named individually because they
+          # compose the compositor itself. `libomniwm` is the internal core
+          # (`build.md` §2.1), not a hand-off surface; the narrow block-mapping
+          # library a consumer would link is a separate SHM-client library that
+          # does not exist yet.
           packages = {
             inherit omniwm;
             inherit (omniPackages) libomniwm libomniwm-ipc libomniwm-debugger omniwm-debug;

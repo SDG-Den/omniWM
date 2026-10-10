@@ -86,7 +86,7 @@ component is. No linking magic: one fixed table of register functions lives in
 `omni_boot()` has one home. The sort-and-activate sequence below is its body and
 lives in `core/registry.c`, because activating the registry is the registry's
 own work; `core/server.c` owns the fixed table of register functions and calls
-`omni_boot()` as `server.md` §4 step 4. An earlier draft of this section
+`omni_boot()` as `server.md` §2 step 4. An earlier draft of this section
 assigned `omni_boot` to both files, which is the same two-homes problem
 `server.md` §1 names for the server struct.
 
@@ -145,8 +145,11 @@ because components do not unload (`§3.4`, `§6.3`).
 | call | purpose | lifetime |
 |---|---|---|
 | `omni_register_<component>(void)` | the collect entry: appends the descriptor, never runs `init` | static |
+| `omni_append_component(const struct omni_component *)` | the append call the collect entry makes; one descriptor | static |
 | `omni_option_register(key, type_tag, default)` | one component option, added to the descriptor's array | static |
+| `omni_option_register_many(const struct omni_option *, size_t)` | the array form: registers a `§3.1` option array in one call | static |
 | `omni_action_register(name, handler, context, schema) -> handle` | a named control (`§6`) | handle |
+| `omni_action_register_many(const struct omni_action *, size_t)` | the array form: registers a `§3.1` action array in one call | handle |
 | `omni_trigger_register(pattern, gap_policy, callback) -> handle` | a journal subscription (`§5`) | handle |
 | `omni_register_init(fn, priority)` | a startup step that runs at `init` time, distinct from the descriptor's own `init` | static |
 | `omni_rule_field_register(name, type_tag, read_fn)` | a window-rule match field (`windows.md` §9) | static |

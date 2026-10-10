@@ -49,16 +49,17 @@ let
     });
 
   # The compositor's logic, minus its entry point and minus the socket. This is
-  # the package the design wants reachable: `ipc.md` §7.2 says a well-written
-  # omniWM library maps the block directly rather than touching the socket, and
-  # this is what such a library maps it with.
+  # the *internal* development library omniWM itself is built from, not a
+  # hand-off surface (`build.md` §2.1). The narrow surface a consumer would link
+  # to map the block directly is a separate SHM-client library, over
+  # `include/shared/`, and it does not exist yet.
   libomniwm = withDescription
     (common {
       pname = "libomniwm";
       buildTarget = "libomniwm.so";
       installTag = "core";
     })
-    "Core library of the omniWM compositor, for driving a config store directly";
+    "Internal core library of the omniWM compositor";
 
   # The socket facade. `ipc.md` §1 serves the socket from the WM event loop, so
   # this is server code that runs inside the compositor process and cannot be a

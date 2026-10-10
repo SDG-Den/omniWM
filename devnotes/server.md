@@ -31,7 +31,7 @@ owning component's descriptor and instance, never a reachable global
 
 ## 2. Boot order
 
-Boot is one entry point, `omni_boot()`, and it runs once. The order is not
+The server boots through one fixed sequence, and it runs once. The order is not
 interchangeable, because each step depends on the previous one existing.
 
 1. create the store, seed the core `omniwm.*` keys, and register the built-in
