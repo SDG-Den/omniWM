@@ -19,9 +19,9 @@ at the point of the copy, in the file or in the license text it carries.
 
 The three protocol XML files are vendored rather than generated from the
 `wayland-protocols` package because they are the wlroots protocols that wlroots
-exposes but does not generate for us. Each carries its own MIT-style copyright
-notice inside the file, which is what the licence requires and what is
-preserved.
+exposes but does not generate for us. Each carries its own permissive copyright
+notice inside the file (X11-style for two, MIT for one), which is what the
+licence requires and what is preserved.
 
 The expected next entry is the input port. `input.md` §3 is about to be the
 largest copy in the project, because `generaldesign.md` §14 decides that the

@@ -268,7 +268,7 @@ the user did not change is still the configuration the instance was built from.
 
 ```
 const char *key;        /* full public key: "omniwm.gaps" */
-uint16_t    type;       /* type tag from configstorelayout.md §2/§4 */
+uint16_t    type;       /* type tag from configstorage.md §4 */
 const void *value;      /* native default per type */
 ```
 
@@ -286,7 +286,7 @@ const struct omni_action_schema    *schema; /* positional declaration, §6.1 */
 
 ```
 const char *pattern;     /* "omniwm.*" or a category; same grammar as IPC watch */
-uint16_t    gap_policy;  /* configstorage.md §5.2; a trigger is not exempt (§5) */
+uint16_t    gap_policy;  /* OMNI_GAP_FAIL or OMNI_GAP_RESYNC (omni_layout.h §8), the numeric form of configstorage.md §5.2's "fail"/"resync"; a trigger is not exempt (§5) */
 void (*callback)(const struct omni_event *event);
 ```
 
@@ -430,14 +430,16 @@ its own work is responsible for joining it inside `destroy` or `suspend`.
 ## 5. Events (core/events.{c,h})
 
 One vocabulary, one source of truth. The block journal is the only event
-source; `omni_subscribe()` is an internal watch over the same commit path that
+source; `omni_trigger_register()` is an internal watch over the same commit path that
 IPC `watch` serializes (ipc.md §4). Triggers listed in a record are
 subscribed here at activation.
 
 - `pattern` grammar and matching are identical to IPC `watch` (single `*`
   wildcard); a trigger is the in-process twin of a watch.
-- `omni_subscribe()` takes the same `gap_policy` argument as IPC `watch`
-  (`configstorage.md` §5.2). A trigger is not exempt from gap detection just
+- `omni_trigger_register()` takes the same `gap_policy` argument as IPC `watch`
+  (`configstorage.md` §5.2), as one of the header's `OMNI_GAP_FAIL`/`OMNI_GAP_RESYNC`
+  values; the store's `"fail"`/`"resync"` strings map onto them at the subscribing
+  layer. A trigger is not exempt from gap detection just
   because it runs in-process and therefore never pays socket latency; a
   subscriber that blocks, allocates, or throws away events still falls behind.
 - Event struct `omni_event` carries the journal identity fields: `epoch`,
@@ -464,7 +466,7 @@ subscribed here at activation.
 - Dispatch is synchronous, subscribers in registration order, each guarded
   against reentrancy (a callback committing changes re-enters dispatch one
   nesting level deep, then unwinds).
-- `omni_subscribe()` returns an `omni_subscription` handle, and
+- `omni_trigger_register()` returns an `omni_subscription` handle, and
   `omni_unsubscribe(omni_subscription)` is the only removal path. Unsubscribing
   by pattern is not offered: it has no defined referent when a component
   subscribes twice to the same pattern or subscribes the same pattern another
@@ -524,7 +526,7 @@ Four properties are load-bearing, and each is a decision rather than a style:
   component.** An ordinary cached value invalidates on `KEY_SET` for its
   `entry_id`. A derived structure invalidates on `BINDS_UPDATED`
   (`configstorage.md` §3.1), because it is invalidated by the set changing rather
-  than by any single entry. The subscription is §5's `omni_subscribe`, and the
+  than by any single entry. The subscription is §5's `omni_trigger_register`, and the
   callback is what refreshes the private copy.
 
 The worked example this pattern was waiting for is `input`, which is the
@@ -861,12 +863,13 @@ cheap as the first.
 | dynamic array | `struct omni_dynarr`, contiguous, doubles on growth | the workhorse: any component's list of anything, and the substrate the registry's own sorted lists are built on |
 | string builder | `struct omni_strbuf`, append and format | building a key path while walking the catalog |
 | hash map | open-addressed, string to `uintptr_t` | name to `entry_id` for layout, action and set names, and for the catalog's own name index (`configstorage.md` §3.1); three lookups per keypress plus a name resolution per `get`, so it has to be O(1) |
+| id map | `struct omni_idmap`, open-addressed `uint32_t` key to `uintptr_t` | an integer-keyed cache: the worked component maps `entry_id` to a copied name, and hashing an id that came from a dense index is wasted work |
 | ring buffer | `struct omni_ringbuf`, fixed capacity, no allocation | the journal is one of these in the block already; a native one serves the region buffer and the solver's iterations |
 | interning | `struct omni_interns`, string to `uint32_t` | layout and action names are compared constantly and there are few enough to hold once |
 | linked list | `wl_list` only | Wayland's is intrusive, allocation-free and already in every component, so a second list is a second convention |
 
 **No component writes its own container.** One dynamic array, one hash map, one
-string builder. The reason is narrower than consistency: §2's registry has to
+id map, one string builder. The reason is narrower than consistency: §2's registry has to
 resolve names and sort descriptors, and a component with its own hash map means
 the registry's lookup is not the one everything else uses. That is exactly the
 coupling which makes a new action more than a descriptor.
@@ -1122,15 +1125,15 @@ question to every field the component holds:
 
 ```
 static const struct omni_option displayname_options[] = {
-    { "omniwm.displayname.enabled", OMNI_TYPE_BOOL, &(bool){true} },
-    { "omniwm.displayname.default", OMNI_TYPE_STRING, "" },
+    { "omniwm.displayname.enabled", OMNI_TAG_BOOL, &(bool){true} },
+    { "omniwm.displayname.default", OMNI_TAG_STRING, "" },
 };
 
 static const struct omni_action displayname_actions[] = {
     { "omniwm.displayname.set",
       displayname_action_set, NULL,
       &(struct omni_action_schema){
-          .n_args = 2, .arg_tags = (uint16_t[]){ OMNI_TYPE_STRING, OMNI_TYPE_STRING },
+          .n_args = 2, .arg_tags = (uint16_t[]){ OMNI_TAG_STRING, OMNI_TAG_STRING },
           .result_tag = 0 } },
 };
 
@@ -1161,7 +1164,7 @@ void omni_register_displayname(void)
         .resume     = displayname_resume,
     });
 
-    omni_rule_property_register("display_name", OMNI_TYPE_STRING, displayname_apply_rule);
+    omni_rule_property_register("display_name", OMNI_TAG_STRING, displayname_apply_rule);
 }
 ```
 
@@ -1177,7 +1180,7 @@ looked up per frame. This is §5.1's pattern made concrete:
 ```
 struct displayname_instance {
     struct omni_instance base;              /* descriptor, state, init_errno */
-    struct omni_map     name_by_client;     /* key: entry_id, value: copied name */
+    struct omni_idmap  name_by_client;     /* key: entry_id, value: copied name */
     uint64_t            indexed_commit_id;  /* commit the cache reflects */
 };
 
@@ -1208,13 +1211,13 @@ static void displayname_action_set(const struct omni_action_context *ctx,
     if (!window.entry_id)
         return omni_action_fail(OMNI_SOCK_ERR_ACTION_FAILED);
     omni_set_window_value(window, "display_name", args->value[1],
-                          OMNI_SCOPE_WINDOW_DEPENDENT);
+                          WINDOW_DEPENDENT);
 }
 
 static void displayname_apply_rule(const struct omni_rule_ctx *ctx)
 {
     omni_set_window_value(ctx->window, "display_name", ctx->value,
-                          OMNI_SCOPE_WINDOW_DEPENDENT);
+                          WINDOW_DEPENDENT);
 }
 ```
 

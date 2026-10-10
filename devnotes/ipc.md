@@ -316,6 +316,7 @@ Decoder input rules for `set` / `exec` args; encoder output rules for
 | bool | `true`/`false` | `true`/`false` |
 | i8..i32, u8..u32, f32, f64 | number | number |
 | i64, u64 | object `{"$u64":"<decimal>"}` / `{"$i64":"<decimal>"}` | same |
+| q32_32 | object `{"$q32_32":"<decimal int64 or 0x-hex>"}` | same; signed 64-bit fixed-point, 32 fractional bits |
 | duration | object `{"$u64":"<ns>"}` | same; nanoseconds, not ms |
 | datetime | RFC 3339 string, offset required | same, normalised to UTC `Z` |
 | char | string (1 char) | string (1 char) |
@@ -345,12 +346,16 @@ Decoder input rules for `set` / `exec` args; encoder output rules for
 | gradient | `{"type":"gradient", "stops":[{"offset","color"}]}` | same |
 
 Every type named in the storage table of `configstorage.md` §4 has a row here.
-`ratio`, `percent`, `vec2u`, and `hsva8` were previously missing; the two
+`ratio`, `percent`, `vec2u`, `hsva8`, and `q32_32` were previously missing; the two
 culled-as-redundant candidates are retained deliberately. `hsva8` stays because
 HSV is a legitimate authoring input, and the encoder normalises it at the
 boundary rather than storing HSV. `percent` stays as a distinct tag because a
 fraction in [0,1] and a number in [0,100] are genuinely different stored
 intents, and the explicit object makes the caller state which.
+
+`q32_32` is carried as its raw signed 64-bit fixed-point integer, because a JSON
+number cannot represent it exactly; the TOML float a `q32_32` key parses from is
+a parser concern (`tomlparser.md`), not a wire concern.
 
 ### 3.1 Wide integers
 

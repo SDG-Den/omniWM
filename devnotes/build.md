@@ -74,7 +74,7 @@ performs it on every evaluation.
 
 ### 2.1 The five packages
 
-`meson.build` defines four targets and the flake exposes five packages. The
+`meson.build` defines five targets and the flake exposes five packages. The
 split is not cosmetic, so it is worth stating what each one is for:
 
 | Package | Target | Propagates | Notes |
@@ -193,8 +193,11 @@ pair resolves against released software rather than against a fork.
 `nix/common.nix` pins `wlroots_0_20` rather than the moving `wlroots` attribute,
 because the two name the same version today and will not stay that way.
 
-The base list is Mango's, unchanged, and it is the same list in `meson.build`'s
-`dependency()` calls and `nix/common.nix`'s `buildInputs`:
+The base list is Mango's, unchanged. `meson.build`'s `dependency()` calls and
+`nix/common.nix`'s `buildInputs` name the same set of libraries, each per its own
+system's convention: the table's `libxcb-wm` is meson's pkg-config name
+`xcb-icccm`, and `libGL` is not in the meson list because it resolves
+transitively through the pkg-config dependencies that are. The version table:
 
 | library | version | optional |
 |---|---|---|
@@ -642,8 +645,9 @@ is why `scaffolding.md` records the same list rather than leaving it as a commen
 in a build file.
 
 What the build already settled is the package split and its mechanism, in §2.1:
-three `install_tag` values keep the five Nix packages separate, and dependencies
-travel by propagation rather than by copying a `.so` into two outputs.
+three `install_tag` values keep the three libraries apart, the two compositor
+packages are told apart by their propagated inputs, and dependencies travel by
+propagation rather than by copying a `.so` into two outputs.
 
 **The general principle governing what belongs in the core**, stated
 2026-09-29: the core library is a simple, generic feature set that cannot do much

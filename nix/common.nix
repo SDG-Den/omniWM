@@ -41,7 +41,7 @@
   # called `name` is a confusing failure to debug for a one-word fix.
   pname,
   # The ninja target this package builds, and the Meson install tag it installs.
-  # One Meson project defines all four targets; each derivation names one of each,
+  # One Meson project defines all five targets; each derivation names one of each,
   # so the packages stay separate without the work being done five times.
   buildTarget ? null,
   installTag,

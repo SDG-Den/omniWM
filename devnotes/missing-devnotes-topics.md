@@ -50,7 +50,9 @@ not deciding:
 - `testing.md`, which **exists**: phase 01 wrote it, and it carries the seam, the
   framework, the per-tier store tests, the fuzz corpus and the deliberate
   absences. The runner it specifies is not in the tree yet.
-- `build.md`, whenever someone wants to build.
+- `build.md`, which **exists**: phase 02 wrote it (the dependency set, the
+  wlroots/scenefx pair, the render toolkit, the solver width and the Meson
+  structure), with the `flake build` check deferred to implementation.
 - The `binding` record offsets, which wait on stage 10.
 
 ## How the stages 1 to 4 audit was resolved

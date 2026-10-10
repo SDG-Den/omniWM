@@ -10,9 +10,9 @@ project('omniwm', ['c'],
 # ---------------------------------------------------------------------------
 # Build status
 #
-# The source tree is scaffolded and empty: 118 files under `src` and `include`
+# The source tree is scaffolded and empty: 121 files under `src` and `include`
 # are zero bytes, and `include/shared/omni_layout.h` is the only one with
-# content. The two libraries below therefore link to empty shared objects rather
+# content. The three libraries below therefore link to empty shared objects rather
 # than to implementations, and the two executables are commented out until the
 # substrate lands.
 #
@@ -254,17 +254,17 @@ subdir('protocols')
 # ---------------------------------------------------------------------------
 # Targets
 #
-# Four of them, and the split is not cosmetic. `libomniwm` is the internal
+# Five of them, and the split is not cosmetic. `libomniwm` is the internal
 # development library the WM is built from. `libomniwm-ipc` is the socket
 # facade, which the WM links and a client does not. `libomniwm-debugger` is a
 # reader of the block, which nothing
 # links into the compositor. `omniwm` is the compositor itself, and it links the
-# socket facade and, in the debug build, the debugger. All four link the shared
+# socket facade and, in the debug build, the debugger. All five link the shared
 # dependency set, wlroots included.
 #
 # The three libraries build today. Every source in them is zero bytes, which
 # links into a valid shared object with no symbols — the link is real, the
-# contents are not. That is why they are enabled and the executable is not: an
+# contents are not. That is why they are enabled and the executables are not: an
 # empty `main` does not link at all, and a build that fails for a reason
 # unrelated to the design teaches a reader to ignore build failures.
 #

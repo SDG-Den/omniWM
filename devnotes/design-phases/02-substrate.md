@@ -203,8 +203,9 @@ implementation, when `libomniwm` has symbols and the `omniwm` target exists; see
 **B6. The Meson structure.** `missing-devnotes-topics.md` says Mango's `meson.build`
 is the model, from `architecture-audit.md` §5. What carries over and what does not
 is open, and the answer depends on how many components there are by stage 3.
-**Mango's structure is in the tree**, with `core_sources` naming all 61
-intended translation units and the `executable()` call commented out. The list is
+**Mango's structure is in the tree**, with `core_sources` naming 59 of the 61
+intended translation units (`ipc_sources` and `debugger_sources` hold the other
+two) and the `executable()` calls commented out. The list is
 `filestructure.md`'s tree in build-system terms, so it is a second place that has
 to change when the tree does. **Decided 2026-10-10: the core library contains
 everything the WM needs to function, and features extend it by registration.** The

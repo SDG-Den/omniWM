@@ -898,6 +898,11 @@ OMNI_STATIC_ASSERT(OMNI_JOURNAL_SLOT_OFF_COMMIT_ID % 8 == 0, "slot commit aligne
 	(((oldest_seq) == UINT64_C(0)) ||                                     \
 		((cursor_seq) < ((oldest_seq) - UINT64_C(1))))
 
+/* Gap policy for a journal subscription (configstorage.md §5.2): what a
+ * subscriber does when it can no longer catch up to the retained window. */
+#define OMNI_GAP_FAIL UINT16_C(0)
+#define OMNI_GAP_RESYNC UINT16_C(1)
+
 /* ------------------------------------------------------------------ */
 /* 9. Request queue (configstorelayout.md section 9)                   */
 /* ------------------------------------------------------------------ */

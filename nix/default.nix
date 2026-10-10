@@ -11,6 +11,7 @@
 #   libomniwm-debugger   the block visualiser. Nothing links it into the WM.
 #   omniwm               the compositor. Links the IPC at runtime, never the
 #                        debugger.
+#   omniwm-debug         the above with ASan and the debugger in the closure.
 #
 # The debugger is absent from `omniwm` on purpose rather than by omission. A
 # debugger linked into a shipping compositor puts a read-everything surface in the

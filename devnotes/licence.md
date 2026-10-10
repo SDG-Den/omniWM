@@ -29,8 +29,9 @@ The rule `PROVENANCE.md` states is the one this document commits to: an entry is
 added at the moment of the copy, a port counts as a copy, and the applicable
 copyright notice is preserved at the point of the copy. The four entries it
 already carries are the three vendored wlroots protocol definitions and the
-adopted `protocols/meson.build`; each protocol XML carries its own MIT-style
-notice in the file, which is what its licence requires.
+adopted `protocols/meson.build`; each protocol XML carries its own permissive
+notice in the file (X11-style for two, MIT for one), which is what its licence
+requires.
 
 ## 3. What the record is not
 

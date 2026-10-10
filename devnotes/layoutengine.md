@@ -343,11 +343,11 @@ be a component. So the engine needs:
 `helpers.md` §3.2 fixes that exactly one instance exists per activation and that
 a toggle never re-runs `init`; `helpers.md` §6 fixes that a suspended component
 releases its subscriptions and actions and a resumed one re-registers them.
-`helpers.md` §11 puts tags and windows in band 200 and decorate and draw in 300,
+`helpers.md` §9 puts tags and windows in band 200 and decorate and draw in 300,
 and states that priority is advisory and not a dependency edge, so a component
 that activates before something it implicitly needs surfaces as an init failure
 rather than as a detected violation. The engine is not in that table at all, so it
-has no place in the order and no band that could express one: §2.4 and §11 make
+has no place in the order and no band that could express one: §2.4 and §9 make
 it a core service in `src/core`, implemented at `src/core/layoutengine.c`. What is
 still open is the narrower
 question §3.7 carries, which is when the first pass can run before there are
@@ -677,7 +677,7 @@ Closed, and both closures are by removal rather than by answer:
   allow, and nothing for a user to write. Rules are tried in list order and the
   first that fits wins (`layoutlanguage.md` §3), which is a total order already.
   The header's four weight bands are gone, leaving one weight per solved family,
-  and `helpers.md` §11's component priority is a separate concept that no longer
+  and `helpers.md` §9's component priority is a separate concept that no longer
   risks colliding with a layout band because there is no layout band to collide
   with.
 - ~~Whether the solve is deterministic given the same input set.~~ **Closed, and
